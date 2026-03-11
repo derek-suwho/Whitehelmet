@@ -44,7 +44,7 @@ Plans:
   2. User can open a file picker to select individual .xlsx files for upload
   3. User can drop an entire folder and all .xlsx files within it are ingested
   4. Each uploaded file appears in the left panel with its file name and metadata (size, date)
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 02-01-PLAN.md — Drag-and-drop + file picker upload with file list and metadata display
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. App Shell | 2/2 | Complete   | 2026-03-11 |
-| 2. File Ingestion | 0/2 | Not started | - |
+| 2. File Ingestion | 1/2 | In Progress|  |
 | 3. Excel Editor | 0/2 | Not started | - |
 | 4. AI Consolidation | 0/2 | Not started | - |
 | 5. AI Chat Operations | 0/2 | Not started | - |

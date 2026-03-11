@@ -7,9 +7,9 @@
 
 ### File Management
 
-- [ ] **FILE-01**: User can upload individual .xlsx files via drag-and-drop or file picker
+- [x] **FILE-01**: User can upload individual .xlsx files via drag-and-drop or file picker
 - [ ] **FILE-02**: User can drop an entire folder to bulk-upload all .xlsx files within it
-- [ ] **FILE-03**: User can view all uploaded source files in left panel with file name and metadata
+- [x] **FILE-03**: User can view all uploaded source files in left panel with file name and metadata
 
 ### AI Engine
 
@@ -66,9 +66,9 @@
 |-------------|-------|--------|
 | UI-01 | Phase 1 | Complete |
 | UI-02 | Phase 1 | Complete |
-| FILE-01 | Phase 2 | Pending |
+| FILE-01 | Phase 2 | Complete |
 | FILE-02 | Phase 2 | Pending |
-| FILE-03 | Phase 2 | Pending |
+| FILE-03 | Phase 2 | Complete |
 | EXCEL-01 | Phase 3 | Pending |
 | EXCEL-02 | Phase 3 | Pending |
 | AI-01 | Phase 4 | Pending |

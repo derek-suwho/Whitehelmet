@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 01-02-PLAN.md — chat UI approved, phase 1 complete
-last_updated: "2026-03-11T06:06:06.792Z"
+stopped_at: Completed 02-01 upload/file-list, awaiting human-verify checkpoint
+last_updated: "2026-03-11T06:21:11.918Z"
 last_activity: 2026-03-10 — Completed 01-02 chat UI, phase 1 done
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 4
+  completed_plans: 3
   percent: 100
 ---
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 - Trend: —
 
 *Updated after each plan completion*
+| Phase 02-file-ingestion P01 | 10 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - Single index.html with inline Tailwind — no build step for Phase 1
 - addMessage() helper centralizes bubble creation — Phase 4 swaps mock response for real API call
 - Mock AI text informs users real AI comes in Phase 4 — sets correct expectations
+- [Phase 02-file-ingestion]: Store raw File object in uploadedFiles for Phase 3 Excel parsing
+- [Phase 02-file-ingestion]: Panel-wide drag listeners so drop works anywhere in left panel
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-10
-Stopped at: Completed 01-02-PLAN.md — chat UI approved, phase 1 complete
+Last session: 2026-03-11T06:21:11.916Z
+Stopped at: Completed 02-01 upload/file-list, awaiting human-verify checkpoint
 Resume file: None
