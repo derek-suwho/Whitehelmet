@@ -513,7 +513,7 @@
     /* ── Source file list ─────────────────────────────────────── */
     .source-file-item {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       gap: 10px;
       padding: 10px 14px;
       border-bottom: 1px solid #1e2630;
@@ -540,7 +540,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-top: 1px;
+      margin-top: 0;
     }
 
     .source-file-info {
@@ -581,6 +581,38 @@
     /* ── File list container ─────────────────────────────────── */
     .file-list {
       margin: -20px -16px;
+    }
+
+    /* ── Add more files button ────────────────────────────────── */
+    .add-files-btn {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 14px;
+      background: transparent;
+      border: none;
+      border-top: 1px solid #1e2630;
+      color: #55627a;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .add-files-btn:hover {
+      background: rgba(226,154,53,0.06);
+      color: #e29a35;
+    }
+
+    .add-files-btn:focus-visible {
+      outline: 2px solid rgba(226,154,53,0.5);
+      outline-offset: -2px;
+    }
+
+    .add-files-btn:active {
+      background: rgba(226,154,53,0.1);
     }
   </style>
 </head>
@@ -878,6 +910,13 @@
           item.appendChild(info);
           list.appendChild(item);
         });
+
+        // Add "add more files" button inside the file list
+        var addBtn = document.createElement('button');
+        addBtn.className = 'add-files-btn';
+        addBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add more files';
+        addBtn.addEventListener('click', function () { fileInput.click(); });
+        list.appendChild(addBtn);
 
         panelBody.innerHTML = '';
         panelBody.appendChild(list);
