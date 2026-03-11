@@ -29,7 +29,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. The three-panel UI shell renders without breaking existing Sources, Excel Editor, and AI Chat panels
   4. A role switcher control is visible and selecting a role changes which panels and actions are displayed
   5. Each role (Contractor, Project Manager, System Admin, Project Director) shows a distinct, appropriate view
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Extend serve.mjs into REST API server with JSON file persistence (INFRA-01, INFRA-02)
+- [ ] 01-02-PLAN.md — Add role switcher and CSS role-visibility to index.html (INFRA-03, ROLE-01, ROLE-02)
+- [ ] 01-03-PLAN.md — Human verification checkpoint for complete Phase 1 foundation
 
 ### Phase 2: Template Management
 **Goal**: An admin can create a report template with named sheets and typed column headers, and that template is available for contractors to use
@@ -73,7 +78,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/TBD | Not started | - |
+| 1. Foundation | 0/3 | Not started | - |
 | 2. Template Management | 0/TBD | Not started | - |
 | 3. Report Submission | 0/TBD | Not started | - |
 | 4. Consolidation and Review | 0/TBD | Not started | - |
