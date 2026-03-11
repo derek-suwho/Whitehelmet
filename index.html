@@ -954,11 +954,73 @@
         }
       });
 
+      // ── Folder traversal via FileSystem API ───────────────
+      function traverseDirectory(dirEntry) {
+        return new Promise(function (resolve) {
+          var reader = dirEntry.createReader();
+          var allFiles = [];
+
+          function readBatch() {
+            reader.readEntries(function (entries) {
+              if (entries.length === 0) {
+                resolve(allFiles);
+                return;
+              }
+              var pending = entries.length;
+              entries.forEach(function (entry) {
+                if (entry.isFile) {
+                  entry.file(function (file) {
+                    allFiles.push(file);
+                    if (--pending === 0) readBatch();
+                  }, function () {
+                    if (--pending === 0) readBatch();
+                  });
+                } else if (entry.isDirectory) {
+                  traverseDirectory(entry).then(function (subFiles) {
+                    allFiles = allFiles.concat(subFiles);
+                    if (--pending === 0) readBatch();
+                  });
+                } else {
+                  if (--pending === 0) readBatch();
+                }
+              });
+            }, function () {
+              resolve(allFiles);
+            });
+          }
+
+          readBatch();
+        });
+      }
+
       panelLeft.addEventListener('drop', function (e) {
         e.preventDefault();
         setDragActive(false);
         panelLeft.classList.remove('panel-drag-over');
-        handleFiles(e.dataTransfer.files);
+
+        // Use webkitGetAsEntry when available to support folder drops
+        if (e.dataTransfer.items && e.dataTransfer.items.length > 0 &&
+            typeof e.dataTransfer.items[0].webkitGetAsEntry === 'function') {
+          var items = Array.from(e.dataTransfer.items);
+          var promises = items.map(function (item) {
+            var entry = item.webkitGetAsEntry();
+            if (!entry) return Promise.resolve([]);
+            if (entry.isDirectory) return traverseDirectory(entry);
+            // Regular file entry — wrap in File promise
+            return new Promise(function (resolve) {
+              entry.file(function (file) { resolve([file]); }, function () { resolve([]); });
+            });
+          });
+
+          Promise.all(promises).then(function (arrays) {
+            var collected = [];
+            arrays.forEach(function (arr) { collected = collected.concat(arr); });
+            handleFiles(collected);
+          });
+        } else {
+          // Fallback for browsers without webkitGetAsEntry
+          handleFiles(e.dataTransfer.files);
+        }
       });
 
       // File input change
