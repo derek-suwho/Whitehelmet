@@ -340,21 +340,129 @@
       max-width: 280px;
     }
 
+    /* ── Chat message history ────────────────────────────────── */
+    .chat-history {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: #262e3a transparent;
+    }
+
+    .chat-history::-webkit-scrollbar {
+      width: 4px;
+    }
+    .chat-history::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .chat-history::-webkit-scrollbar-thumb {
+      background: #262e3a;
+      border-radius: 2px;
+    }
+
+    .chat-empty-hint {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 8px;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .chat-empty-hint-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(167,139,250,0.06);
+      border: 1px solid rgba(167,139,250,0.12);
+      color: rgba(167,139,250,0.5);
+      margin-bottom: 6px;
+    }
+
+    .chat-empty-hint-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #55627a;
+      letter-spacing: -0.01em;
+    }
+
+    .chat-empty-hint-sub {
+      font-size: 12px;
+      color: #363e4d;
+      line-height: 1.6;
+      max-width: 200px;
+    }
+
+    /* ── Message bubbles ─────────────────────────────────────── */
+    .msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 82%;
+    }
+
+    .msg-user {
+      align-self: flex-end;
+      align-items: flex-end;
+    }
+
+    .msg-ai {
+      align-self: flex-start;
+      align-items: flex-start;
+    }
+
+    .msg-bubble {
+      border-radius: 12px;
+      padding: 9px 13px;
+      font-size: 13px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    .msg-user .msg-bubble {
+      background: #b86812;
+      color: #fdf8f0;
+      border-radius: 12px 12px 3px 12px;
+      box-shadow: 0 2px 8px rgba(184,104,18,0.35), 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .msg-ai .msg-bubble {
+      background: #1e262f;
+      color: #b0bcc9;
+      border: 1px solid #262e3a;
+      border-radius: 12px 12px 12px 3px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    }
+
     /* ── Chat input footer ────────────────────────────────────── */
     .chat-footer {
       flex-shrink: 0;
-      padding: 12px 14px 16px;
+      padding: 10px 14px 14px;
       border-top: 1px solid #1e262f;
     }
 
     .chat-input-wrap {
-      background: #1e262f;
+      background: #1a2030;
       border: 1px solid #262e3a;
       border-radius: 10px;
-      padding: 10px 12px;
+      padding: 9px 10px;
       display: flex;
       align-items: center;
       gap: 8px;
+      transition: border-color 0.15s ease;
+    }
+
+    .chat-input-wrap:focus-within {
+      border-color: rgba(167,139,250,0.4);
+      box-shadow: 0 0 0 2px rgba(167,139,250,0.08);
     }
 
     .chat-input {
@@ -363,7 +471,7 @@
       border: none;
       outline: none;
       font-size: 13px;
-      color: #8c99ae;
+      color: #c8d0dc;
       font-family: 'Inter', system-ui, sans-serif;
     }
 
@@ -372,23 +480,34 @@
     }
 
     .chat-send-btn {
-      width: 28px;
-      height: 28px;
-      border-radius: 7px;
-      background: rgba(167,139,250,0.15);
-      border: 1px solid rgba(167,139,250,0.2);
-      color: rgba(167,139,250,0.7);
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      background: rgba(184,104,18,0.2);
+      border: 1px solid rgba(184,104,18,0.3);
+      color: #e29a35;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       flex-shrink: 0;
-      transition: background 0.15s ease;
+      transition: background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
     }
 
     .chat-send-btn:hover {
-      background: rgba(167,139,250,0.25);
-      color: #a78bfa;
+      background: rgba(184,104,18,0.35);
+      color: #f0ad45;
+      transform: scale(1.05);
+    }
+
+    .chat-send-btn:focus-visible {
+      outline: 2px solid rgba(226,154,53,0.5);
+      outline-offset: 2px;
+    }
+
+    .chat-send-btn:active {
+      transform: scale(0.95);
+      opacity: 0.85;
     }
   </style>
 </head>
@@ -488,32 +607,34 @@
           </svg>
         </div>
         <span class="panel-header-title">AI Chat</span>
-        <span class="panel-header-badge">Idle</span>
+        <span id="chat-badge" class="panel-header-badge">Ready</span>
       </div>
 
-      <div class="panel-body">
-        <div class="empty-state">
-          <div class="empty-state-icon empty-state-icon-chat">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-              <line x1="12" y1="17" x2="12.01" y2="17"/>
+      <!-- Scrollable message history -->
+      <div class="chat-history" id="chat-history">
+        <!-- Empty state shown before any messages -->
+        <div class="chat-empty-hint" id="chat-empty-state">
+          <div class="chat-empty-hint-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
             </svg>
           </div>
-          <div class="empty-state-heading">Chat will appear here</div>
-          <div class="empty-state-subtext">Ask the AI to merge data, restructure columns, or summarize reports</div>
+          <div class="chat-empty-hint-text">Start a conversation...</div>
+          <div class="chat-empty-hint-sub">Ask the AI to merge data, restructure columns, or summarize reports</div>
         </div>
       </div>
 
+      <!-- Fixed input bar -->
       <div class="chat-footer">
         <div class="chat-input-wrap">
           <input
             class="chat-input"
+            id="chat-input"
             type="text"
-            placeholder="Ask the AI anything…"
-            disabled
+            placeholder="Type a message..."
+            autocomplete="off"
           />
-          <button class="chat-send-btn" disabled>
+          <button class="chat-send-btn" id="chat-send-btn" title="Send message">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"/>
               <polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -524,6 +645,68 @@
     </div>
 
   </div><!-- /panels-container -->
+
+  <script>
+    (function () {
+      var history   = document.getElementById('chat-history');
+      var input     = document.getElementById('chat-input');
+      var sendBtn   = document.getElementById('chat-send-btn');
+      var emptyState = document.getElementById('chat-empty-state');
+      var badge     = document.getElementById('chat-badge');
+
+      function addMessage(text, sender) {
+        // Remove empty state on first message
+        if (emptyState && emptyState.parentNode) {
+          emptyState.parentNode.removeChild(emptyState);
+        }
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'msg msg-' + sender;
+
+        var bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        bubble.textContent = text;
+
+        wrapper.appendChild(bubble);
+        history.appendChild(wrapper);
+
+        // Auto-scroll to bottom
+        history.scrollTop = history.scrollHeight;
+      }
+
+      function sendMessage() {
+        var text = input.value.trim();
+        if (!text) return;
+
+        addMessage(text, 'user');
+        input.value = '';
+        input.focus();
+
+        // Update badge while "thinking"
+        badge.textContent = 'Thinking…';
+
+        // Mock AI reply after 500ms
+        setTimeout(function () {
+          addMessage(
+            "I\u2019m an AI assistant for Whitehelmet. AI responses will be connected in a future update.",
+            'ai'
+          );
+          badge.textContent = 'Ready';
+        }, 500);
+      }
+
+      // Send on button click
+      sendBtn.addEventListener('click', sendMessage);
+
+      // Send on Enter key (not Shift+Enter)
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+    })();
+  </script>
 
 </body>
 </html>
