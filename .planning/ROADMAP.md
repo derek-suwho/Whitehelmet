@@ -44,12 +44,11 @@ Plans:
   2. User can open a file picker to select individual .xlsx files for upload
   3. User can drop an entire folder and all .xlsx files within it are ingested
   4. Each uploaded file appears in the left panel with its file name and metadata (size, date)
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: Implement drag-and-drop and file picker upload for single .xlsx files
-- [ ] 02-02: Add folder drop support for bulk-upload of all .xlsx files within a folder
-- [ ] 02-03: Build sources panel list with file name and metadata display
+- [ ] 02-01-PLAN.md — Drag-and-drop + file picker upload with file list and metadata display
+- [ ] 02-02-PLAN.md — Folder drop support for recursive .xlsx ingestion
 
 ### Phase 3: Excel Editor
 **Goal**: Users can view and directly edit spreadsheet data in the browser and download the result
@@ -116,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. App Shell | 2/2 | Complete   | 2026-03-11 |
-| 2. File Ingestion | 0/3 | Not started | - |
+| 2. File Ingestion | 0/2 | Not started | - |
 | 3. Excel Editor | 0/2 | Not started | - |
 | 4. AI Consolidation | 0/2 | Not started | - |
 | 5. AI Chat Operations | 0/2 | Not started | - |
