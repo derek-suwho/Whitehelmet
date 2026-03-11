@@ -511,7 +511,7 @@
     }
 
     /* ── Source file list ─────────────────────────────────────── */
-    .source-file-item {
+    .source-item {
       display: flex;
       align-items: center;
       gap: 10px;
@@ -521,34 +521,38 @@
       transition: background 0.12s ease;
     }
 
-    .source-file-item:hover {
+    .source-item:hover {
       background: rgba(255,255,255,0.03);
     }
 
-    .source-file-item:last-child {
-      border-bottom: none;
-    }
-
-    .source-file-icon {
+    .source-item-icon {
       flex-shrink: 0;
       width: 28px;
       height: 28px;
       border-radius: 6px;
-      background: rgba(52,211,153,0.08);
-      border: 1px solid rgba(52,211,153,0.15);
-      color: #34d399;
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-top: 0;
     }
 
-    .source-file-info {
+    .source-item-icon.icon-file {
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.15);
+      color: #34d399;
+    }
+
+    .source-item-icon.icon-folder {
+      background: rgba(226,154,53,0.08);
+      border: 1px solid rgba(226,154,53,0.15);
+      color: #e29a35;
+    }
+
+    .source-item-info {
       flex: 1;
       min-width: 0;
     }
 
-    .source-file-name {
+    .source-item-name {
       font-size: 13px;
       font-weight: 500;
       color: #e8ecf2;
@@ -558,11 +562,70 @@
       line-height: 1.4;
     }
 
-    .source-file-meta {
+    .source-item-meta {
       font-size: 11px;
       color: #55627a;
       margin-top: 2px;
       line-height: 1.4;
+    }
+
+    .source-item-delete {
+      flex-shrink: 0;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      border: none;
+      background: transparent;
+      color: #55627a;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+    }
+
+    .source-item:hover .source-item-delete {
+      opacity: 1;
+    }
+
+    .source-item-delete:hover {
+      background: rgba(239,68,68,0.1);
+      color: #ef4444;
+    }
+
+    .source-item-delete:active {
+      background: rgba(239,68,68,0.2);
+    }
+
+    /* ── Folder items ─────────────────────────────────────────── */
+    .source-folder-item {
+      cursor: pointer;
+    }
+
+    .source-folder-chevron {
+      flex-shrink: 0;
+      width: 16px;
+      height: 16px;
+      color: #55627a;
+      transition: transform 0.15s ease;
+    }
+
+    .source-folder-item.expanded .source-folder-chevron {
+      transform: rotate(90deg);
+    }
+
+    .source-folder-children {
+      display: none;
+      background: rgba(0,0,0,0.15);
+    }
+
+    .source-folder-children.visible {
+      display: block;
+    }
+
+    .source-folder-children .source-item {
+      padding-left: 38px;
     }
 
     /* ── Drag-active state ────────────────────────────────────── */
@@ -583,22 +646,30 @@
       margin: -20px -16px;
     }
 
-    /* ── Add more files button ────────────────────────────────── */
+    /* ── Add files action row ─────────────────────────────────── */
+    .add-files-row {
+      display: flex;
+      border-top: 1px solid #1e2630;
+    }
+
     .add-files-btn {
       display: flex;
       align-items: center;
-      justify-content: flex-start;
-      gap: 8px;
-      width: 100%;
-      padding: 10px 14px;
+      justify-content: center;
+      gap: 6px;
+      flex: 1;
+      padding: 10px 12px;
       background: transparent;
       border: none;
-      border-top: 1px solid #1e2630;
       color: #55627a;
       font-size: 12px;
       font-family: inherit;
       cursor: pointer;
       transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .add-files-btn + .add-files-btn {
+      border-left: 1px solid #1e2630;
     }
 
     .add-files-btn:hover {
@@ -612,6 +683,43 @@
     }
 
     .add-files-btn:active {
+      background: rgba(226,154,53,0.1);
+    }
+
+    /* ── Empty state action buttons ───────────────────────────── */
+    .empty-state-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .empty-state-action-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: 1px solid #1e2630;
+      background: rgba(255,255,255,0.02);
+      color: #55627a;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+
+    .empty-state-action-btn:hover {
+      background: rgba(226,154,53,0.06);
+      color: #e29a35;
+      border-color: rgba(226,154,53,0.3);
+    }
+
+    .empty-state-action-btn:focus-visible {
+      outline: 2px solid rgba(226,154,53,0.5);
+      outline-offset: 2px;
+    }
+
+    .empty-state-action-btn:active {
       background: rgba(226,154,53,0.1);
     }
   </style>
@@ -662,8 +770,18 @@
               <line x1="12" y1="12" x2="12" y2="21"/>
               <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
             </svg>
-            <div class="drop-zone-text">Drop .xlsx files here</div>
-            <div class="drop-zone-hint">or click to browse</div>
+            <div class="drop-zone-text">Drop files or folders here</div>
+            <div class="drop-zone-hint">or use the buttons below</div>
+          </div>
+          <div class="empty-state-actions">
+            <button class="empty-state-action-btn" id="empty-add-files">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add files
+            </button>
+            <button class="empty-state-action-btn" id="empty-add-folder">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Add folder
+            </button>
           </div>
         </div>
       </div>
@@ -753,6 +871,8 @@
 
   <!-- Hidden file input for browse dialog -->
   <input type="file" id="file-input" accept=".xlsx" multiple style="display:none;" />
+  <!-- Hidden folder input for folder browse dialog -->
+  <input type="file" id="folder-input" webkitdirectory multiple style="display:none;" />
 
   <script>
     (function () {
@@ -817,15 +937,23 @@
 
     // ── File ingestion ─────────────────────────────────────────
     (function () {
-      var uploadedFiles = [];
+      // Data model: sources[] contains { type:'file', ... } and { type:'folder', name, files:[], expanded }
+      var sources = [];
       var fileInput     = document.getElementById('file-input');
+      var folderInput   = document.getElementById('folder-input');
       var panelLeft     = document.querySelector('.panel-left');
       var panelBody     = panelLeft.querySelector('.panel-body');
       var badge         = panelLeft.querySelector('.panel-header-badge');
-      var dropZone      = panelLeft.querySelector('.drop-zone');
 
       // ── Empty state HTML template ──────────────────────────
       var emptyStateHTML = panelBody.innerHTML;
+
+      // ── SVG constants ──────────────────────────────────────
+      var FILE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+      var FOLDER_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+      var CHEVRON_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+      var DELETE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      var PLUS_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
 
       // ── Helpers ───────────────────────────────────────────
       function formatFileSize(bytes) {
@@ -847,79 +975,224 @@
         return base.slice(0, max - 3 - suffix.length) + '…' + suffix;
       }
 
-      // ── handleFiles ───────────────────────────────────────
-      function handleFiles(fileList) {
+      function getTotalFileCount() {
+        var count = 0;
+        sources.forEach(function (s) {
+          if (s.type === 'file') count++;
+          else if (s.type === 'folder') count += s.files.length;
+        });
+        return count;
+      }
+
+      // ── Add individual files (deduped) ─────────────────────
+      function addFiles(fileList) {
         var added = false;
         for (var i = 0; i < fileList.length; i++) {
           var f = fileList[i];
           if (!f.name.toLowerCase().endsWith('.xlsx')) continue;
-          // Deduplicate by name
+          // Check dups across top-level files
           var dup = false;
-          for (var j = 0; j < uploadedFiles.length; j++) {
-            if (uploadedFiles[j].name === f.name) { dup = true; break; }
+          for (var j = 0; j < sources.length; j++) {
+            if (sources[j].type === 'file' && sources[j].name === f.name) { dup = true; break; }
           }
           if (dup) continue;
-          uploadedFiles.push({ name: f.name, size: f.size, lastModified: f.lastModified, file: f });
+          sources.push({ type: 'file', name: f.name, size: f.size, lastModified: f.lastModified, file: f });
           added = true;
         }
-        if (added || fileList.length === 0) renderFileList();
+        if (added) render();
       }
 
-      // ── renderFileList ────────────────────────────────────
-      function renderFileList() {
-        // Update badge
-        var count = uploadedFiles.length;
-        badge.textContent = count === 1 ? '1 file' : count + ' files';
+      // ── Add a folder (with its xlsx files grouped) ─────────
+      function addFolder(folderName, fileList) {
+        // Check if folder name already exists
+        for (var i = 0; i < sources.length; i++) {
+          if (sources[i].type === 'folder' && sources[i].name === folderName) return;
+        }
+        var xlsxFiles = [];
+        for (var j = 0; j < fileList.length; j++) {
+          var f = fileList[j];
+          if (f.name.toLowerCase().endsWith('.xlsx')) {
+            xlsxFiles.push({ name: f.name, size: f.size, lastModified: f.lastModified, file: f });
+          }
+        }
+        if (xlsxFiles.length === 0) return;
+        sources.push({ type: 'folder', name: folderName, files: xlsxFiles, expanded: false });
+        render();
+      }
 
-        if (count === 0) {
+      // ── Delete source ─────────────────────────────────────
+      function deleteSource(index) {
+        sources.splice(index, 1);
+        render();
+      }
+
+      // ── Render ────────────────────────────────────────────
+      function render() {
+        var total = getTotalFileCount();
+        badge.textContent = total === 0 ? '0 files' : (total === 1 ? '1 file' : total + ' files');
+
+        if (sources.length === 0) {
           panelBody.innerHTML = emptyStateHTML;
-          // Re-wire drop zone after restoring HTML
-          wireDropZone();
+          wireEmptyState();
           return;
         }
 
-        // Build file list
         var list = document.createElement('div');
         list.className = 'file-list';
 
-        uploadedFiles.forEach(function (f) {
-          var item = document.createElement('div');
-          item.className = 'source-file-item';
-
-          // Icon
-          var iconWrap = document.createElement('div');
-          iconWrap.className = 'source-file-icon';
-          iconWrap.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
-
-          // Info
-          var info = document.createElement('div');
-          info.className = 'source-file-info';
-
-          var nameEl = document.createElement('div');
-          nameEl.className = 'source-file-name';
-          nameEl.title = f.name;
-          nameEl.textContent = truncateName(f.name, 28);
-
-          var metaEl = document.createElement('div');
-          metaEl.className = 'source-file-meta';
-          metaEl.textContent = formatFileSize(f.size) + ' · ' + formatDate(f.lastModified);
-
-          info.appendChild(nameEl);
-          info.appendChild(metaEl);
-          item.appendChild(iconWrap);
-          item.appendChild(info);
-          list.appendChild(item);
+        sources.forEach(function (s, idx) {
+          if (s.type === 'file') {
+            list.appendChild(createFileItem(s, idx));
+          } else if (s.type === 'folder') {
+            list.appendChild(createFolderItem(s, idx));
+          }
         });
 
-        // Add "add more files" button inside the file list
+        // Action buttons row
+        var actionsRow = document.createElement('div');
+        actionsRow.className = 'add-files-row';
+
         var addBtn = document.createElement('button');
         addBtn.className = 'add-files-btn';
-        addBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add more files';
+        addBtn.innerHTML = PLUS_ICON + ' Add files';
         addBtn.addEventListener('click', function () { fileInput.click(); });
-        list.appendChild(addBtn);
+
+        var addFolderBtn = document.createElement('button');
+        addFolderBtn.className = 'add-files-btn';
+        addFolderBtn.innerHTML = FOLDER_ICON + ' Add folder';
+        addFolderBtn.addEventListener('click', function () { folderInput.click(); });
+
+        actionsRow.appendChild(addBtn);
+        actionsRow.appendChild(addFolderBtn);
+        list.appendChild(actionsRow);
 
         panelBody.innerHTML = '';
         panelBody.appendChild(list);
+      }
+
+      function createFileItem(f, sourceIdx) {
+        var item = document.createElement('div');
+        item.className = 'source-item';
+
+        var icon = document.createElement('div');
+        icon.className = 'source-item-icon icon-file';
+        icon.innerHTML = FILE_ICON;
+
+        var info = document.createElement('div');
+        info.className = 'source-item-info';
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'source-item-name';
+        nameEl.title = f.name;
+        nameEl.textContent = truncateName(f.name, 28);
+
+        var metaEl = document.createElement('div');
+        metaEl.className = 'source-item-meta';
+        metaEl.textContent = formatFileSize(f.size) + ' · ' + formatDate(f.lastModified);
+
+        info.appendChild(nameEl);
+        info.appendChild(metaEl);
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'source-item-delete';
+        delBtn.innerHTML = DELETE_ICON;
+        delBtn.title = 'Remove file';
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          deleteSource(sourceIdx);
+        });
+
+        item.appendChild(icon);
+        item.appendChild(info);
+        item.appendChild(delBtn);
+        return item;
+      }
+
+      function createFolderItem(folder, sourceIdx) {
+        var wrapper = document.createElement('div');
+
+        // Folder header row
+        var item = document.createElement('div');
+        item.className = 'source-item source-folder-item' + (folder.expanded ? ' expanded' : '');
+
+        var chevron = document.createElement('div');
+        chevron.className = 'source-folder-chevron';
+        chevron.innerHTML = CHEVRON_ICON;
+
+        var icon = document.createElement('div');
+        icon.className = 'source-item-icon icon-folder';
+        icon.innerHTML = FOLDER_ICON;
+
+        var info = document.createElement('div');
+        info.className = 'source-item-info';
+
+        var nameEl = document.createElement('div');
+        nameEl.className = 'source-item-name';
+        nameEl.title = folder.name;
+        nameEl.textContent = truncateName(folder.name, 22);
+
+        var metaEl = document.createElement('div');
+        metaEl.className = 'source-item-meta';
+        metaEl.textContent = folder.files.length + ' file' + (folder.files.length !== 1 ? 's' : '');
+
+        info.appendChild(nameEl);
+        info.appendChild(metaEl);
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'source-item-delete';
+        delBtn.innerHTML = DELETE_ICON;
+        delBtn.title = 'Remove folder';
+        delBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          deleteSource(sourceIdx);
+        });
+
+        item.appendChild(chevron);
+        item.appendChild(icon);
+        item.appendChild(info);
+        item.appendChild(delBtn);
+
+        // Children container
+        var children = document.createElement('div');
+        children.className = 'source-folder-children' + (folder.expanded ? ' visible' : '');
+
+        folder.files.forEach(function (f) {
+          var child = document.createElement('div');
+          child.className = 'source-item';
+
+          var cIcon = document.createElement('div');
+          cIcon.className = 'source-item-icon icon-file';
+          cIcon.innerHTML = FILE_ICON;
+
+          var cInfo = document.createElement('div');
+          cInfo.className = 'source-item-info';
+
+          var cName = document.createElement('div');
+          cName.className = 'source-item-name';
+          cName.title = f.name;
+          cName.textContent = truncateName(f.name, 24);
+
+          var cMeta = document.createElement('div');
+          cMeta.className = 'source-item-meta';
+          cMeta.textContent = formatFileSize(f.size) + ' · ' + formatDate(f.lastModified);
+
+          cInfo.appendChild(cName);
+          cInfo.appendChild(cMeta);
+          child.appendChild(cIcon);
+          child.appendChild(cInfo);
+          children.appendChild(child);
+        });
+
+        // Toggle expand on click
+        item.addEventListener('click', function () {
+          folder.expanded = !folder.expanded;
+          item.classList.toggle('expanded');
+          children.classList.toggle('visible');
+        });
+
+        wrapper.appendChild(item);
+        wrapper.appendChild(children);
+        return wrapper;
       }
 
       // ── Drag-active visual feedback ───────────────────────
@@ -930,15 +1203,19 @@
         else    dz.classList.remove('drag-active');
       }
 
-      // ── Wire the drop zone & panel drag events ────────────
-      function wireDropZone() {
+      // ── Wire empty state buttons ──────────────────────────
+      function wireEmptyState() {
         var dz = panelLeft.querySelector('.drop-zone');
         if (dz) {
           dz.addEventListener('click', function () { fileInput.click(); });
         }
+        var addFilesBtn = document.getElementById('empty-add-files');
+        var addFolderBtn = document.getElementById('empty-add-folder');
+        if (addFilesBtn) addFilesBtn.addEventListener('click', function () { fileInput.click(); });
+        if (addFolderBtn) addFolderBtn.addEventListener('click', function () { folderInput.click(); });
       }
 
-      // Panel-level drag handling (works even after file list replaces empty state)
+      // Panel-level drag handling
       panelLeft.addEventListener('dragover', function (e) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'copy';
@@ -947,7 +1224,6 @@
       });
 
       panelLeft.addEventListener('dragleave', function (e) {
-        // Only fire when leaving the panel itself, not child elements
         if (!panelLeft.contains(e.relatedTarget)) {
           setDragActive(false);
           panelLeft.classList.remove('panel-drag-over');
@@ -998,39 +1274,58 @@
         setDragActive(false);
         panelLeft.classList.remove('panel-drag-over');
 
-        // Use webkitGetAsEntry when available to support folder drops
         if (e.dataTransfer.items && e.dataTransfer.items.length > 0 &&
             typeof e.dataTransfer.items[0].webkitGetAsEntry === 'function') {
           var items = Array.from(e.dataTransfer.items);
-          var promises = items.map(function (item) {
+          var folderPromises = [];
+          var looseFiles = [];
+
+          items.forEach(function (item) {
             var entry = item.webkitGetAsEntry();
-            if (!entry) return Promise.resolve([]);
-            if (entry.isDirectory) return traverseDirectory(entry);
-            // Regular file entry — wrap in File promise
-            return new Promise(function (resolve) {
-              entry.file(function (file) { resolve([file]); }, function () { resolve([]); });
-            });
+            if (!entry) return;
+            if (entry.isDirectory) {
+              var folderName = entry.name;
+              folderPromises.push(
+                traverseDirectory(entry).then(function (files) {
+                  addFolder(folderName, files);
+                })
+              );
+            } else {
+              // Loose file
+              folderPromises.push(
+                new Promise(function (resolve) {
+                  entry.file(function (file) { looseFiles.push(file); resolve(); }, resolve);
+                })
+              );
+            }
           });
 
-          Promise.all(promises).then(function (arrays) {
-            var collected = [];
-            arrays.forEach(function (arr) { collected = collected.concat(arr); });
-            handleFiles(collected);
+          Promise.all(folderPromises).then(function () {
+            if (looseFiles.length > 0) addFiles(looseFiles);
           });
         } else {
-          // Fallback for browsers without webkitGetAsEntry
-          handleFiles(e.dataTransfer.files);
+          addFiles(e.dataTransfer.files);
         }
       });
 
       // File input change
       fileInput.addEventListener('change', function () {
-        handleFiles(fileInput.files);
+        addFiles(fileInput.files);
         fileInput.value = '';
       });
 
-      // Initial wire of drop zone click
-      wireDropZone();
+      // Folder input change — group by folder name
+      folderInput.addEventListener('change', function () {
+        var files = folderInput.files;
+        if (files.length === 0) { folderInput.value = ''; return; }
+        // Extract folder name from webkitRelativePath
+        var folderName = files[0].webkitRelativePath ? files[0].webkitRelativePath.split('/')[0] : 'Uploaded Folder';
+        addFolder(folderName, files);
+        folderInput.value = '';
+      });
+
+      // Initial wire
+      wireEmptyState();
     })();
   </script>
 
