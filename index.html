@@ -509,6 +509,79 @@
       transform: scale(0.95);
       opacity: 0.85;
     }
+
+    /* ── Source file list ─────────────────────────────────────── */
+    .source-file-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e2630;
+      cursor: default;
+      transition: background 0.12s ease;
+    }
+
+    .source-file-item:hover {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .source-file-item:last-child {
+      border-bottom: none;
+    }
+
+    .source-file-icon {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      background: rgba(52,211,153,0.08);
+      border: 1px solid rgba(52,211,153,0.15);
+      color: #34d399;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .source-file-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .source-file-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: #e8ecf2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+
+    .source-file-meta {
+      font-size: 11px;
+      color: #55627a;
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    /* ── Drag-active state ────────────────────────────────────── */
+    .drag-active {
+      border-color: rgba(226,154,53,0.6) !important;
+      border-style: solid !important;
+      background: rgba(226,154,53,0.06) !important;
+    }
+
+    /* ── Panel-left drag overlay ─────────────────────────────── */
+    .panel-left.panel-drag-over .panel-body {
+      outline: 2px dashed rgba(226,154,53,0.35);
+      outline-offset: -4px;
+    }
+
+    /* ── File list container ─────────────────────────────────── */
+    .file-list {
+      margin: -20px -16px;
+    }
   </style>
 </head>
 <body>
@@ -646,6 +719,9 @@
 
   </div><!-- /panels-container -->
 
+  <!-- Hidden file input for browse dialog -->
+  <input type="file" id="file-input" accept=".xlsx" multiple style="display:none;" />
+
   <script>
     (function () {
       var history   = document.getElementById('chat-history');
@@ -705,6 +781,155 @@
           sendMessage();
         }
       });
+    })();
+
+    // ── File ingestion ─────────────────────────────────────────
+    (function () {
+      var uploadedFiles = [];
+      var fileInput     = document.getElementById('file-input');
+      var panelLeft     = document.querySelector('.panel-left');
+      var panelBody     = panelLeft.querySelector('.panel-body');
+      var badge         = panelLeft.querySelector('.panel-header-badge');
+      var dropZone      = panelLeft.querySelector('.drop-zone');
+
+      // ── Empty state HTML template ──────────────────────────
+      var emptyStateHTML = panelBody.innerHTML;
+
+      // ── Helpers ───────────────────────────────────────────
+      function formatFileSize(bytes) {
+        if (bytes < 1024)        return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      }
+
+      function formatDate(ts) {
+        var d = new Date(ts);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+
+      function truncateName(name, max) {
+        if (name.length <= max) return name;
+        var ext = name.lastIndexOf('.');
+        var base = ext > 0 ? name.slice(0, ext) : name;
+        var suffix = ext > 0 ? name.slice(ext) : '';
+        return base.slice(0, max - 3 - suffix.length) + '…' + suffix;
+      }
+
+      // ── handleFiles ───────────────────────────────────────
+      function handleFiles(fileList) {
+        var added = false;
+        for (var i = 0; i < fileList.length; i++) {
+          var f = fileList[i];
+          if (!f.name.toLowerCase().endsWith('.xlsx')) continue;
+          // Deduplicate by name
+          var dup = false;
+          for (var j = 0; j < uploadedFiles.length; j++) {
+            if (uploadedFiles[j].name === f.name) { dup = true; break; }
+          }
+          if (dup) continue;
+          uploadedFiles.push({ name: f.name, size: f.size, lastModified: f.lastModified, file: f });
+          added = true;
+        }
+        if (added || fileList.length === 0) renderFileList();
+      }
+
+      // ── renderFileList ────────────────────────────────────
+      function renderFileList() {
+        // Update badge
+        var count = uploadedFiles.length;
+        badge.textContent = count === 1 ? '1 file' : count + ' files';
+
+        if (count === 0) {
+          panelBody.innerHTML = emptyStateHTML;
+          // Re-wire drop zone after restoring HTML
+          wireDropZone();
+          return;
+        }
+
+        // Build file list
+        var list = document.createElement('div');
+        list.className = 'file-list';
+
+        uploadedFiles.forEach(function (f) {
+          var item = document.createElement('div');
+          item.className = 'source-file-item';
+
+          // Icon
+          var iconWrap = document.createElement('div');
+          iconWrap.className = 'source-file-icon';
+          iconWrap.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>';
+
+          // Info
+          var info = document.createElement('div');
+          info.className = 'source-file-info';
+
+          var nameEl = document.createElement('div');
+          nameEl.className = 'source-file-name';
+          nameEl.title = f.name;
+          nameEl.textContent = truncateName(f.name, 28);
+
+          var metaEl = document.createElement('div');
+          metaEl.className = 'source-file-meta';
+          metaEl.textContent = formatFileSize(f.size) + ' · ' + formatDate(f.lastModified);
+
+          info.appendChild(nameEl);
+          info.appendChild(metaEl);
+          item.appendChild(iconWrap);
+          item.appendChild(info);
+          list.appendChild(item);
+        });
+
+        panelBody.innerHTML = '';
+        panelBody.appendChild(list);
+      }
+
+      // ── Drag-active visual feedback ───────────────────────
+      function setDragActive(on) {
+        var dz = panelLeft.querySelector('.drop-zone');
+        if (!dz) return;
+        if (on) dz.classList.add('drag-active');
+        else    dz.classList.remove('drag-active');
+      }
+
+      // ── Wire the drop zone & panel drag events ────────────
+      function wireDropZone() {
+        var dz = panelLeft.querySelector('.drop-zone');
+        if (dz) {
+          dz.addEventListener('click', function () { fileInput.click(); });
+        }
+      }
+
+      // Panel-level drag handling (works even after file list replaces empty state)
+      panelLeft.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setDragActive(true);
+        panelLeft.classList.add('panel-drag-over');
+      });
+
+      panelLeft.addEventListener('dragleave', function (e) {
+        // Only fire when leaving the panel itself, not child elements
+        if (!panelLeft.contains(e.relatedTarget)) {
+          setDragActive(false);
+          panelLeft.classList.remove('panel-drag-over');
+        }
+      });
+
+      panelLeft.addEventListener('drop', function (e) {
+        e.preventDefault();
+        setDragActive(false);
+        panelLeft.classList.remove('panel-drag-over');
+        handleFiles(e.dataTransfer.files);
+      });
+
+      // File input change
+      fileInput.addEventListener('change', function () {
+        handleFiles(fileInput.files);
+        fileInput.value = '';
+      });
+
+      // Initial wire of drop zone click
+      wireDropZone();
     })();
   </script>
 
