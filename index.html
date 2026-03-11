@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whitehelmet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Construction-themed palette: slate-based with amber/warm amber accents
+            brand: {
+              50:  '#fdf8f0',
+              100: '#faefd9',
+              200: '#f4d9a8',
+              300: '#ecbc6a',
+              400: '#e29a35',
+              500: '#d4821a',
+              600: '#b86812',
+              700: '#8f4e10',
+              800: '#703f14',
+              900: '#5c3413',
+            },
+            surface: {
+              base:     '#0f1217',
+              elevated: '#171c23',
+              panel:    '#1d242e',
+              border:   '#262e3a',
+              muted:    '#2d3748',
+            },
+            content: {
+              primary:   '#e8ecf2',
+              secondary: '#8c99ae',
+              muted:     '#55627a',
+              accent:    '#e29a35',
+            },
+          },
+          fontFamily: {
+            display: ['Georgia', 'Cambria', 'serif'],
+            sans:    ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          letterSpacing: {
+            tight: '-0.03em',
+          },
+          lineHeight: {
+            relaxed: '1.7',
+          },
+          boxShadow: {
+            panel:   '0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
+            header:  '0 1px 0 rgba(255,255,255,0.05)',
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background-color: #0f1217;
+      color: #e8ecf2;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── App chrome ─────────────────────────────────────────── */
+    .app-topbar {
+      height: 48px;
+      background: #0c1016;
+      border-bottom: 1px solid #1e262f;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.5);
+      position: relative;
+      z-index: 10;
+    }
+
+    .app-topbar-logo {
+      font-family: Georgia, Cambria, serif;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #e8ecf2;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-topbar-logo-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #e29a35;
+      box-shadow: 0 0 8px rgba(226,154,53,0.6);
+    }
+
+    /* ── Three-panel grid ────────────────────────────────────── */
+    .panels-container {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      height: calc(100vh - 48px);
+      overflow: hidden;
+    }
+
+    /* ── Shared panel styles ─────────────────────────────────── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: #171c23;
+      position: relative;
+    }
+
+    .panel-left {
+      border-right: 1px solid #262e3a;
+      background: #161b22;
+      box-shadow: inset -1px 0 0 rgba(255,255,255,0.03), 2px 0 12px rgba(0,0,0,0.3);
+    }
+
+    .panel-center {
+      background: #1a2030;
+      box-shadow: inset 0 0 40px rgba(0,0,0,0.15);
+    }
+
+    .panel-right {
+      border-left: 1px solid #262e3a;
+      background: #141920;
+      box-shadow: inset 1px 0 0 rgba(255,255,255,0.03), -2px 0 12px rgba(0,0,0,0.3);
+    }
+
+    /* ── Panel header ────────────────────────────────────────── */
+    .panel-header {
+      height: 52px;
+      padding: 0 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #1e262f;
+      background: inherit;
+      flex-shrink: 0;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .panel-header-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .icon-sources {
+      background: rgba(226,154,53,0.12);
+      color: #e29a35;
+    }
+
+    .icon-excel {
+      background: rgba(52,211,153,0.12);
+      color: #34d399;
+    }
+
+    .icon-chat {
+      background: rgba(167,139,250,0.12);
+      color: #a78bfa;
+    }
+
+    .panel-header-title {
+      font-family: Georgia, Cambria, serif;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #dde4ee;
+    }
+
+    .panel-header-badge {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #55627a;
+      background: #1e262f;
+      border: 1px solid #262e3a;
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+
+    /* ── Panel body / content area ───────────────────────────── */
+    .panel-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      scrollbar-width: thin;
+      scrollbar-color: #262e3a transparent;
+    }
+
+    .panel-body::-webkit-scrollbar {
+      width: 4px;
+    }
+    .panel-body::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .panel-body::-webkit-scrollbar-thumb {
+      background: #262e3a;
+      border-radius: 2px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────── */
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 14px;
+      text-align: center;
+      padding: 32px;
+    }
+
+    .empty-state-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 4px;
+    }
+
+    .empty-state-icon-sources {
+      background: rgba(226,154,53,0.08);
+      border: 1px solid rgba(226,154,53,0.15);
+      color: rgba(226,154,53,0.6);
+    }
+
+    .empty-state-icon-excel {
+      background: rgba(52,211,153,0.06);
+      border: 1px solid rgba(52,211,153,0.12);
+      color: rgba(52,211,153,0.5);
+    }
+
+    .empty-state-icon-chat {
+      background: rgba(167,139,250,0.06);
+      border: 1px solid rgba(167,139,250,0.12);
+      color: rgba(167,139,250,0.5);
+    }
+
+    .empty-state-heading {
+      font-size: 14px;
+      font-weight: 600;
+      color: #8c99ae;
+      letter-spacing: -0.01em;
+    }
+
+    .empty-state-subtext {
+      font-size: 12.5px;
+      color: #4a5568;
+      line-height: 1.6;
+      max-width: 200px;
+    }
+
+    /* ── Drop zone ───────────────────────────────────────────── */
+    .drop-zone {
+      border: 1.5px dashed #262e3a;
+      border-radius: 12px;
+      padding: 28px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+      background: rgba(226,154,53,0.02);
+      transition: border-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .drop-zone:hover {
+      border-color: rgba(226,154,53,0.3);
+      background: rgba(226,154,53,0.04);
+    }
+
+    .drop-zone-text {
+      font-size: 12.5px;
+      color: #55627a;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .drop-zone-hint {
+      font-size: 11px;
+      color: #363e4d;
+    }
+
+    /* ── Center panel specific ───────────────────────────────── */
+    .center-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+      text-align: center;
+      padding: 40px;
+    }
+
+    .center-empty-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(52,211,153,0.06);
+      border: 1px solid rgba(52,211,153,0.12);
+      color: rgba(52,211,153,0.5);
+      margin-bottom: 4px;
+    }
+
+    .center-empty-heading {
+      font-family: Georgia, Cambria, serif;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      color: #7a8899;
+    }
+
+    .center-empty-sub {
+      font-size: 13px;
+      color: #3d4a5c;
+      line-height: 1.7;
+      max-width: 280px;
+    }
+
+    /* ── Chat input footer ────────────────────────────────────── */
+    .chat-footer {
+      flex-shrink: 0;
+      padding: 12px 14px 16px;
+      border-top: 1px solid #1e262f;
+    }
+
+    .chat-input-wrap {
+      background: #1e262f;
+      border: 1px solid #262e3a;
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .chat-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: #8c99ae;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .chat-input::placeholder {
+      color: #3d4a5c;
+    }
+
+    .chat-send-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: rgba(167,139,250,0.15);
+      border: 1px solid rgba(167,139,250,0.2);
+      color: rgba(167,139,250,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.15s ease;
+    }
+
+    .chat-send-btn:hover {
+      background: rgba(167,139,250,0.25);
+      color: #a78bfa;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Top bar ───────────────────────────────────────────── -->
+  <div class="app-topbar">
+    <div class="app-topbar-logo">
+      <div class="app-topbar-logo-dot"></div>
+      Whitehelmet
+    </div>
+  </div>
+
+  <!-- ── Three-panel layout ───────────────────────────────── -->
+  <div class="panels-container">
+
+    <!-- ── LEFT: Sources ──────────────────────────────────── -->
+    <div class="panel panel-left">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-sources">
+          <!-- Folder icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">Sources</span>
+        <span class="panel-header-badge">0 files</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="empty-state">
+          <div class="empty-state-icon empty-state-icon-sources">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="empty-state-heading">No source files</div>
+          <div class="empty-state-subtext">Upload subcontractor reports to get started</div>
+
+          <div class="drop-zone">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #55627a;">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+            <div class="drop-zone-text">Drop .xlsx files here</div>
+            <div class="drop-zone-hint">or click to browse</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CENTER: Excel Editor ───────────────────────────── -->
+    <div class="panel panel-center">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-excel">
+          <!-- Grid icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">Excel Editor</span>
+        <span class="panel-header-badge">No file open</span>
+      </div>
+
+      <div class="panel-body" style="display:flex; align-items:center; justify-content:center;">
+        <div class="center-empty">
+          <div class="center-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="center-empty-heading">Select a source file to view</div>
+          <div class="center-empty-sub">Choose a file from the Sources panel to open it in the spreadsheet editor</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: AI Chat ─────────────────────────────────── -->
+    <div class="panel panel-right">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-chat">
+          <!-- Chat icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">AI Chat</span>
+        <span class="panel-header-badge">Idle</span>
+      </div>
+
+      <div class="panel-body">
+        <div class="empty-state">
+          <div class="empty-state-icon empty-state-icon-chat">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          </div>
+          <div class="empty-state-heading">Chat will appear here</div>
+          <div class="empty-state-subtext">Ask the AI to merge data, restructure columns, or summarize reports</div>
+        </div>
+      </div>
+
+      <div class="chat-footer">
+        <div class="chat-input-wrap">
+          <input
+            class="chat-input"
+            type="text"
+            placeholder="Ask the AI anything…"
+            disabled
+          />
+          <button class="chat-send-btn" disabled>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels-container -->
+
+</body>
+</html>
