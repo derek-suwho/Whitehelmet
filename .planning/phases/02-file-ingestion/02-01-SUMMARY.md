@@ -54,7 +54,7 @@ completed: 2026-03-10
 - **Duration:** ~10 min
 - **Started:** 2026-03-10T06:00:00Z
 - **Completed:** 2026-03-10T06:10:00Z
-- **Tasks:** 1 of 2 (Task 2 is human-verify checkpoint)
+- **Tasks:** 2 of 2 (Task 2 human-verify approved)
 - **Files modified:** 1
 
 ## Accomplishments
@@ -68,6 +68,8 @@ completed: 2026-03-10
 ## Task Commits
 
 1. **Task 1: Wire upload handlers and file list rendering** - `12f2de1` (feat)
+2. **Task 2: Human-verify checkpoint** - approved
+3. **Add more files button** - `bac9bd3` (feat, user-requested UX fix)
 
 ## Files Created/Modified
 - `index.html` - Added hidden #file-input, upload IIFE (handleFiles, renderFileList, drag events), CSS for .source-file-item / .drag-active / .file-list
@@ -79,7 +81,14 @@ completed: 2026-03-10
 
 ## Deviations from Plan
 
-None - plan executed exactly as written.
+### User-requested fix
+
+**1. Missing "add more files" affordance**
+- **Found during:** Human verification checkpoint
+- **Issue:** Once files uploaded, empty state replaced — no way to add more files via click
+- **Fix:** Added "Add more files" button at bottom of file list triggering file picker
+- **Files modified:** index.html
+- **Committed in:** bac9bd3
 
 ## Issues Encountered
 None.
