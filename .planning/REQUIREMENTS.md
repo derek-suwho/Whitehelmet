@@ -87,35 +87,35 @@
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+All 19 v1 requirements mapped to phases. Updated during roadmap creation (2026-03-10).
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| ROLE-01 | Phase 1 | Pending |
-| ROLE-02 | Phase 1 | Pending |
-| TMPL-01 | Phase 2 | Pending |
-| TMPL-02 | Phase 2 | Pending |
-| TMPL-03 | Phase 2 | Pending |
-| TMPL-04 | Phase 2 | Pending |
-| TMPL-05 | Phase 2 | Pending |
-| SUBM-01 | Phase 3 | Pending |
-| SUBM-02 | Phase 3 | Pending |
-| SUBM-03 | Phase 3 | Pending |
-| SUBM-04 | Phase 3 | Pending |
-| SUBM-05 | Phase 3 | Pending |
-| CONS-01 | Phase 4 | Pending |
-| CONS-02 | Phase 4 | Pending |
-| VIEW-01 | Phase 4 | Pending |
-| VIEW-02 | Phase 4 | Pending |
+| Requirement | Phase | Phase Name | Status |
+|-------------|-------|------------|--------|
+| INFRA-01 | Phase 1 | Foundation | Pending |
+| INFRA-02 | Phase 1 | Foundation | Pending |
+| INFRA-03 | Phase 1 | Foundation | Pending |
+| ROLE-01 | Phase 1 | Foundation | Pending |
+| ROLE-02 | Phase 1 | Foundation | Pending |
+| TMPL-01 | Phase 2 | Template Management | Pending |
+| TMPL-02 | Phase 2 | Template Management | Pending |
+| TMPL-03 | Phase 2 | Template Management | Pending |
+| TMPL-04 | Phase 2 | Template Management | Pending |
+| TMPL-05 | Phase 2 | Template Management | Pending |
+| SUBM-01 | Phase 3 | Report Submission | Pending |
+| SUBM-02 | Phase 3 | Report Submission | Pending |
+| SUBM-03 | Phase 3 | Report Submission | Pending |
+| SUBM-04 | Phase 3 | Report Submission | Pending |
+| SUBM-05 | Phase 3 | Report Submission | Pending |
+| CONS-01 | Phase 4 | Consolidation and Review | Pending |
+| CONS-02 | Phase 4 | Consolidation and Review | Pending |
+| VIEW-01 | Phase 4 | Consolidation and Review | Pending |
+| VIEW-02 | Phase 4 | Consolidation and Review | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
 - Mapped to phases: 19
-- Unmapped: 0 ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after initial definition*
+*Last updated: 2026-03-10 — traceability confirmed after roadmap creation*
