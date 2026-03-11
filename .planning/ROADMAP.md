@@ -58,11 +58,11 @@ Plans:
   1. An Excel-compatible spreadsheet renders in the center panel with rows, columns, and cell values
   2. User can click any cell and type to edit its value directly in the browser
   3. User can download the current spreadsheet state as a valid .xlsx file
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: Integrate embedded in-browser spreadsheet library with full read/write cell editing
-- [ ] 03-02: Implement .xlsx export and download of the current spreadsheet state
+- [ ] 03-01-PLAN.md — Integrate Jspreadsheet CE + SheetJS for click-to-open spreadsheet with cell editing
+- [ ] 03-02-PLAN.md — Add .xlsx export/download of current spreadsheet state
 
 ### Phase 4: AI Consolidation
 **Goal**: AI can merge multiple uploaded sub reports into a single master Excel record
