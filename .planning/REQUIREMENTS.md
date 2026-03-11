@@ -32,7 +32,7 @@
 ### UI/Layout
 
 - [x] **UI-01**: Three-panel NotebookLM-style layout (sources left | Excel center | chat right)
-- [ ] **UI-02**: Right panel AI chat interface with message history
+- [x] **UI-02**: Right panel AI chat interface with message history
 
 ## v2 Requirements
 
@@ -65,7 +65,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | UI-01 | Phase 1 | Complete |
-| UI-02 | Phase 1 | Pending |
+| UI-02 | Phase 1 | Complete |
 | FILE-01 | Phase 2 | Pending |
 | FILE-02 | Phase 2 | Pending |
 | FILE-03 | Phase 2 | Pending |

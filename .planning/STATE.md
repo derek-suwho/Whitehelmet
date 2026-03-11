@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Completed 01-01-PLAN.md — three-panel app shell approved
+last_updated: "2026-03-11T05:59:27.972Z"
+last_activity: 2026-03-10 — Completed 01-01 app shell layout
+progress:
+  total_phases: 6
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
+---
+
 # Project State
 
 ## Project Reference
@@ -10,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 1 of 6 (App Shell)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-03-10 — Completed 01-01 app shell layout
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-03-10 — Completed 01-02 chat UI, phase 1 done
 
-Progress: [█░░░░░░░░░] 8%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -50,6 +66,8 @@ Recent decisions affecting current work:
 - Construction-themed palette (slate/amber/warm-gray) — avoids generic Tailwind blue/indigo
 - CSS Grid cols-[280px_1fr_320px] for fixed side panels with flexible center
 - Single index.html with inline Tailwind — no build step for Phase 1
+- addMessage() helper centralizes bubble creation — Phase 4 swaps mock response for real API call
+- Mock AI text informs users real AI comes in Phase 4 — sets correct expectations
 
 ### Pending Todos
 
@@ -62,5 +80,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Completed 01-01-PLAN.md — three-panel app shell approved
+Stopped at: Completed 01-02-PLAN.md — chat UI approved, phase 1 complete
 Resume file: None
