@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Whitehelmet</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for parsing .xlsx files -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- jSuites (required dependency for Jspreadsheet CE) -->
+  <link rel="stylesheet" href="https://jsuites.net/v5/jsuites.css" />
+  <script src="https://jsuites.net/v5/jsuites.js"></script>
+  <!-- Jspreadsheet CE v5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5/dist/jspreadsheet.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5/dist/index.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -722,6 +730,112 @@
     .empty-state-action-btn:active {
       background: rgba(226,154,53,0.1);
     }
+
+    /* ── Source file selected state ──────────────────────── */
+    .source-item.source-selected {
+      background: rgba(52,211,153,0.08);
+      border-left: 2px solid rgba(52,211,153,0.5);
+    }
+
+    .source-item.source-selected .source-item-name {
+      color: #34d399;
+    }
+
+    /* ── Jspreadsheet dark theme overrides ───────────────── */
+    #excel-container {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Override jspreadsheet table styles */
+    .jexcel_content {
+      background: #1a2030;
+      color: #e8ecf2;
+    }
+
+    .jexcel > thead > tr > td,
+    .jexcel > tbody > tr > td:first-child {
+      background: #1d242e !important;
+      color: #8c99ae !important;
+      border-color: #262e3a !important;
+      font-size: 11px;
+    }
+
+    .jexcel > tbody > tr > td {
+      background: #1a2030 !important;
+      color: #e8ecf2 !important;
+      border-color: #262e3a !important;
+      font-size: 12px;
+      font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .jexcel > tbody > tr:hover > td {
+      background: rgba(255,255,255,0.02) !important;
+    }
+
+    .jexcel > tbody > tr > td.highlight,
+    .jexcel > tbody > tr > td.highlight-top,
+    .jexcel > tbody > tr > td.highlight-bottom,
+    .jexcel > tbody > tr > td.highlight-left,
+    .jexcel > tbody > tr > td.highlight-right {
+      background: rgba(226,154,53,0.08) !important;
+    }
+
+    .jexcel > tbody > tr > td.selected {
+      background: rgba(226,154,53,0.15) !important;
+    }
+
+    /* Selected cell border */
+    .jexcel_corner {
+      background: #e29a35 !important;
+      border-color: #e29a35 !important;
+    }
+
+    /* Editor input */
+    .jexcel > tbody > tr > td.edition {
+      background: #262e3a !important;
+    }
+
+    .jexcel > tbody > tr > td.edition > input,
+    .jexcel > tbody > tr > td.edition > textarea {
+      background: #262e3a !important;
+      color: #e8ecf2 !important;
+      font-family: 'Inter', system-ui, sans-serif;
+      font-size: 12px;
+    }
+
+    /* Toolbar — hide it */
+    .jexcel_toolbar {
+      display: none !important;
+    }
+
+    /* Column resizer */
+    .jexcel_resizeColumn {
+      background: #e29a35 !important;
+    }
+
+    /* Scrollbar */
+    .jexcel_content::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .jexcel_content::-webkit-scrollbar-track {
+      background: #1a2030;
+    }
+    .jexcel_content::-webkit-scrollbar-thumb {
+      background: #262e3a;
+      border-radius: 3px;
+    }
+    .jexcel_content::-webkit-scrollbar-thumb:hover {
+      background: #363e4d;
+    }
+
+    /* Panel body no padding when spreadsheet active */
+    .panel-body.has-spreadsheet {
+      padding: 0;
+      overflow: hidden;
+    }
   </style>
 </head>
 <body>
@@ -944,6 +1058,7 @@
       var panelLeft     = document.querySelector('.panel-left');
       var panelBody     = panelLeft.querySelector('.panel-body');
       var badge         = panelLeft.querySelector('.panel-header-badge');
+      var selectedItemEl = null;
 
       // ── Empty state HTML template ──────────────────────────
       var emptyStateHTML = panelBody.innerHTML;
@@ -1070,9 +1185,16 @@
         panelBody.appendChild(list);
       }
 
+      function selectItem(el) {
+        if (selectedItemEl) selectedItemEl.classList.remove('source-selected');
+        selectedItemEl = el;
+        if (el) el.classList.add('source-selected');
+      }
+
       function createFileItem(f, sourceIdx) {
         var item = document.createElement('div');
         item.className = 'source-item';
+        item.style.cursor = 'pointer';
 
         var icon = document.createElement('div');
         icon.className = 'source-item-icon icon-file';
@@ -1100,6 +1222,11 @@
         delBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           deleteSource(sourceIdx);
+        });
+
+        item.addEventListener('click', function () {
+          selectItem(item);
+          if (window.openFile) window.openFile(f.file);
         });
 
         item.appendChild(icon);
@@ -1159,6 +1286,7 @@
         folder.files.forEach(function (f) {
           var child = document.createElement('div');
           child.className = 'source-item';
+          child.style.cursor = 'pointer';
 
           var cIcon = document.createElement('div');
           cIcon.className = 'source-item-icon icon-file';
@@ -1180,6 +1308,14 @@
           cInfo.appendChild(cMeta);
           child.appendChild(cIcon);
           child.appendChild(cInfo);
+
+          // Click to open file
+          child.addEventListener('click', function (e) {
+            e.stopPropagation(); // Prevent folder expand toggle
+            selectItem(child);
+            if (window.openFile) window.openFile(f.file);
+          });
+
           children.appendChild(child);
         });
 
@@ -1326,6 +1462,84 @@
 
       // Initial wire
       wireEmptyState();
+    })();
+
+    // ── Excel Editor ────────────────────────────────────────────
+    (function () {
+      var panelCenter   = document.querySelector('.panel-center');
+      var panelBody     = panelCenter.querySelector('.panel-body');
+      var headerBadge   = panelCenter.querySelector('.panel-header-badge');
+      var currentInstance = null;
+
+      // Expose state for future plans
+      window._excelState = { instance: null, workbook: null };
+
+      window.openFile = function (fileObj) {
+        var reader = new FileReader();
+        reader.onload = function (e) {
+          var data     = new Uint8Array(e.target.result);
+          var workbook = XLSX.read(data, { type: 'array' });
+          var sheetName = workbook.SheetNames[0];
+          var ws        = workbook.Sheets[sheetName];
+          var rows      = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+          // Ensure at least some rows/cols
+          if (!rows || rows.length === 0) rows = [[]];
+
+          // Destroy previous instance
+          if (currentInstance) {
+            try { currentInstance.destroy(); } catch (ex) {}
+            currentInstance = null;
+          }
+
+          // Clear panel body and set spreadsheet mode
+          panelBody.innerHTML = '';
+          panelBody.className = 'panel-body has-spreadsheet';
+
+          // Container element
+          var container = document.createElement('div');
+          container.id  = 'excel-container';
+          panelBody.appendChild(container);
+
+          // Build column definitions (min 10 cols)
+          var maxCols = 0;
+          rows.forEach(function (r) { if (r.length > maxCols) maxCols = r.length; });
+          if (maxCols < 10) maxCols = 10;
+          var columns = [];
+          for (var c = 0; c < maxCols; c++) {
+            columns.push({ width: 120 });
+          }
+
+          // Ensure at least 20 rows
+          var minRows = Math.max(rows.length, 20);
+
+          // Jspreadsheet CE v5 uses `worksheets` array
+          var instances = jspreadsheet(container, {
+            worksheets: [{
+              data: rows,
+              columns: columns,
+              minDimensions: [maxCols, minRows],
+              tableOverflow: true,
+              tableWidth: '100%',
+              tableHeight: (panelBody.offsetHeight - 4) + 'px',
+              allowInsertRow: true,
+              allowInsertColumn: true,
+            }]
+          });
+
+          currentInstance = Array.isArray(instances) ? instances[0] : instances;
+
+          // Update global state
+          window._excelState.instance = currentInstance;
+          window._excelState.workbook = workbook;
+
+          // Update header badge (truncate to 20 chars)
+          var name = fileObj.name;
+          headerBadge.textContent = name.length > 20 ? name.slice(0, 17) + '…' : name;
+        };
+
+        reader.readAsArrayBuffer(fileObj);
+      };
     })();
   </script>
 
