@@ -29,7 +29,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Three-panel layout renders: sources panel on left, Excel area in center, chat panel on right
   2. Chat panel shows an input field and message history area
   3. Layout is stable and does not collapse or overflow at standard desktop viewport
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
 - [ ] 01-01-PLAN.md — Three-panel layout shell with sources, Excel placeholder, and chat panels
@@ -115,7 +115,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. App Shell | 0/2 | Not started | - |
+| 1. App Shell | 1/2 | In Progress|  |
 | 2. File Ingestion | 0/3 | Not started | - |
 | 3. Excel Editor | 0/2 | Not started | - |
 | 4. AI Consolidation | 0/2 | Not started | - |

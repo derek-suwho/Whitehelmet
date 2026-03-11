@@ -10,27 +10,27 @@ See: .planning/PROJECT.md (updated 2026-03-10)
 ## Current Position
 
 Phase: 1 of 6 (App Shell)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-03-10 — Roadmap created
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-03-10 — Completed 01-01 app shell layout
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 8%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: —
-- Total execution time: —
+- Total plans completed: 1
+- Average duration: ~15 min
+- Total execution time: ~15 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 01-app-shell | 1 | ~15 min | ~15 min |
 
 **Recent Trend:**
-- Last 5 plans: —
+- Last 5 plans: 01-01 (~15 min)
 - Trend: —
 
 *Updated after each plan completion*
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - NotebookLM-style three-panel layout (sources → Excel → AI)
 - No approval workflow in v1
 - Full in-browser cell editing required (not read-only)
+- Construction-themed palette (slate/amber/warm-gray) — avoids generic Tailwind blue/indigo
+- CSS Grid cols-[280px_1fr_320px] for fixed side panels with flexible center
+- Single index.html with inline Tailwind — no build step for Phase 1
 
 ### Pending Todos
 
@@ -59,5 +62,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-10
-Stopped at: Roadmap created, ready to plan Phase 1
+Stopped at: Completed 01-01-PLAN.md — three-panel app shell approved
 Resume file: None
