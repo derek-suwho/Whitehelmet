@@ -29,11 +29,11 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. Three-panel layout renders: sources panel on left, Excel area in center, chat panel on right
   2. Chat panel shows an input field and message history area
   3. Layout is stable and does not collapse or overflow at standard desktop viewport
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 01-01: Build three-panel layout shell with sources, Excel placeholder, and chat panels
-- [ ] 01-02: Implement chat UI with message input, send action, and scrollable history
+- [ ] 01-01-PLAN.md — Three-panel layout shell with sources, Excel placeholder, and chat panels
+- [ ] 01-02-PLAN.md — Chat UI with message input, send action, and scrollable history
 
 ### Phase 2: File Ingestion
 **Goal**: Users can upload and view all source .xlsx files in the left panel
