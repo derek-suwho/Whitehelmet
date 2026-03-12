@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 04-01-PLAN.md (AI consolidation pipeline)
-last_updated: "2026-03-12T05:23:22.566Z"
+stopped_at: Completed 04-02-PLAN.md (streaming chat with conversation history)
+last_updated: "2026-03-12T05:27:00.136Z"
 last_activity: 2026-03-10 — Completed 01-02 chat UI, phase 1 done
 progress:
   total_phases: 6
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
   percent: 100
 ---
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100%
 | Phase 03-excel-editor P01 | 8 | 1 tasks | 1 files |
 | Phase 03-excel-editor P02 | 2 | 1 tasks | 1 files |
 | Phase 04-ai-consolidation P01 | 15 | 2 tasks | 1 files |
+| Phase 04-ai-consolidation P02 | 8 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,8 @@ Recent decisions affecting current work:
 - [Phase 03-excel-editor]: [Phase 03-excel-editor P02]: panel-header-action CSS pattern for reusable header icon-buttons
 - [Phase 03-excel-editor]: [Phase 03-excel-editor P02]: XLSX export uses getData() -> aoa_to_sheet -> XLSX.write(array) -> Blob download
 - [Phase 04-ai-consolidation]: claude-opus-4-5 for consolidation; non-streaming API call; _fileRef pattern bridges checkbox DOM to raw File; window.addMessage exposed globally post-declaration
+- [Phase 04-ai-consolidation]: window.ANTHROPIC_API_KEY and window.conversationHistory declared at script scope so both consolidation and chat IIFEs share the same reference
+- [Phase 04-ai-consolidation]: Streaming chat uses skipHistory param on addMessage to prevent double-pushing; external callers (consolidation) auto-push summaries to conversationHistory
 
 ### Pending Todos
 
@@ -89,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-12T05:23:22.564Z
-Stopped at: Completed 04-01-PLAN.md (AI consolidation pipeline)
+Last session: 2026-03-12T05:27:00.133Z
+Stopped at: Completed 04-02-PLAN.md (streaming chat with conversation history)
 Resume file: None

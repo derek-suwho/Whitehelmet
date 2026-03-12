@@ -16,7 +16,7 @@
 - [x] **AI-01**: AI consolidates multiple sub .xlsx files into a single master Excel template
 - [ ] **AI-02**: User can instruct AI via chat to modify template structure (add/remove columns, change layout, modify formulas)
 - [ ] **AI-03**: User can instruct AI via chat to perform data operations (merge rows, filter, aggregate, fill from sources)
-- [ ] **AI-04**: AI chat maintains conversation history within a session
+- [x] **AI-04**: AI chat maintains conversation history within a session
 
 ### Excel View
 
@@ -72,7 +72,7 @@
 | EXCEL-01 | Phase 3 | Complete |
 | EXCEL-02 | Phase 3 | Complete |
 | AI-01 | Phase 4 | Complete |
-| AI-04 | Phase 4 | Pending |
+| AI-04 | Phase 4 | Complete |
 | AI-02 | Phase 5 | Pending |
 | AI-03 | Phase 5 | Pending |
 | MSTR-01 | Phase 6 | Pending |
