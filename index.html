@@ -853,6 +853,38 @@
       padding: 0;
       overflow: hidden;
     }
+
+    /* ── Panel header action button ──────────────────────── */
+    .panel-header-action {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      border: 1px solid #262e3a;
+      background: transparent;
+      color: #55627a;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: color 0.15s ease, background 0.15s ease, transform 0.1s ease, opacity 0.15s ease;
+    }
+
+    .panel-header-action:hover {
+      color: #e29a35;
+      background: rgba(226,154,53,0.08);
+      border-color: rgba(226,154,53,0.3);
+    }
+
+    .panel-header-action:focus-visible {
+      outline: 2px solid rgba(226,154,53,0.5);
+      outline-offset: 2px;
+    }
+
+    .panel-header-action:active {
+      transform: scale(0.93);
+      opacity: 0.8;
+    }
   </style>
 </head>
 <body>
@@ -932,6 +964,14 @@
         </div>
         <span class="panel-header-title">Excel Editor</span>
         <span class="panel-header-badge">No file open</span>
+        <button class="panel-header-action" id="download-xlsx-btn" title="Download as .xlsx" style="display:none;">
+          <!-- Download / arrow-down icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
       </div>
 
       <div class="panel-body" style="display:flex; align-items:center; justify-content:center;">
@@ -1486,10 +1526,40 @@
       var panelCenter   = document.querySelector('.panel-center');
       var panelBody     = panelCenter.querySelector('.panel-body');
       var headerBadge   = panelCenter.querySelector('.panel-header-badge');
+      var downloadBtn   = document.getElementById('download-xlsx-btn');
       var currentInstance = null;
+      var currentFileName = 'export.xlsx';
 
       // Expose state for future plans
-      window._excelState = { instance: null, workbook: null };
+      window._excelState = { instance: null, workbook: null, fileName: null };
+
+      // ── Download / export handler ──────────────────────────
+      downloadBtn.addEventListener('click', function () {
+        var state = window._excelState;
+        if (!state.instance) return;
+
+        // Get current cell data from Jspreadsheet
+        var data = state.instance.getData();
+
+        // Build a new SheetJS workbook from current data
+        var wb = XLSX.utils.book_new();
+        var ws = XLSX.utils.aoa_to_sheet(data);
+        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+
+        // Write to binary array
+        var wbArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+        // Create Blob and trigger download
+        var blob = new Blob([wbArray], { type: 'application/octet-stream' });
+        var url  = URL.createObjectURL(blob);
+        var a    = document.createElement('a');
+        a.href     = url;
+        a.download = state.fileName || 'export.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
 
       window.openFile = function (fileObj) {
         var reader = new FileReader();
@@ -1553,6 +1623,10 @@
           // Update global state
           window._excelState.instance = currentInstance;
           window._excelState.workbook = workbook;
+          window._excelState.fileName = fileObj.name;
+
+          // Show download button now that a file is open
+          downloadBtn.style.display = 'flex';
 
           // Update header badge (truncate to 20 chars)
           var name = fileObj.name;
