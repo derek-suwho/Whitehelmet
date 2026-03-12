@@ -1060,10 +1060,11 @@
       var emptyState = document.getElementById('chat-empty-state');
       var badge     = document.getElementById('chat-badge');
 
-      function addMessage(text, sender) {
+      function addMessage(text, sender, skipHistory) {
         // Remove empty state on first message
         if (emptyState && emptyState.parentNode) {
           emptyState.parentNode.removeChild(emptyState);
+          emptyState = null;
         }
 
         var wrapper = document.createElement('div');
@@ -1078,29 +1079,118 @@
 
         // Auto-scroll to bottom
         history.scrollTop = history.scrollHeight;
+
+        // Push to conversation history for ai messages (so consolidation summaries are in context)
+        if (sender === 'ai' && !skipHistory && window.conversationHistory) {
+          window.conversationHistory.push({ role: 'assistant', content: text });
+        }
       }
       // Expose globally so consolidation pipeline can post messages
       window.addMessage = addMessage;
 
-      function sendMessage() {
+      async function sendMessage() {
         var text = input.value.trim();
         if (!text) return;
 
+        // Remove empty state
+        if (emptyState && emptyState.parentNode) {
+          emptyState.parentNode.removeChild(emptyState);
+          emptyState = null;
+        }
+
+        // Render user bubble
         addMessage(text, 'user');
         input.value = '';
         input.focus();
 
-        // Update badge while "thinking"
-        badge.textContent = 'Thinking…';
+        // Disable inputs while responding
+        input.disabled = true;
+        sendBtn.disabled = true;
+        badge.textContent = 'Thinking\u2026';
 
-        // Mock AI reply after 500ms
-        setTimeout(function () {
-          addMessage(
-            "I\u2019m an AI assistant for Whitehelmet. AI responses will be connected in a future update.",
-            'ai'
-          );
+        // Append user message to history
+        window.conversationHistory.push({ role: 'user', content: text });
+
+        // Create an empty AI bubble for streaming into
+        var wrapper = document.createElement('div');
+        wrapper.className = 'msg msg-ai';
+        var bubble = document.createElement('div');
+        bubble.className = 'msg-bubble';
+        bubble.textContent = '';
+        wrapper.appendChild(bubble);
+        history.appendChild(wrapper);
+        history.scrollTop = history.scrollHeight;
+
+        var fullResponse = '';
+
+        try {
+          var response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': window.ANTHROPIC_API_KEY,
+              'anthropic-version': '2023-06-01',
+              'anthropic-dangerous-direct-browser-access': 'true'
+            },
+            body: JSON.stringify({
+              model: 'claude-opus-4-5',
+              max_tokens: 4096,
+              stream: true,
+              system: 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.',
+              messages: window.conversationHistory
+            })
+          });
+
+          if (!response.ok) {
+            var errText = await response.text();
+            throw new Error('API error ' + response.status + ': ' + errText);
+          }
+
+          // Parse SSE stream
+          var reader = response.body.getReader();
+          var decoder = new TextDecoder();
+          var buffer = '';
+
+          while (true) {
+            var chunk = await reader.read();
+            if (chunk.done) break;
+
+            buffer += decoder.decode(chunk.value, { stream: true });
+
+            // Split on newline SSE boundaries
+            var lines = buffer.split('\n');
+            buffer = lines.pop(); // keep incomplete line in buffer
+
+            for (var i = 0; i < lines.length; i++) {
+              var line = lines[i].trim();
+              if (!line.startsWith('data: ')) continue;
+              var dataStr = line.slice(6);
+              if (dataStr === '[DONE]') continue;
+              try {
+                var evt = JSON.parse(dataStr);
+                if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+                  fullResponse += evt.delta.text;
+                  bubble.textContent = fullResponse;
+                  history.scrollTop = history.scrollHeight;
+                }
+              } catch (parseErr) {
+                // Ignore malformed SSE lines
+              }
+            }
+          }
+
+          // Push complete assistant message to history
+          window.conversationHistory.push({ role: 'assistant', content: fullResponse });
+
+        } catch (err) {
+          bubble.textContent = 'Sorry, something went wrong: ' + err.message;
+          // Don't push failed response to history (keep it clean)
+        } finally {
+          input.disabled = false;
+          sendBtn.disabled = false;
           badge.textContent = 'Ready';
-        }, 500);
+          input.focus();
+        }
       }
 
       // Send on button click
@@ -1721,8 +1811,12 @@
 
   <!-- ── AI Consolidation Pipeline ───────────────────────────── -->
   <script>
+    // Shared state for chat streaming (must be at window scope before any IIFE reads them)
+    window.ANTHROPIC_API_KEY = 'YOUR_KEY_HERE'; // TODO: remove before sharing
+    window.conversationHistory = [];
+
     (function () {
-      var ANTHROPIC_API_KEY = 'YOUR_KEY_HERE'; // TODO: remove before sharing
+      var ANTHROPIC_API_KEY = window.ANTHROPIC_API_KEY;
       var ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 
       var SYSTEM_PROMPT = [
