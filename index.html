@@ -811,15 +811,8 @@
       border-color: #262e3a !important;
     }
 
-    .jss_tab {
-      background: #1d242e !important;
-      color: #8c99ae !important;
-      border-color: #262e3a !important;
-    }
-
-    .jss_tab.selected {
-      background: #1a2030 !important;
-      color: #e8ecf2 !important;
+    .jss_tab, .jtabs-headers > * {
+      color: #000000 !important;
     }
 
     /* Toolbar — hide it */
@@ -885,6 +878,16 @@
       transform: scale(0.93);
       opacity: 0.8;
     }
+
+    /* ── Source file checkboxes ──────────────────────────── */
+    .source-check {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      cursor: pointer;
+      accent-color: #e29a35;
+      margin-right: 4px;
+    }
   </style>
 </head>
 <body>
@@ -911,6 +914,10 @@
         </div>
         <span class="panel-header-title">Sources</span>
         <span class="panel-header-badge">0 files</span>
+        <button class="panel-header-action consolidate-btn" id="consolidate-btn" title="Consolidate selected files"
+          style="width:auto; padding:0 8px; font-size:11px; font-weight:600; letter-spacing:0.03em; color:#e29a35; border-color:rgba(226,154,53,0.4);">
+          Consolidate
+        </button>
       </div>
 
       <div class="panel-body">
@@ -1072,6 +1079,8 @@
         // Auto-scroll to bottom
         history.scrollTop = history.scrollHeight;
       }
+      // Expose globally so consolidation pipeline can post messages
+      window.addMessage = addMessage;
 
       function sendMessage() {
         var text = input.value.trim();
@@ -1194,6 +1203,21 @@
 
       // ── Delete source ─────────────────────────────────────
       function deleteSource(index) {
+        var removed = sources[index];
+        // Close center panel if the removed source is currently open
+        if (window.closeFile && window._excelState && window._excelState.fileName) {
+          var openName = window._excelState.fileName;
+          if (removed.type === 'file' && removed.file.name === openName) {
+            window.closeFile(openName);
+          } else if (removed.type === 'folder') {
+            for (var i = 0; i < removed.files.length; i++) {
+              if (removed.files[i].file.name === openName) {
+                window.closeFile(openName);
+                break;
+              }
+            }
+          }
+        }
         sources.splice(index, 1);
         render();
       }
@@ -1253,6 +1277,13 @@
         item.className = 'source-item';
         item.style.cursor = 'pointer';
 
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'source-check';
+        cb.title = 'Select for consolidation';
+        cb._fileRef = f.file;
+        cb.addEventListener('click', function (e) { e.stopPropagation(); });
+
         var icon = document.createElement('div');
         icon.className = 'source-item-icon icon-file';
         icon.innerHTML = FILE_ICON;
@@ -1286,6 +1317,7 @@
           if (window.openFile) window.openFile(f.file);
         });
 
+        item.appendChild(cb);
         item.appendChild(icon);
         item.appendChild(info);
         item.appendChild(delBtn);
@@ -1345,6 +1377,13 @@
           child.className = 'source-item';
           child.style.cursor = 'pointer';
 
+          var cCb = document.createElement('input');
+          cCb.type = 'checkbox';
+          cCb.className = 'source-check';
+          cCb.title = 'Select for consolidation';
+          cCb._fileRef = f.file;
+          cCb.addEventListener('click', function (e) { e.stopPropagation(); });
+
           var cIcon = document.createElement('div');
           cIcon.className = 'source-item-icon icon-file';
           cIcon.innerHTML = FILE_ICON;
@@ -1363,6 +1402,7 @@
 
           cInfo.appendChild(cName);
           cInfo.appendChild(cMeta);
+          child.appendChild(cCb);
           child.appendChild(cIcon);
           child.appendChild(cInfo);
 
@@ -1533,6 +1573,38 @@
       // Expose state for future plans
       window._excelState = { instance: null, workbook: null, fileName: null };
 
+      var EMPTY_CENTER_HTML = '<div class="center-empty">'
+        + '<div class="center-empty-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
+        + '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+        + '<polyline points="14 2 14 8 20 8"/>'
+        + '<line x1="16" y1="13" x2="8" y2="13"/>'
+        + '<line x1="16" y1="17" x2="8" y2="17"/>'
+        + '<polyline points="10 9 9 9 8 9"/>'
+        + '</svg></div>'
+        + '<div class="center-empty-heading">Select a source file to view</div>'
+        + '<div class="center-empty-sub">Choose a file from the Sources panel to open it in the spreadsheet editor</div>'
+        + '</div>';
+
+      window.closeFile = function (fileName) {
+        var state = window._excelState;
+        // Only close if the given file is the one currently open
+        if (fileName && state.fileName !== fileName) return;
+        if (currentInstance) {
+          try { currentInstance.destroy(); } catch (ex) {}
+          currentInstance = null;
+        }
+        state.instance = null;
+        state.workbook = null;
+        state.fileName = null;
+        downloadBtn.style.display = 'none';
+        headerBadge.textContent = '';
+        panelBody.className = 'panel-body';
+        panelBody.style.display = 'flex';
+        panelBody.style.alignItems = 'center';
+        panelBody.style.justifyContent = 'center';
+        panelBody.innerHTML = EMPTY_CENTER_HTML;
+      };
+
       // ── Download / export handler ──────────────────────────
       downloadBtn.addEventListener('click', function () {
         var state = window._excelState;
@@ -1619,6 +1691,15 @@
           });
 
           currentInstance = Array.isArray(instances) ? instances[0] : instances;
+
+          // Force all sheet tab text to black — jSuites applies inline color to
+          // inactive tabs that overrides CSS. Patch every child of .jtabs-headers.
+          var tabsHeaders = container.querySelector('.jtabs-headers');
+          if (tabsHeaders) {
+            Array.prototype.forEach.call(tabsHeaders.children, function (el) {
+              el.style.setProperty('color', '#000000', 'important');
+            });
+          }
 
           // Update global state
           window._excelState.instance = currentInstance;
