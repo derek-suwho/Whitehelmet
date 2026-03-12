@@ -21,7 +21,7 @@
 ### Excel View
 
 - [x] **EXCEL-01**: Embedded in-browser spreadsheet editor with full read/write cell editing
-- [ ] **EXCEL-02**: User can download master record as .xlsx file
+- [x] **EXCEL-02**: User can download master record as .xlsx file
 
 ### Master Records
 
@@ -70,7 +70,7 @@
 | FILE-02 | Phase 2 | Pending |
 | FILE-03 | Phase 2 | Complete |
 | EXCEL-01 | Phase 3 | Complete |
-| EXCEL-02 | Phase 3 | Pending |
+| EXCEL-02 | Phase 3 | Complete |
 | AI-01 | Phase 4 | Pending |
 | AI-04 | Phase 4 | Pending |
 | AI-02 | Phase 5 | Pending |
