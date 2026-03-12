@@ -72,11 +72,11 @@ Plans:
   1. User can trigger AI consolidation on a set of uploaded source files and a merged master appears in the Excel editor
   2. The consolidated master contains data drawn from all contributing source files
   3. AI chat maintains conversation history so follow-up messages have context from prior turns
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01: Implement AI consolidation pipeline (send source files to Claude, receive merged output, render in editor)
-- [ ] 04-02: Wire chat session history so conversation context persists across messages within a session
+- [ ] 04-01-PLAN.md — AI consolidation pipeline: checkboxes, Consolidate button, Claude API call, merged result in editor
+- [ ] 04-02-PLAN.md — Real streaming chat with in-memory conversation history replacing mock reply
 
 ### Phase 5: AI Chat Operations
 **Goal**: Users can restructure templates and perform data operations through natural language chat
