@@ -748,86 +748,103 @@
       overflow: hidden;
     }
 
-    /* Override jspreadsheet table styles */
-    .jexcel_content {
-      background: #1a2030;
-      color: #e8ecf2;
+    /* Override jspreadsheet CE v5 table styles (v5 uses .jss prefix) */
+    .jss_content {
+      background: #ffffff;
+      color: #111111;
     }
 
-    .jexcel > thead > tr > td,
-    .jexcel > tbody > tr > td:first-child {
+    .jss > thead > tr > td,
+    .jss > tbody > tr > td:first-child {
       background: #1d242e !important;
       color: #8c99ae !important;
       border-color: #262e3a !important;
       font-size: 11px;
     }
 
-    .jexcel > tbody > tr > td {
-      background: #1a2030 !important;
-      color: #e8ecf2 !important;
-      border-color: #262e3a !important;
+    .jss > tbody > tr > td {
+      background: #ffffff !important;
+      color: #111111 !important;
+      border-color: #d1d5db !important;
       font-size: 12px;
       font-family: 'Inter', system-ui, sans-serif;
     }
 
-    .jexcel > tbody > tr:hover > td {
-      background: rgba(255,255,255,0.02) !important;
+    .jss > tbody > tr:hover > td {
+      background: #f9fafb !important;
     }
 
-    .jexcel > tbody > tr > td.highlight,
-    .jexcel > tbody > tr > td.highlight-top,
-    .jexcel > tbody > tr > td.highlight-bottom,
-    .jexcel > tbody > tr > td.highlight-left,
-    .jexcel > tbody > tr > td.highlight-right {
+    .jss > tbody > tr > td.highlight,
+    .jss > tbody > tr > td.highlight-top,
+    .jss > tbody > tr > td.highlight-bottom,
+    .jss > tbody > tr > td.highlight-left,
+    .jss > tbody > tr > td.highlight-right {
       background: rgba(226,154,53,0.08) !important;
     }
 
-    .jexcel > tbody > tr > td.selected {
+    .jss > tbody > tr > td.selected {
       background: rgba(226,154,53,0.15) !important;
     }
 
     /* Selected cell border */
-    .jexcel_corner {
+    .jss_corner {
       background: #e29a35 !important;
       border-color: #e29a35 !important;
     }
 
     /* Editor input */
-    .jexcel > tbody > tr > td.edition {
+    .jss > tbody > tr > td.edition {
       background: #262e3a !important;
     }
 
-    .jexcel > tbody > tr > td.edition > input,
-    .jexcel > tbody > tr > td.edition > textarea {
+    .jss > tbody > tr > td.edition > input,
+    .jss > tbody > tr > td.edition > textarea {
       background: #262e3a !important;
       color: #e8ecf2 !important;
       font-family: 'Inter', system-ui, sans-serif;
       font-size: 12px;
     }
 
+    /* Worksheet tabs */
+    .jss_tabs {
+      background: #171c23 !important;
+      border-color: #262e3a !important;
+    }
+
+    .jss_tab {
+      background: #1d242e !important;
+      color: #8c99ae !important;
+      border-color: #262e3a !important;
+    }
+
+    .jss_tab.selected {
+      background: #1a2030 !important;
+      color: #e8ecf2 !important;
+    }
+
     /* Toolbar — hide it */
-    .jexcel_toolbar {
+    .jss_toolbar {
       display: none !important;
     }
 
     /* Column resizer */
-    .jexcel_resizeColumn {
+    .jss_resizeColumn {
       background: #e29a35 !important;
     }
 
     /* Scrollbar */
-    .jexcel_content::-webkit-scrollbar {
+    .jss_content::-webkit-scrollbar {
       width: 6px;
       height: 6px;
     }
-    .jexcel_content::-webkit-scrollbar-track {
+    .jss_content::-webkit-scrollbar-track {
       background: #1a2030;
     }
-    .jexcel_content::-webkit-scrollbar-thumb {
+    .jss_content::-webkit-scrollbar-thumb {
       background: #262e3a;
       border-radius: 3px;
     }
-    .jexcel_content::-webkit-scrollbar-thumb:hover {
+    .jss_content::-webkit-scrollbar-thumb:hover {
       background: #363e4d;
     }
 
@@ -1479,12 +1496,6 @@
         reader.onload = function (e) {
           var data     = new Uint8Array(e.target.result);
           var workbook = XLSX.read(data, { type: 'array' });
-          var sheetName = workbook.SheetNames[0];
-          var ws        = workbook.Sheets[sheetName];
-          var rows      = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-          // Ensure at least some rows/cols
-          if (!rows || rows.length === 0) rows = [[]];
 
           // Destroy previous instance
           if (currentInstance) {
@@ -1501,30 +1512,40 @@
           container.id  = 'excel-container';
           panelBody.appendChild(container);
 
-          // Build column definitions (min 10 cols)
-          var maxCols = 0;
-          rows.forEach(function (r) { if (r.length > maxCols) maxCols = r.length; });
-          if (maxCols < 10) maxCols = 10;
-          var columns = [];
-          for (var c = 0; c < maxCols; c++) {
-            columns.push({ width: 120 });
-          }
+          // Build worksheet configs for all sheets
+          var worksheets = workbook.SheetNames.map(function (sheetName) {
+            var ws   = workbook.Sheets[sheetName];
+            var rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+            if (!rows || rows.length === 0) rows = [[]];
 
-          // Ensure at least 20 rows
-          var minRows = Math.max(rows.length, 20);
+            var maxCols = 0;
+            rows.forEach(function (r) { if (r.length > maxCols) maxCols = r.length; });
+            if (maxCols < 10) maxCols = 10;
 
-          // Jspreadsheet CE v5 uses `worksheets` array
-          var instances = jspreadsheet(container, {
-            worksheets: [{
-              data: rows,
+            var columns = [];
+            for (var c = 0; c < maxCols; c++) { columns.push({ width: 120 }); }
+
+            var stringRows = rows.map(function (row) {
+              return row.map(function (cell) {
+                return (cell === null || cell === undefined) ? '' : String(cell);
+              });
+            });
+
+            return {
+              sheetName: sheetName,
+              data: stringRows,
               columns: columns,
-              minDimensions: [maxCols, minRows],
-              tableOverflow: true,
-              tableWidth: '100%',
-              tableHeight: (panelBody.offsetHeight - 4) + 'px',
+              minDimensions: [maxCols, Math.max(rows.length, 20)],
               allowInsertRow: true,
               allowInsertColumn: true,
-            }]
+            };
+          });
+
+          var instances = jspreadsheet(container, {
+            worksheets: worksheets,
+            tableOverflow: true,
+            tableWidth: '100%',
+            tableHeight: (panelBody.offsetHeight - 4) + 'px',
           });
 
           currentInstance = Array.isArray(instances) ? instances[0] : instances;
