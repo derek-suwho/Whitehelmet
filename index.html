@@ -744,8 +744,9 @@
     /* ── Jspreadsheet dark theme overrides ───────────────── */
     #excel-container {
       width: 100%;
-      height: 100%;
-      overflow: hidden;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
     }
 
     /* Override jspreadsheet CE v5 table styles (v5 uses .jss prefix) */
@@ -809,6 +810,9 @@
     .jss_tabs {
       background: #171c23 !important;
       border-color: #262e3a !important;
+      position: sticky !important;
+      left: 0 !important;
+      z-index: 5 !important;
     }
 
     .jss_tab, .jtabs-headers > * {
@@ -845,6 +849,65 @@
     .panel-body.has-spreadsheet {
       padding: 0;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Tab bar — fixed header above sheet */
+    .panel-body.has-spreadsheet > .jtabs-headers {
+      flex-shrink: 0;
+      display: flex !important;
+      flex-direction: row !important;
+      flex-wrap: nowrap;
+      background: #d0d3d8 !important;
+      border-bottom: 1px solid #b0b3b8;
+      padding: 0;
+      margin: 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .panel-body.has-spreadsheet > .jtabs-headers::-webkit-scrollbar {
+      display: none;
+    }
+    /* Individual tab buttons — boxy Excel-style, touching */
+    .panel-body.has-spreadsheet > .jtabs-headers > * {
+      display: inline-block !important;
+      padding: 7px 24px !important;
+      background: #c0c3c8 !important;
+      color: #444444 !important;
+      border: 1px solid #b0b3b8 !important;
+      border-bottom: none !important;
+      border-left: none !important;
+      border-radius: 0 !important;
+      font-size: 12px !important;
+      font-family: 'Inter', system-ui, sans-serif !important;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .panel-body.has-spreadsheet > .jtabs-headers > *:first-child {
+      border-left: 1px solid #b0b3b8 !important;
+    }
+    /* Active tab — white, merges seamlessly with sheet below */
+    .panel-body.has-spreadsheet > .jtabs-headers > *.jtabs-selected,
+    .panel-body.has-spreadsheet > .jtabs-headers > *[data-selected="true"] {
+      background: #ffffff !important;
+      color: #111111 !important;
+      font-weight: 600 !important;
+      border-bottom: 1px solid #ffffff !important;
+      margin-bottom: -1px;
+    }
+    /* Hide empty/nameless tab (jspreadsheet add-sheet button) */
+    .panel-body.has-spreadsheet > .jtabs-headers > *:empty {
+      display: none !important;
+    }
+    /* Remove any top gap between tab bar and sheet content */
+    #excel-container .jtabs-content,
+    #excel-container .jss_spreadsheet,
+    #excel-container .jss_content,
+    #excel-container .jss_container {
+      margin-top: 0 !important;
+      padding-top: 0 !important;
     }
 
     /* ── Panel header action button ──────────────────────── */
@@ -1738,6 +1801,7 @@
           // Clear panel body and set spreadsheet mode
           panelBody.innerHTML = '';
           panelBody.className = 'panel-body has-spreadsheet';
+          panelBody.style.cssText = '';
 
           // Container element
           var container = document.createElement('div');
@@ -1775,19 +1839,19 @@
 
           var instances = jspreadsheet(container, {
             worksheets: worksheets,
-            tableOverflow: true,
-            tableWidth: '100%',
-            tableHeight: (panelBody.offsetHeight - 4) + 'px',
           });
 
           currentInstance = Array.isArray(instances) ? instances[0] : instances;
 
-          // Force all sheet tab text to black — jSuites applies inline color to
-          // inactive tabs that overrides CSS. Patch every child of .jtabs-headers.
+          // Move tab bar outside the scrollable container so it stays visible
+          // when scrolling horizontally. Insert before container so tabs appear at top.
           var tabsHeaders = container.querySelector('.jtabs-headers');
           if (tabsHeaders) {
+            panelBody.insertBefore(tabsHeaders, container);
             Array.prototype.forEach.call(tabsHeaders.children, function (el) {
               el.style.setProperty('color', '#000000', 'important');
+              // Hide empty/nameless buttons (e.g. add-sheet button)
+              if (!el.textContent.trim()) el.style.display = 'none';
             });
           }
 

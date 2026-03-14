@@ -13,9 +13,9 @@ Six phases deliver the full AI-powered consolidation engine. The app shell and l
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: App Shell** - Three-panel NotebookLM-style layout and chat UI frame (completed 2026-03-11)
-- [ ] **Phase 2: File Ingestion** - Upload, bulk-add, and source file management in left panel
+- [x] **Phase 2: File Ingestion** - Upload, bulk-add, and source file management in left panel (completed 2026-03-11)
 - [x] **Phase 3: Excel Editor** - Embedded in-browser spreadsheet with read/write editing and download (completed 2026-03-12)
-- [ ] **Phase 4: AI Consolidation** - AI merges multiple sub .xlsx files into a master record
+- [x] **Phase 4: AI Consolidation** - AI merges multiple sub .xlsx files into a master record (completed 2026-03-12)
 - [ ] **Phase 5: AI Chat Operations** - Natural language template restructuring and data operations
 - [ ] **Phase 6: Master Records** - Dashboard, auto-generated metadata, aggregated record views
 
@@ -44,11 +44,11 @@ Plans:
   2. User can open a file picker to select individual .xlsx files for upload
   3. User can drop an entire folder and all .xlsx files within it are ingested
   4. Each uploaded file appears in the left panel with its file name and metadata (size, date)
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — Drag-and-drop + file picker upload with file list and metadata display
-- [ ] 02-02-PLAN.md — Folder drop support for recursive .xlsx ingestion
+- [x] 02-01-PLAN.md — Drag-and-drop + file picker upload with file list and metadata display
+- [x] 02-02-PLAN.md — Folder drop support for recursive .xlsx ingestion
 
 ### Phase 3: Excel Editor
 **Goal**: Users can view and directly edit spreadsheet data in the browser and download the result
@@ -72,11 +72,11 @@ Plans:
   1. User can trigger AI consolidation on a set of uploaded source files and a merged master appears in the Excel editor
   2. The consolidated master contains data drawn from all contributing source files
   3. AI chat maintains conversation history so follow-up messages have context from prior turns
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 04-01-PLAN.md — AI consolidation pipeline: checkboxes, Consolidate button, Claude API call, merged result in editor
-- [ ] 04-02-PLAN.md — Real streaming chat with in-memory conversation history replacing mock reply
+- [x] 04-01-PLAN.md — AI consolidation pipeline: checkboxes, Consolidate button, Claude API call, merged result in editor
+- [x] 04-02-PLAN.md — Real streaming chat with in-memory conversation history replacing mock reply
 
 ### Phase 5: AI Chat Operations
 **Goal**: Users can restructure templates and perform data operations through natural language chat
@@ -115,8 +115,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. App Shell | 2/2 | Complete   | 2026-03-11 |
-| 2. File Ingestion | 1/2 | In Progress|  |
+| 2. File Ingestion | 2/2 | Complete   | 2026-03-11 |
 | 3. Excel Editor | 2/2 | Complete   | 2026-03-12 |
-| 4. AI Consolidation | 0/2 | Not started | - |
+| 4. AI Consolidation | 2/2 | Complete   | 2026-03-12 |
 | 5. AI Chat Operations | 0/2 | Not started | - |
 | 6. Master Records | 0/3 | Not started | - |

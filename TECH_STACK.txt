@@ -1,0 +1,233 @@
+================================================================================
+  WHITEHELMET — TECH STACK REFERENCE
+  Generated: 2026-03-14
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+  ARCHITECTURE OVERVIEW
+────────────────────────────────────────────────────────────────────────────────
+
+  Single-file web application — the entire product lives in one index.html file
+  with no build step, no bundler, and no compilation required. All dependencies
+  are loaded from CDN at runtime. The app runs in the browser as a static file
+  served by a lightweight local server.
+
+  JavaScript is organised into isolated IIFE (Immediately Invoked Function
+  Expression) modules that communicate through a shared window.* namespace.
+  There is no module system (no import/export), no framework, and no virtual DOM.
+
+
+────────────────────────────────────────────────────────────────────────────────
+  RUNTIME ENVIRONMENT
+────────────────────────────────────────────────────────────────────────────────
+
+  Platform .............. Browser (web application)
+  Entry point ........... index.html (single file, ~2000 lines)
+  Server ................ npx serve (serve package via npx, port 3000)
+                          No persistent server process — started on demand
+  Build step ............ None
+  Package manager ....... npm (package.json present, devDependencies only)
+  Node.js usage ......... Dev tooling only (puppeteer for screenshots)
+                          Not used at runtime
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FRONTEND — CORE
+────────────────────────────────────────────────────────────────────────────────
+
+  Language .............. Vanilla JavaScript (ES5/ES6 mixed)
+                          Async/await used in API and file reading paths
+                          No TypeScript
+  HTML .................. HTML5, single index.html
+  CSS ................... Inline <style> block (~900 lines of hand-written CSS)
+                          + Tailwind CSS utility classes (via CDN Play CDN)
+  DOM manipulation ...... Native browser APIs (querySelector, createElement,
+                          appendChild, innerHTML, classList, style)
+  State management ...... Module-scoped variables inside IIFEs + window.* globals
+                          for cross-IIFE shared state
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FRONTEND — LAYOUT & STYLING
+────────────────────────────────────────────────────────────────────────────────
+
+  Layout system ......... CSS Grid (three-panel: 280px | 1fr | 320px)
+  Component pattern ..... CSS class-based components (.panel, .panel-body,
+                          .panel-header, .source-item, .chat-bubble, etc.)
+  Design system ......... Custom construction-themed dark palette
+                            surface.base:     #0f1217
+                            surface.elevated: #171c23
+                            surface.panel:    #1d242e
+                            content.primary:  #e8ecf2
+                            content.accent:   #e29a35 (amber — brand colour)
+  Typography ............ Inter (Google Fonts, weights 300/400/500/600)
+                            — UI text and spreadsheet cells
+                          Georgia/Cambria serif
+                            — Logo, panel titles, section headings
+
+  Tailwind CSS .......... v3 (Play CDN — cdn.tailwindcss.com)
+                          Used for utility classes; extended with custom colour
+                          tokens (brand.*, surface.*, content.*) via tailwind.config
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FRONTEND — JAVASCRIPT MODULES (IIFEs)
+────────────────────────────────────────────────────────────────────────────────
+
+  The app is split into four IIFE script blocks, each responsible for one domain:
+
+  1. Chat IIFE
+     — Manages the right-panel AI chat UI
+     — Sends messages to Anthropic API with streaming SSE
+     — Maintains window.conversationHistory (in-memory [{role, content}] array)
+     — Exposes window.addMessage() globally for cross-IIFE use
+     — Disables input during streaming; shows "Thinking..." badge
+
+  2. File Ingestion IIFE
+     — Manages the left-panel Sources list
+     — Handles drag-and-drop of individual files and folders
+     — Recursive folder traversal via webkitGetAsEntry API
+     — Folder picker via <input webkitdirectory>
+     — Data model: sources[] containing {type:'file'} and {type:'folder'} objects
+     — Exposes window.openFile() and window.closeFile() for cross-IIFE use
+
+  3. Excel Editor IIFE
+     — Manages the centre-panel spreadsheet
+     — Parses .xlsx with SheetJS, renders with Jspreadsheet CE
+     — Exposes window.openFile / window.closeFile / window._excelState
+     — Handles .xlsx export/download via SheetJS write + Blob
+
+  4. AI Consolidation IIFE (inline script block)
+     — Reads checked source files, serialises to AoA via SheetJS
+     — Calls Anthropic Messages API (non-streaming, structured JSON response)
+     — Parses merged AoA + prose summary from response
+     — Loads merged result back into Excel editor via window.openFile()
+     — Posts summary to chat via window.addMessage()
+
+  Shared window-scope state (declared between script blocks):
+     window.ANTHROPIC_API_KEY       — API key shared by chat + consolidation
+     window.conversationHistory     — Chat turn history [{role, content}]
+     window.addMessage              — Chat bubble renderer
+     window.openFile / closeFile    — Excel editor file lifecycle
+     window._excelState             — {instance, workbook, fileName}
+
+
+────────────────────────────────────────────────────────────────────────────────
+  SPREADSHEET — LIBRARIES
+────────────────────────────────────────────────────────────────────────────────
+
+  SheetJS (xlsx) ........ v0.20.3
+                          CDN: cdn.sheetjs.com
+                          Used for:
+                            — Parsing uploaded .xlsx files (XLSX.read)
+                            — Converting sheet data to Array-of-Arrays (sheet_to_json)
+                            — Building new workbooks (book_new, aoa_to_sheet)
+                            — Writing .xlsx binary for download (XLSX.write)
+                            — Creating synthetic File objects from AI-merged data
+
+  Jspreadsheet CE ....... v5 (community edition)
+                          CDN: cdn.jsdelivr.net/npm/jspreadsheet-ce@5
+                          Used for:
+                            — In-browser editable spreadsheet grid
+                            — Multi-worksheet support (tabs)
+                            — Click-to-edit cells, column resizing
+                            — getData() for reading current cell state on export
+
+  jSuites ............... v5 (required peer dependency of Jspreadsheet CE)
+                          CDN: jsuites.net/v5
+                          Provides the tab/worksheet switching UI component
+                          (.jtabs, .jtabs-headers, .jtabs-content DOM structure)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  AI — ANTHROPIC API
+────────────────────────────────────────────────────────────────────────────────
+
+  Provider .............. Anthropic (api.anthropic.com)
+  API version ........... 2023-06-01
+  Model ................. claude-opus-4-5 (used for both chat and consolidation)
+  Access method ......... Direct browser fetch() with header:
+                          'anthropic-dangerous-direct-browser-access': 'true'
+                          (No backend proxy — API key lives in window scope)
+  API key storage ....... window.ANTHROPIC_API_KEY (hardcoded placeholder,
+                          marked with // TODO: remove before sharing)
+
+  Chat endpoint usage:
+    — stream: true
+    — SSE parsing via response.body.getReader() + TextDecoder
+    — Tokens streamed token-by-token into a live chat bubble
+    — Full conversation history sent on every request (multi-turn context)
+    — Failed responses excluded from conversationHistory
+
+  Consolidation endpoint usage:
+    — stream: false (non-streaming — complete JSON must be parsed at once)
+    — All checked .xlsx files read as ArrayBuffer, converted to AoA JSON
+    — Prompt instructs Claude to merge into a single unified AoA
+    — Response format: raw JSON array followed by "\nSUMMARY:" + prose paragraph
+    — JSON parsed → SheetJS → synthetic .xlsx File → loaded into editor
+
+
+────────────────────────────────────────────────────────────────────────────────
+  FILE HANDLING — BROWSER APIS
+────────────────────────────────────────────────────────────────────────────────
+
+  File reading .......... FileReader API (readAsArrayBuffer)
+  Drag and drop ......... HTML5 Drag and Drop API (dragover, drop, dragleave)
+  Folder upload ......... DataTransferItem.webkitGetAsEntry()
+                          FileSystemDirectoryReader.readEntries() (recursive)
+  Folder picker ......... <input type="file" webkitdirectory multiple>
+  File download ......... URL.createObjectURL(Blob) + programmatic <a> click
+  Deduplication ......... By filename (case-sensitive) for files;
+                          by folder name for folders
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DEV TOOLING
+────────────────────────────────────────────────────────────────────────────────
+
+  Local server .......... npx serve (static file server, port 3000)
+  Screenshots ........... Puppeteer v24.39.0 (devDependency)
+                          screenshot.mjs / serve.mjs — custom scripts
+  Version control ....... Git / GitHub
+                          Repo: github.com/derek-suwho/Whitehelmet
+  Node.js ............... Used only for dev tooling (not in runtime path)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  DEPENDENCY SUMMARY
+────────────────────────────────────────────────────────────────────────────────
+
+  Runtime (CDN, no install required):
+    Tailwind CSS          v3          cdn.tailwindcss.com
+    SheetJS (xlsx)        v0.20.3     cdn.sheetjs.com
+    jSuites               v5          jsuites.net/v5
+    Jspreadsheet CE       v5          cdn.jsdelivr.net/npm/jspreadsheet-ce@5
+    Inter (font)          —           fonts.googleapis.com
+    Anthropic API         2023-06-01  api.anthropic.com (external service)
+
+  Dev only (npm install):
+    puppeteer             ^24.39.0    Headless browser for screenshots
+    serve                 (npx)       Static file server
+
+  Production dependencies: 0 (zero npm packages required at runtime)
+
+
+────────────────────────────────────────────────────────────────────────────────
+  KEY ARCHITECTURAL DECISIONS
+────────────────────────────────────────────────────────────────────────────────
+
+  Single HTML file ........ No build pipeline needed; easy to share and deploy;
+                            entire product is one file anyone can open
+  IIFE modules ............ Encapsulation without a module bundler; each domain
+                            (chat, files, excel, AI) has its own scope
+  window.* globals ........ Cross-IIFE communication without a message bus or
+                            event system; explicit, readable surface area
+  Direct browser API call . No backend required for v1; trades key security for
+                            zero infrastructure; flagged for pre-production fix
+  SheetJS + Jspreadsheet .. SheetJS handles all parse/write; Jspreadsheet handles
+                            display/editing; clean separation of concerns
+  No approval workflow .... Deferred — not needed for v1 per stakeholder decision
+  .xlsx only .............. PDF/CSV deferred; .xlsx covers all subcontractor files
+
+================================================================================
