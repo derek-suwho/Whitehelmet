@@ -5,7 +5,7 @@
 // Groups 1 & 2: your state properties are pre-defined below — just use them.
 
 export const state = {
-  apiKey: 'YOUR_KEY_HERE', // TODO: remove before sharing
+  apiKey: '', // loaded from .env via /config endpoint at startup
   conversationHistory: [],
   excelState: { instance: null, workbook: null, fileName: null },
 

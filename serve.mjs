@@ -6,6 +6,18 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3000;
 
+// Load .env file if present
+function loadEnv() {
+  try {
+    const env = fs.readFileSync(path.join(__dirname, '.env'), 'utf8');
+    env.split('\n').forEach(line => {
+      const [key, ...rest] = line.split('=');
+      if (key && rest.length) process.env[key.trim()] = rest.join('=').trim();
+    });
+  } catch (_) {}
+}
+loadEnv();
+
 const MIME_TYPES = {
   '.html': 'text/html',
   '.css': 'text/css',
@@ -25,6 +37,14 @@ const MIME_TYPES = {
 
 const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
+
+  // Config endpoint — exposes env vars to the frontend
+  if (urlPath === '/config') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY || '' }));
+    return;
+  }
+
   if (urlPath === '/') urlPath = '/index.html';
 
   const filePath = path.join(__dirname, urlPath);
