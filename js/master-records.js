@@ -337,7 +337,7 @@ export function initMasterRecords() {
   }
 
   // ── Search ───────────────────────────────────────────────
-  function buildSearch(allRecords, tbody) {
+  function buildSearch(allRecords, tbody, countEl) {
     var bar = document.createElement('div');
     bar.className = 'db-search-bar';
 
@@ -356,13 +356,30 @@ export function initMasterRecords() {
       var q = (input.value || '').toLowerCase();
       clearBtn.style.display = q ? 'inline' : 'none';
       tbody.innerHTML = '';
+
       var filtered = allRecords.filter(function (r) {
         return (r.name || '').toLowerCase().indexOf(q) !== -1;
       });
-      if (filtered.length === 0) {
+
+      var sorted = sortRecords(filtered);
+
+      // Update count label
+      if (countEl) {
+        if (sorted.length === 0) {
+          countEl.style.display = 'none';
+        } else if (q) {
+          countEl.style.display = '';
+          countEl.textContent = 'Showing ' + sorted.length + ' of ' + allRecords.length + ' records';
+        } else {
+          countEl.style.display = '';
+          countEl.textContent = allRecords.length + ' record' + (allRecords.length !== 1 ? 's' : '');
+        }
+      }
+
+      if (sorted.length === 0) {
         tbody.appendChild(q ? buildSearchEmptyRow() : buildEmptyRow());
       } else {
-        filtered.forEach(function (r) {
+        sorted.forEach(function (r) {
           tbody.appendChild(buildRow(r));
         });
       }
@@ -377,7 +394,7 @@ export function initMasterRecords() {
 
     bar.appendChild(input);
     bar.appendChild(clearBtn);
-    return bar;
+    return { bar: bar, filterAndRender: filterAndRender };
   }
 
   // ── Loading shell ────────────────────────────────────────
@@ -404,7 +421,7 @@ export function initMasterRecords() {
     dashboardRoot.innerHTML = '';
     dashboardRoot.appendChild(buildHeader());
 
-    // Error state — no search bar, just error in table
+    // Error state — no search bar or count, just error in table
     if (!records) {
       var tableAreaErr = document.createElement('div');
       tableAreaErr.className = 'db-table-area';
@@ -419,18 +436,26 @@ export function initMasterRecords() {
       return;
     }
 
+    var sorted = sortRecords(records);
     var tbody = document.createElement('tbody');
 
-    if (records.length === 0) {
+    if (sorted.length === 0) {
       tbody.appendChild(buildEmptyRow());
     } else {
-      records.forEach(function (r) {
+      sorted.forEach(function (r) {
         tbody.appendChild(buildRow(r));
       });
     }
 
-    var searchBar = buildSearch(records, tbody);
-    dashboardRoot.appendChild(searchBar);
+    // Count label
+    var countEl = document.createElement('div');
+    countEl.className = 'db-record-count';
+    countEl.textContent = records.length + ' record' + (records.length !== 1 ? 's' : '');
+    if (records.length === 0) countEl.style.display = 'none';
+
+    var searchResult = buildSearch(records, tbody, countEl);
+    dashboardRoot.appendChild(searchResult.bar);
+    dashboardRoot.appendChild(countEl);
 
     var tableArea = document.createElement('div');
     tableArea.className = 'db-table-area';
