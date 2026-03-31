@@ -191,4 +191,96 @@ export function initMasterRecords() {
     wrap.appendChild(p);
     return buildStateRow(wrap);
   }
+
+  // ── Reload ───────────────────────────────────────────────
+  function reloadRecords() {
+    showLoading();
+    apiAdapter.getAll().then(function (records) {
+      render(records);
+    }).catch(function () {
+      render(null);
+    });
+  }
+
+  // ── Row Builder ──────────────────────────────────────────
+  function buildRow(record) {
+    var tr = document.createElement('tr');
+
+    function openRecord() {
+      if (state.openFile && record.fileObj) {
+        state.openFile(record.fileObj);
+      }
+      state.hideDashboard();
+    }
+
+    // Name
+    var tdName = document.createElement('td');
+    tdName.className = 'db-col-name';
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'db-record-name';
+    nameSpan.textContent = record.name || '';
+    nameSpan.title = record.name || '';
+    tdName.appendChild(nameSpan);
+
+    // Last Updated
+    var tdDate = document.createElement('td');
+    tdDate.className = 'db-col-date db-record-date';
+    tdDate.textContent = formatDate(record.savedAt);
+
+    // Sources
+    var tdSources = document.createElement('td');
+    tdSources.className = 'db-col-sources db-col-center';
+    tdSources.textContent = safeNum(record.sourceCount);
+
+    // Rows
+    var tdRows = document.createElement('td');
+    tdRows.className = 'db-col-rows db-col-center';
+    tdRows.textContent = safeNum(record.rowCount);
+
+    // Cols
+    var tdCols = document.createElement('td');
+    tdCols.className = 'db-col-cols db-col-center';
+    tdCols.textContent = safeNum(record.colCount);
+
+    // Open button
+    var tdOpen = document.createElement('td');
+    tdOpen.className = 'db-col-open db-col-center';
+    var openBtn = document.createElement('button');
+    openBtn.className = 'db-open-btn';
+    openBtn.textContent = 'Open';
+    openBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      openRecord();
+    });
+    tdOpen.appendChild(openBtn);
+
+    // Delete button
+    var tdDel = document.createElement('td');
+    tdDel.className = 'db-col-delete db-col-center';
+    var delBtn = document.createElement('button');
+    delBtn.className = 'db-delete-btn';
+    delBtn.innerHTML = TRASH_ICON;
+    delBtn.title = 'Delete record';
+    delBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (!confirm('Delete this record?')) return;
+      apiAdapter.remove(record.id).then(function () {
+        reloadRecords();
+      });
+    });
+    tdDel.appendChild(delBtn);
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdDate);
+    tr.appendChild(tdSources);
+    tr.appendChild(tdRows);
+    tr.appendChild(tdCols);
+    tr.appendChild(tdOpen);
+    tr.appendChild(tdDel);
+
+    // Row click (anywhere except delete) opens record
+    tr.addEventListener('click', openRecord);
+
+    return tr;
+  }
 }
