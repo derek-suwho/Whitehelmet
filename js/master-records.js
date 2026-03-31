@@ -134,4 +134,61 @@ export function initMasterRecords() {
     thead.appendChild(tr);
     return thead;
   }
+
+  // ── State Rows ───────────────────────────────────────────
+  var TRASH_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>';
+
+  function buildStateRow(content) {
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 7;
+    td.className = 'db-state-cell';
+    td.appendChild(content);
+    tr.appendChild(td);
+    return tr;
+  }
+
+  function buildLoadingRow() {
+    var wrap = document.createElement('div');
+    var spinner = document.createElement('span');
+    spinner.className = 'db-spinner';
+    var text = document.createTextNode(' Loading records...');
+    wrap.appendChild(spinner);
+    wrap.appendChild(text);
+    return buildStateRow(wrap);
+  }
+
+  function buildEmptyRow() {
+    var wrap = document.createElement('div');
+    var p1 = document.createElement('p');
+    p1.textContent = 'No saved consolidations yet.';
+    var p2 = document.createElement('p');
+    p2.className = 'db-state-sub';
+    p2.textContent = 'Consolidate files to create your first record.';
+    wrap.appendChild(p1);
+    wrap.appendChild(p2);
+    return buildStateRow(wrap);
+  }
+
+  function buildErrorRow(onRetry) {
+    var wrap = document.createElement('div');
+    var p = document.createElement('p');
+    p.className = 'db-error-text';
+    p.textContent = '\u26a0 Failed to load records.';
+    var btn = document.createElement('button');
+    btn.className = 'db-retry-btn';
+    btn.textContent = 'Try again';
+    btn.addEventListener('click', onRetry);
+    wrap.appendChild(p);
+    wrap.appendChild(btn);
+    return buildStateRow(wrap);
+  }
+
+  function buildSearchEmptyRow() {
+    var wrap = document.createElement('div');
+    var p = document.createElement('p');
+    p.textContent = 'No records match your search.';
+    wrap.appendChild(p);
+    return buildStateRow(wrap);
+  }
 }
