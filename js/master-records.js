@@ -72,11 +72,22 @@ export function initMasterRecords() {
 
   state.showDashboard = function () {
     dashboardRoot.style.display = 'flex';
+    if (escHandler) {
+      document.removeEventListener('keydown', escHandler);
+    }
+    escHandler = function (e) {
+      if (e.key === 'Escape') state.hideDashboard();
+    };
+    document.addEventListener('keydown', escHandler);
     reloadRecords();
   };
 
   state.hideDashboard = function () {
     dashboardRoot.style.display = 'none';
+    if (escHandler) {
+      document.removeEventListener('keydown', escHandler);
+      escHandler = null;
+    }
   };
 
   // ── Helpers ─────────────────────────────────────────────
@@ -248,6 +259,7 @@ export function initMasterRecords() {
   function reloadRecords() {
     showLoading();
     apiAdapter.getAll().then(function (records) {
+      lastFetchedRecords = records;
       render(records);
     }).catch(function () {
       render(null);
