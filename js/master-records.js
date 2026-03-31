@@ -65,4 +65,15 @@ export function initMasterRecords() {
     record.savedAt = new Date().toISOString();
     apiAdapter.post(record);
   };
+
+  state.showDashboard = function () {
+    dashboardRoot.style.display = 'block';
+    apiAdapter.getAll().then(function (records) {
+      // Phase 3 will add: render(records)
+    });
+  };
+
+  state.hideDashboard = function () {
+    dashboardRoot.style.display = 'none';
+  };
 }
