@@ -76,4 +76,62 @@ export function initMasterRecords() {
   state.hideDashboard = function () {
     dashboardRoot.style.display = 'none';
   };
+
+  // ── Helpers ─────────────────────────────────────────────
+  function formatDate(isoString) {
+    if (!isoString) return '—';
+    var d = new Date(isoString);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  function safeNum(val) {
+    return (val !== undefined && val !== null) ? val : '—';
+  }
+
+  // ── Header ──────────────────────────────────────────────
+  function buildHeader() {
+    var header = document.createElement('div');
+    header.className = 'db-header';
+
+    var title = document.createElement('h2');
+    title.className = 'db-header-title';
+    title.textContent = 'Master Records';
+
+    var closeBtn = document.createElement('button');
+    closeBtn.className = 'db-close-btn';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', function () {
+      state.hideDashboard();
+    });
+
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    return header;
+  }
+
+  // ── Table Header ─────────────────────────────────────────
+  function buildTableHeader() {
+    var thead = document.createElement('thead');
+    var tr = document.createElement('tr');
+
+    var cols = [
+      { label: 'Name',         cls: 'db-col-name' },
+      { label: 'Last Updated', cls: 'db-col-date' },
+      { label: 'Sources',      cls: 'db-col-sources db-col-center' },
+      { label: 'Rows',         cls: 'db-col-rows db-col-center' },
+      { label: 'Cols',         cls: 'db-col-cols db-col-center' },
+      { label: 'Open',         cls: 'db-col-open db-col-center' },
+      { label: '',             cls: 'db-col-delete db-col-center' }
+    ];
+
+    cols.forEach(function (col) {
+      var th = document.createElement('th');
+      th.textContent = col.label;
+      th.className = col.cls;
+      tr.appendChild(th);
+    });
+
+    thead.appendChild(tr);
+    return thead;
+  }
 }
