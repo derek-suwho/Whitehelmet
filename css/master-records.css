@@ -269,3 +269,36 @@
   vertical-align: middle;
   margin-right: 8px;
 }
+
+/* ── Sortable Headers ───────────────────────────────────── */
+.db-th-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.db-th-sortable:hover {
+  color: #8c99ae;
+}
+
+.db-th-active {
+  color: #e8ecf2;
+}
+
+.db-sort-arrow {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  color: #55627a;
+}
+
+.db-th-active .db-sort-arrow {
+  color: #e8ecf2;
+}
+
+/* ── Record Count ───────────────────────────────────────── */
+.db-record-count {
+  padding: 8px 24px;
+  font-size: 12px;
+  color: #8c99ae;
+  flex-shrink: 0;
+}
