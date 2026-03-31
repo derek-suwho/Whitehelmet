@@ -2,3 +2,98 @@
    OWNERSHIP: Group 2 owns this file.
    Add all dashboard/master-records styling here.
    ──────────────────────────────────────────────────────── */
+
+/* ── Dashboard Overlay ──────────────────────────────────── */
+#dashboard-root {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #0f1217;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+.db-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  background: #171c23;
+  border-bottom: 1px solid #1d242e;
+  flex-shrink: 0;
+}
+
+.db-header-title {
+  font-family: Georgia, Cambria, serif;
+  font-size: 18px;
+  color: #e8ecf2;
+  margin: 0;
+  font-weight: normal;
+}
+
+.db-close-btn {
+  background: none;
+  border: 1px solid #55627a;
+  color: #8c99ae;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.db-close-btn:hover {
+  border-color: #e8ecf2;
+  color: #e8ecf2;
+}
+
+/* ── Search Bar ─────────────────────────────────────────── */
+.db-search-bar {
+  padding: 12px 24px;
+  background: #171c23;
+  border-bottom: 1px solid #1d242e;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.db-search-input {
+  width: 100%;
+  background: #0f1217;
+  border: 1px solid #1d242e;
+  border-radius: 4px;
+  color: #e8ecf2;
+  font-size: 13px;
+  padding: 7px 32px 7px 10px;
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+}
+
+.db-search-input:focus {
+  border-color: #55627a;
+}
+
+.db-search-input::placeholder {
+  color: #55627a;
+}
+
+.db-search-clear {
+  position: absolute;
+  right: 32px;
+  background: none;
+  border: none;
+  color: #55627a;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  display: none;
+}
+
+.db-search-clear:hover {
+  color: #8c99ae;
+}
