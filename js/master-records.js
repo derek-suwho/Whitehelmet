@@ -134,19 +134,52 @@ export function initMasterRecords() {
     var tr = document.createElement('tr');
 
     var cols = [
-      { label: 'Name',         cls: 'db-col-name' },
-      { label: 'Last Updated', cls: 'db-col-date' },
-      { label: 'Sources',      cls: 'db-col-sources db-col-center' },
-      { label: 'Rows',         cls: 'db-col-rows db-col-center' },
-      { label: 'Cols',         cls: 'db-col-cols db-col-center' },
-      { label: 'Open',         cls: 'db-col-open db-col-center' },
-      { label: '',             cls: 'db-col-delete db-col-center' }
+      { label: 'Name',         cls: 'db-col-name',                    sortKey: 'name' },
+      { label: 'Last Updated', cls: 'db-col-date',                    sortKey: 'savedAt' },
+      { label: 'Sources',      cls: 'db-col-sources db-col-center',   sortKey: null },
+      { label: 'Rows',         cls: 'db-col-rows db-col-center',      sortKey: null },
+      { label: 'Cols',         cls: 'db-col-cols db-col-center',      sortKey: null },
+      { label: 'Open',         cls: 'db-col-open db-col-center',      sortKey: null },
+      { label: '',             cls: 'db-col-delete db-col-center',    sortKey: null }
     ];
 
     cols.forEach(function (col) {
       var th = document.createElement('th');
-      th.textContent = col.label;
       th.className = col.cls;
+
+      if (col.sortKey) {
+        var isActive = currentSortCol === col.sortKey;
+        th.className += ' db-th-sortable';
+        if (isActive) th.className += ' db-th-active';
+
+        var labelText = document.createTextNode(col.label);
+        var arrow = document.createElement('span');
+        arrow.className = 'db-sort-arrow';
+        if (isActive) {
+          arrow.textContent = currentSortDir === 'asc' ? '\u2191' : '\u2193';
+        } else {
+          arrow.textContent = '\u2195';
+        }
+
+        th.appendChild(labelText);
+        th.appendChild(arrow);
+
+        th.addEventListener('click', (function (sortKey) {
+          return function () {
+            if (currentSortCol === sortKey) {
+              currentSortDir = currentSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+              currentSortCol = sortKey;
+              currentSortDir = 'asc';
+            }
+            render(lastFetchedRecords);
+          };
+        }(col.sortKey)));
+
+      } else {
+        th.textContent = col.label;
+      }
+
       tr.appendChild(th);
     });
 
