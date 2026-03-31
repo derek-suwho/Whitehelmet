@@ -290,6 +290,24 @@ export function initFileIngestion() {
       child.appendChild(cIcon);
       child.appendChild(cInfo);
 
+      var cDel = document.createElement('button');
+      cDel.className = 'source-item-delete';
+      cDel.innerHTML = DELETE_ICON;
+      cDel.title = 'Remove file';
+      cDel.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (state.closeFile && state.excelState && state.excelState.fileName) {
+          if (f.file.name === state.excelState.fileName) {
+            state.closeFile(f.file.name);
+          }
+        }
+        var fi = folder.files.indexOf(f);
+        if (fi !== -1) folder.files.splice(fi, 1);
+        if (folder.files.length === 0) sources.splice(sourceIdx, 1);
+        render();
+      });
+      child.appendChild(cDel);
+
       // Click to open file
       child.addEventListener('click', function (e) {
         e.stopPropagation(); // Prevent folder expand toggle
