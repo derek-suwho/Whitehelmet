@@ -247,14 +247,26 @@ export function initFileIngestion() {
       deleteSource(sourceIdx);
     });
 
-    item.appendChild(chevron);
-    item.appendChild(icon);
-    item.appendChild(info);
-    item.appendChild(delBtn);
-
     // Children container
     var children = document.createElement('div');
     children.className = 'source-folder-children' + (folder.expanded ? ' visible' : '');
+
+    var selectAll = document.createElement('input');
+    selectAll.type = 'checkbox';
+    selectAll.className = 'source-check';
+    selectAll.title = 'Select all files in folder';
+    selectAll.addEventListener('click', function (e) { e.stopPropagation(); });
+    selectAll.addEventListener('change', function (e) {
+      e.stopPropagation();
+      var childChecks = children.querySelectorAll('.source-check');
+      childChecks.forEach(function (cb) { cb.checked = selectAll.checked; });
+    });
+
+    item.appendChild(chevron);
+    item.appendChild(selectAll);
+    item.appendChild(icon);
+    item.appendChild(info);
+    item.appendChild(delBtn);
 
     folder.files.forEach(function (f) {
       var child = document.createElement('div');
