@@ -49,4 +49,20 @@ export function initMasterRecords() {
       // Real swap: return fetch('/api/records/' + id, { method: 'DELETE' });
     }
   };
+
+  function generateName() {
+    var today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    var base = 'Consolidation \u2014 ' + today;
+    var count = state.masterRecords.filter(function (r) {
+      return r.name && r.name.indexOf(base) === 0;
+    }).length;
+    return count === 0 ? base : base + ' (' + (count + 1) + ')';
+  }
+
+  state.saveMasterRecord = function (record) {
+    record.id      = Date.now().toString();
+    record.name    = record.name || generateName();
+    record.savedAt = new Date().toISOString();
+    apiAdapter.post(record);
+  };
 }
