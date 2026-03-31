@@ -17,6 +17,10 @@ import { state } from './state.js';
 
 export function initMasterRecords() {
   var dashboardRoot = document.getElementById('dashboard-root');
+  var currentSortCol = 'savedAt';   // default: Last Updated
+  var currentSortDir = 'desc';      // default: newest first
+  var lastFetchedRecords = [];       // cache for sort-without-refetch
+  var escHandler = null;             // named ref for removeEventListener
 
   /**
    * Master Record Schema
@@ -84,6 +88,23 @@ export function initMasterRecords() {
 
   function safeNum(val) {
     return (val !== undefined && val !== null) ? val : '—';
+  }
+
+  // ── Sort ─────────────────────────────────────────────────
+  function sortRecords(records) {
+    var sorted = records.slice();
+    sorted.sort(function (a, b) {
+      var cmp;
+      if (currentSortCol === 'name') {
+        cmp = (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' });
+      } else {
+        var aVal = a.savedAt || '';
+        var bVal = b.savedAt || '';
+        cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
+      }
+      return currentSortDir === 'asc' ? cmp : -cmp;
+    });
+    return sorted;
   }
 
   // ── Header ──────────────────────────────────────────────
