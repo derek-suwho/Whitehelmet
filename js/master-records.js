@@ -67,10 +67,8 @@ export function initMasterRecords() {
   };
 
   state.showDashboard = function () {
-    dashboardRoot.style.display = 'block';
-    apiAdapter.getAll().then(function (records) {
-      // Phase 3 will add: render(records)
-    });
+    dashboardRoot.style.display = 'flex';
+    reloadRecords();
   };
 
   state.hideDashboard = function () {
@@ -282,5 +280,111 @@ export function initMasterRecords() {
     tr.addEventListener('click', openRecord);
 
     return tr;
+  }
+
+  // ── Search ───────────────────────────────────────────────
+  function buildSearch(allRecords, tbody) {
+    var bar = document.createElement('div');
+    bar.className = 'db-search-bar';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'db-search-input';
+    input.placeholder = 'Search records...';
+    input.setAttribute('autocomplete', 'off');
+
+    var clearBtn = document.createElement('button');
+    clearBtn.className = 'db-search-clear';
+    clearBtn.textContent = '\u2715';
+    clearBtn.type = 'button';
+
+    function filterAndRender() {
+      var q = (input.value || '').toLowerCase();
+      clearBtn.style.display = q ? 'inline' : 'none';
+      tbody.innerHTML = '';
+      var filtered = allRecords.filter(function (r) {
+        return (r.name || '').toLowerCase().indexOf(q) !== -1;
+      });
+      if (filtered.length === 0) {
+        tbody.appendChild(q ? buildSearchEmptyRow() : buildEmptyRow());
+      } else {
+        filtered.forEach(function (r) {
+          tbody.appendChild(buildRow(r));
+        });
+      }
+    }
+
+    input.addEventListener('input', filterAndRender);
+
+    clearBtn.addEventListener('click', function () {
+      input.value = '';
+      filterAndRender();
+    });
+
+    bar.appendChild(input);
+    bar.appendChild(clearBtn);
+    return bar;
+  }
+
+  // ── Loading shell ────────────────────────────────────────
+  function showLoading() {
+    dashboardRoot.innerHTML = '';
+    dashboardRoot.appendChild(buildHeader());
+
+    var tableArea = document.createElement('div');
+    tableArea.className = 'db-table-area';
+
+    var table = document.createElement('table');
+    table.className = 'db-table';
+    table.appendChild(buildTableHeader());
+
+    var tbody = document.createElement('tbody');
+    tbody.appendChild(buildLoadingRow());
+    table.appendChild(tbody);
+    tableArea.appendChild(table);
+    dashboardRoot.appendChild(tableArea);
+  }
+
+  // ── Render ───────────────────────────────────────────────
+  function render(records) {
+    dashboardRoot.innerHTML = '';
+    dashboardRoot.appendChild(buildHeader());
+
+    // Error state — no search bar, just error in table
+    if (!records) {
+      var tableAreaErr = document.createElement('div');
+      tableAreaErr.className = 'db-table-area';
+      var tableErr = document.createElement('table');
+      tableErr.className = 'db-table';
+      tableErr.appendChild(buildTableHeader());
+      var tbodyErr = document.createElement('tbody');
+      tbodyErr.appendChild(buildErrorRow(reloadRecords));
+      tableErr.appendChild(tbodyErr);
+      tableAreaErr.appendChild(tableErr);
+      dashboardRoot.appendChild(tableAreaErr);
+      return;
+    }
+
+    var tbody = document.createElement('tbody');
+
+    if (records.length === 0) {
+      tbody.appendChild(buildEmptyRow());
+    } else {
+      records.forEach(function (r) {
+        tbody.appendChild(buildRow(r));
+      });
+    }
+
+    var searchBar = buildSearch(records, tbody);
+    dashboardRoot.appendChild(searchBar);
+
+    var tableArea = document.createElement('div');
+    tableArea.className = 'db-table-area';
+    var table = document.createElement('table');
+    table.className = 'db-table';
+    table.appendChild(buildTableHeader());
+    table.appendChild(tbody);
+    tableArea.appendChild(table);
+    dashboardRoot.appendChild(tableArea);
   }
 }
