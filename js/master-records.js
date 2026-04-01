@@ -36,21 +36,25 @@ export function initMasterRecords() {
 
   var apiAdapter = {
     getAll: function () {
-      return Promise.resolve(state.masterRecords.slice());
-      // Real swap: return fetch('/api/records').then(r => r.json());
+      return fetch('/api/records').then(function (r) {
+        if (!r.ok) throw new Error('GET /api/records failed: ' + r.status);
+        return r.json();
+      });
     },
     post: function (record) {
-      state.masterRecords.push(record);
-      return Promise.resolve(record);
-      // Real swap: return fetch('/api/records', { method: 'POST', body: JSON.stringify(record), headers: {'Content-Type':'application/json'} }).then(r => r.json());
+      return fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record)
+      }).then(function (r) {
+        if (!r.ok) throw new Error('POST /api/records failed: ' + r.status);
+        return r.json();
+      });
     },
     remove: function (id) {
-      var idx = state.masterRecords.findIndex(function (r) { return r.id === id; });
-      if (idx > -1) {
-        state.masterRecords.splice(idx, 1);
-      }
-      return Promise.resolve();
-      // Real swap: return fetch('/api/records/' + id, { method: 'DELETE' });
+      return fetch('/api/records/' + id, { method: 'DELETE' }).then(function (r) {
+        if (!r.ok) throw new Error('DELETE /api/records/' + id + ' failed: ' + r.status);
+      });
     }
   };
 
