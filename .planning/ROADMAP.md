@@ -24,7 +24,7 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
 **Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
+- [x] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
 - [ ] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
 
 ### Phase 2: Row and Data Operations
