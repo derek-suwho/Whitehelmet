@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Whitehelmet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS for parsing .xlsx files -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <!-- jSuites (required dependency for Jspreadsheet CE) -->
+  <link rel="stylesheet" href="https://jsuites.net/v5/jsuites.css" />
+  <script src="https://jsuites.net/v5/jsuites.js"></script>
+  <!-- Jspreadsheet CE v5 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5/dist/jspreadsheet.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/jspreadsheet-ce@5/dist/index.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            // Construction-themed palette: slate-based with amber/warm amber accents
+            brand: {
+              50:  '#fdf8f0',
+              100: '#faefd9',
+              200: '#f4d9a8',
+              300: '#ecbc6a',
+              400: '#e29a35',
+              500: '#d4821a',
+              600: '#b86812',
+              700: '#8f4e10',
+              800: '#703f14',
+              900: '#5c3413',
+            },
+            surface: {
+              base:     '#0f1217',
+              elevated: '#171c23',
+              panel:    '#1d242e',
+              border:   '#262e3a',
+              muted:    '#2d3748',
+            },
+            content: {
+              primary:   '#e8ecf2',
+              secondary: '#8c99ae',
+              muted:     '#55627a',
+              accent:    '#e29a35',
+            },
+          },
+          fontFamily: {
+            display: ['Georgia', 'Cambria', 'serif'],
+            sans:    ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+          letterSpacing: {
+            tight: '-0.03em',
+          },
+          lineHeight: {
+            relaxed: '1.7',
+          },
+          boxShadow: {
+            panel:   '0 1px 3px rgba(0,0,0,0.4), 0 4px 16px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.04)',
+            header:  '0 1px 0 rgba(255,255,255,0.05)',
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="stylesheet" href="css/styles.css" />
+  <!-- Group 2: Master Records styles -->
+  <link rel="stylesheet" href="css/master-records.css" />
+</head>
+<body>
+
+  <!-- ── Top bar ───────────────────────────────────────────── -->
+  <div class="app-topbar">
+    <div class="app-topbar-logo">
+      <div class="app-topbar-logo-dot"></div>
+      Whitehelmet
+    </div>
+  </div>
+
+  <!-- ── Three-panel layout ───────────────────────────────── -->
+  <div class="panels-container">
+
+    <!-- ── LEFT: Sources ──────────────────────────────────── -->
+    <div class="panel panel-left">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-sources">
+          <!-- Folder icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">Sources</span>
+        <span class="panel-header-badge">0 files</span>
+        <button class="panel-header-action consolidate-btn" id="consolidate-btn" title="Consolidate selected files"
+          style="width:auto; padding:0 8px; font-size:11px; font-weight:600; letter-spacing:0.03em; color:#e29a35; border-color:rgba(226,154,53,0.4);">
+          Consolidate
+        </button>
+      </div>
+
+      <div class="panel-body">
+        <div class="empty-state">
+          <div class="empty-state-icon empty-state-icon-sources">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="empty-state-heading">No source files</div>
+          <div class="empty-state-subtext">Upload subcontractor reports to get started</div>
+
+          <div class="drop-zone">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #55627a;">
+              <polyline points="16 16 12 12 8 16"/>
+              <line x1="12" y1="12" x2="12" y2="21"/>
+              <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+            </svg>
+            <div class="drop-zone-text">Drop files or folders here</div>
+            <div class="drop-zone-hint">or use the buttons below</div>
+          </div>
+          <div class="empty-state-actions">
+            <button class="empty-state-action-btn" id="empty-add-files">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Add files
+            </button>
+            <button class="empty-state-action-btn" id="empty-add-folder">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Add folder
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CENTER: Excel Editor ───────────────────────────── -->
+    <div class="panel panel-center">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-excel">
+          <!-- Grid icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">Excel Editor</span>
+        <span class="panel-header-badge">No file open</span>
+        <button class="panel-header-action" id="download-xlsx-btn" title="Download as .xlsx" style="display:none;">
+          <!-- Download / arrow-down icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="panel-body" style="display:flex; align-items:center; justify-content:center;">
+        <div class="center-empty">
+          <div class="center-empty-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+          </div>
+          <div class="center-empty-heading">Select a source file to view</div>
+          <div class="center-empty-sub">Choose a file from the Sources panel to open it in the spreadsheet editor</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RIGHT: AI Chat ─────────────────────────────────── -->
+    <div class="panel panel-right">
+      <div class="panel-header">
+        <div class="panel-header-icon icon-chat">
+          <!-- Chat icon -->
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        </div>
+        <span class="panel-header-title">AI Chat</span>
+        <span id="chat-badge" class="panel-header-badge">Ready</span>
+      </div>
+
+      <!-- Scrollable message history -->
+      <div class="chat-history" id="chat-history">
+        <!-- Empty state shown before any messages -->
+        <div class="chat-empty-hint" id="chat-empty-state">
+          <div class="chat-empty-hint-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div class="chat-empty-hint-text">Start a conversation...</div>
+          <div class="chat-empty-hint-sub">Ask the AI to merge data, restructure columns, or summarize reports</div>
+        </div>
+      </div>
+
+      <!-- Fixed input bar -->
+      <div class="chat-footer">
+        <div class="chat-input-wrap">
+          <input
+            class="chat-input"
+            id="chat-input"
+            type="text"
+            placeholder="Type a message..."
+            autocomplete="off"
+          />
+          <button class="chat-send-btn" id="chat-send-btn" title="Send message">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="22" y1="2" x2="11" y2="13"/>
+              <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels-container -->
+
+  <!-- ── Group 2: Dashboard overlay (hidden by default) ───── -->
+  <!-- master-records.js shows/hides this. Render your dashboard UI inside here. -->
+  <div id="dashboard-root" style="display:none;"></div>
+
+  <!-- Hidden file input for browse dialog -->
+  <input type="file" id="file-input" accept=".xlsx" multiple style="display:none;" />
+  <!-- Hidden folder input for folder browse dialog -->
+  <input type="file" id="folder-input" webkitdirectory multiple style="display:none;" />
+
+  <!-- App modules -->
+  <script type="module" src="js/app.js"></script>
+
+</body>
+</html>
