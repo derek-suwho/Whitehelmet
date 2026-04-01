@@ -23,8 +23,60 @@ const MIME_TYPES = {
   '.ttf': 'font/ttf',
 };
 
+// ── Mock API (remove when Group 3 backend is ready) ──────
+let mockRecords = [];
+let mockNextId = 1;
+
+function json(res, status, body) {
+  res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+  res.end(JSON.stringify(body));
+}
+
+function readBody(req) {
+  return new Promise((resolve) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
+  });
+}
+
+function handleApi(req, res, urlPath) {
+  const recordsBase = urlPath === '/api/records';
+  const recordById  = urlPath.match(/^\/api\/records\/(.+)$/);
+
+  if (recordsBase && req.method === 'GET') {
+    return json(res, 200, mockRecords);
+  }
+
+  if (recordsBase && req.method === 'POST') {
+    return readBody(req).then(body => {
+      const record = { ...body, id: String(mockNextId++) };
+      mockRecords.push(record);
+      console.log('[mock API] POST /api/records →', record.name);
+      json(res, 201, record);
+    });
+  }
+
+  if (recordById && req.method === 'DELETE') {
+    const id = recordById[1];
+    const before = mockRecords.length;
+    mockRecords = mockRecords.filter(r => r.id !== id);
+    console.log('[mock API] DELETE /api/records/' + id, before !== mockRecords.length ? '✓' : '(not found)');
+    return json(res, 204, {});
+  }
+
+  json(res, 404, { error: 'Not found' });
+}
+// ── End mock API ─────────────────────────────────────────
+
 const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
+
+  // Route API requests to mock handler
+  if (urlPath.startsWith('/api/')) {
+    return handleApi(req, res, urlPath);
+  }
+
   if (urlPath === '/') urlPath = '/index.html';
 
   const filePath = path.join(__dirname, urlPath);
