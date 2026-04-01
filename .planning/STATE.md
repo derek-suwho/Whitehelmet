@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: planning
-stopped_at: Phase 1 context gathered
-last_updated: "2026-04-01T01:50:01.038Z"
+stopped_at: "Checkpoint: Task 2 human-verify — 01-01-PLAN.md"
+last_updated: "2026-04-01T02:49:06.890Z"
 last_activity: 2026-03-17 — Roadmap created
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 2
+  completed_plans: 1
   percent: 0
 ---
 
@@ -50,6 +50,7 @@ Progress: [░░░░░░░░░░] 0%
 - Trend: -
 
 *Updated after each plan completion*
+| Phase 01-command-routing P01 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Recent decisions affecting current work:
 - Project: Claude parses intent into structured ops — more reliable than free-form code gen; lets us validate before applying
 - Project: Error shown in chat on failure — user needs feedback; silent failures are confusing in a chat UI
 - Project: Single-command model (no conversation) — keeps handler stateless and simple for v1
+- [Phase 01-command-routing]: executeOp takes only op (not headers) as a parameter — headers not needed in stub; Plan 02 can add when implementing ops
+- [Phase 01-command-routing]: Thinking bubble removed (parentElement.remove()) on non-command so no stale message lingers during normal chat response
 
 ### Pending Todos
 
@@ -73,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T01:50:01.030Z
-Stopped at: Phase 1 context gathered
-Resume file: .planning/phases/01-command-routing/01-CONTEXT.md
+Last session: 2026-04-01T02:49:06.885Z
+Stopped at: Checkpoint: Task 2 human-verify — 01-01-PLAN.md
+Resume file: None

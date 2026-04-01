@@ -7,15 +7,15 @@
 
 ### Command Routing
 
-- [ ] **ROUTE-01**: `initAiOperations()` registers a handler at `state.chatCommandHandler` during module init
-- [ ] **ROUTE-02**: Handler returns `true` if the message was recognized as a spreadsheet command (preventing fallthrough to normal chat)
-- [ ] **ROUTE-03**: Handler returns `false` if the message is not a spreadsheet command (normal chat proceeds)
+- [x] **ROUTE-01**: `initAiOperations()` registers a handler at `state.chatCommandHandler` during module init
+- [x] **ROUTE-02**: Handler returns `true` if the message was recognized as a spreadsheet command (preventing fallthrough to normal chat)
+- [x] **ROUTE-03**: Handler returns `false` if the message is not a spreadsheet command (normal chat proceeds)
 
 ### Intent Parsing
 
-- [ ] **PARSE-01**: Handler calls Anthropic API (using `state.apiKey`) with the user's message and current spreadsheet headers to classify intent
-- [ ] **PARSE-02**: Claude returns a structured operation object (type + parameters) that the handler executes
-- [ ] **PARSE-03**: If Claude cannot parse a clear intent, the handler posts an error message via `state.addMessage()` and returns `true`
+- [x] **PARSE-01**: Handler calls Anthropic API (using `state.apiKey`) with the user's message and current spreadsheet headers to classify intent
+- [x] **PARSE-02**: Claude returns a structured operation object (type + parameters) that the handler executes
+- [x] **PARSE-03**: If Claude cannot parse a clear intent, the handler posts an error message via `state.addMessage()` and returns `true`
 
 ### Template Operations
 
@@ -35,7 +35,7 @@
 
 - [ ] **UX-01**: After a successful operation, the handler posts a confirmation message in chat (e.g. "Added column 'Total'")
 - [ ] **UX-02**: If an operation fails or the intent is ambiguous, the handler posts a clear error message in chat explaining what went wrong
-- [ ] **UX-03**: While Claude is processing, a "thinking..." indicator is shown in chat
+- [x] **UX-03**: While Claude is processing, a "thinking..." indicator is shown in chat
 
 ## v2 Requirements
 
@@ -62,12 +62,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ROUTE-01 | Phase 1 | Pending |
-| ROUTE-02 | Phase 1 | Pending |
-| ROUTE-03 | Phase 1 | Pending |
-| PARSE-01 | Phase 1 | Pending |
-| PARSE-02 | Phase 1 | Pending |
-| PARSE-03 | Phase 1 | Pending |
+| ROUTE-01 | Phase 1 | Complete |
+| ROUTE-02 | Phase 1 | Complete |
+| ROUTE-03 | Phase 1 | Complete |
+| PARSE-01 | Phase 1 | Complete |
+| PARSE-02 | Phase 1 | Complete |
+| PARSE-03 | Phase 1 | Complete |
 | TMPL-01 | Phase 1 | Pending |
 | TMPL-02 | Phase 1 | Pending |
 | TMPL-03 | Phase 1 | Pending |
@@ -78,7 +78,7 @@
 | DATA-04 | Phase 2 | Pending |
 | UX-01 | Phase 1 | Pending |
 | UX-02 | Phase 1 | Pending |
-| UX-03 | Phase 1 | Pending |
+| UX-03 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 17 total
