@@ -101,6 +101,80 @@ export function initMasterRecords() {
     return (val !== undefined && val !== null) ? val : '—';
   }
 
+  // ── Consolidation Metadata ───────────────────────────────
+  function getConsolidationMeta() {
+    var fileName = (state.excelState && state.excelState.fileName) || '';
+    var match = fileName.match(/(\d+) source/);
+    var sourceCount = match ? parseInt(match[1], 10) : 0;
+
+    var rowCount = 0;
+    var colCount = 0;
+    if (state.excelState && state.excelState.instance) {
+      try {
+        var data = state.excelState.instance.getData();
+        var nonEmpty = data.filter(function (row) {
+          return row.some(function (cell) {
+            return cell !== '' && cell !== null && cell !== undefined;
+          });
+        });
+        rowCount = nonEmpty.length > 0 ? nonEmpty.length - 1 : 0; // subtract header row
+        colCount = nonEmpty.length > 0 ? nonEmpty[0].length : 0;
+      } catch (e) {
+        // getData() unavailable — leave rowCount/colCount as 0
+      }
+    }
+    return { sourceCount: sourceCount, rowCount: rowCount, colCount: colCount };
+  }
+
+  // ── Save Bar ─────────────────────────────────────────────
+  var saveBar = null;
+
+  function buildSaveBar() {
+    var bar = document.createElement('div');
+    bar.id = 'save-record-bar';
+
+    var msg = document.createElement('span');
+    msg.className = 'save-bar-message';
+    msg.innerHTML = '<strong>Consolidation ready.</strong> Save this result to your records?';
+
+    var actions = document.createElement('div');
+    actions.className = 'save-bar-actions';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'save-bar-btn';
+    saveBtn.textContent = 'Save to Records';
+    saveBtn.addEventListener('click', function () {
+      showSaveModal();
+    });
+
+    var dismissBtn = document.createElement('button');
+    dismissBtn.className = 'save-bar-dismiss';
+    dismissBtn.textContent = 'Not now';
+    dismissBtn.addEventListener('click', function () {
+      hideSaveBar();
+    });
+
+    actions.appendChild(saveBtn);
+    actions.appendChild(dismissBtn);
+    bar.appendChild(msg);
+    bar.appendChild(actions);
+    return bar;
+  }
+
+  function showSaveBar() {
+    if (!saveBar) {
+      saveBar = buildSaveBar();
+      document.body.appendChild(saveBar);
+    }
+    saveBar.style.display = 'flex';
+  }
+
+  function hideSaveBar() {
+    if (saveBar) {
+      saveBar.style.display = 'none';
+    }
+  }
+
   // ── Sort ─────────────────────────────────────────────────
   function sortRecords(records) {
     var sorted = records.slice();
@@ -478,4 +552,46 @@ export function initMasterRecords() {
     tableArea.appendChild(table);
     dashboardRoot.appendChild(tableArea);
   }
+
+  // ── Consolidation Detection ──────────────────────────────
+  // Watches the Excel Editor panel's header badge for filename changes.
+  //
+  // DEPENDENCY: relies on .panel-center .panel-header-badge being updated
+  // by excel-editor.js after state.openFile() completes. If the DOM
+  // structure or the update mechanism changes, update this selector and
+  // the isConsolidation check below.
+  //
+  // The save bar is only shown when we are confident a consolidation result
+  // is loaded: state.excelState must exist, fileName must be a non-empty
+  // string, and it must start with 'Consolidated' (the prefix hardcoded in
+  // consolidation.js). Any ambiguity keeps the bar hidden.
+  (function () {
+    var badge = document.querySelector('.panel-center .panel-header-badge');
+
+    // Fail gracefully if the expected badge element is absent.
+    // The save bar simply won't appear — no error thrown.
+    if (!badge) {
+      return;
+    }
+
+    function isConsolidationLoaded() {
+      // Guard: excelState must exist and fileName must be a non-empty string
+      if (!state.excelState) { return false; }
+      var fileName = state.excelState.fileName;
+      if (typeof fileName !== 'string' || fileName.length === 0) { return false; }
+      // 'Consolidated' is the prefix set by consolidation.js — see consolidation.js line ~111
+      // If that prefix ever changes, update this string to match.
+      return fileName.indexOf('Consolidated') === 0;
+    }
+
+    var observer = new MutationObserver(function () {
+      if (isConsolidationLoaded()) {
+        showSaveBar();
+      } else {
+        hideSaveBar();
+      }
+    });
+
+    observer.observe(badge, { childList: true, characterData: true, subtree: true });
+  }());
 }
