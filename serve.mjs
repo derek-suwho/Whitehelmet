@@ -41,7 +41,12 @@ const server = http.createServer((req, res) => {
   // Config endpoint — exposes env vars to the frontend
   if (urlPath === '/config') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ apiKey: process.env.ANTHROPIC_API_KEY || '' }));
+    res.end(JSON.stringify({
+      apiKey: process.env.ANTHROPIC_API_KEY || '',
+      openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
+      supabaseUrl: process.env.SUPABASE_URL || '',
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    }));
     return;
   }
 

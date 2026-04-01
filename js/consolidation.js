@@ -1,7 +1,7 @@
 import { state } from './state.js';
 
 export function initConsolidation() {
-  var ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+  var OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
   var SYSTEM_PROMPT = [
     'You are a data consolidation assistant. You will receive data from multiple Excel sub-reports as JSON.',
@@ -68,20 +68,20 @@ export function initConsolidation() {
 
       var userContent = 'Consolidate the following Excel files:\n\n' + JSON.stringify(fileDataArr, null, 2);
 
-      // Call Anthropic Messages API (non-streaming — structured JSON response required)
-      var response = await fetch(ANTHROPIC_API_URL, {
+      // Call OpenRouter API (non-streaming — structured JSON response required)
+      var response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': state.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
+          'Authorization': 'Bearer ' + state.openrouterApiKey
         },
         body: JSON.stringify({
-          model: 'claude-opus-4-5',
+          model: 'anthropic/claude-opus-4-5',
           max_tokens: 8192,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: userContent }]
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userContent }
+          ]
         })
       });
 
@@ -91,7 +91,7 @@ export function initConsolidation() {
       }
 
       var json = await response.json();
-      var rawText = json.content[0].text;
+      var rawText = json.choices[0].message.content;
 
       // Split response: JSON AoA + summary text
       var summaryIdx = rawText.indexOf('\nSUMMARY:');

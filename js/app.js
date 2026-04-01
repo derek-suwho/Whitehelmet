@@ -16,6 +16,7 @@ import { initMasterRecords } from './master-records.js';
 // Fetch API key from server before initializing anything
 const config = await fetch('/config').then(r => r.json()).catch(() => ({}));
 if (config.apiKey) state.apiKey = config.apiKey;
+if (config.openrouterApiKey) state.openrouterApiKey = config.openrouterApiKey;
 
 // Phase 1–4 modules (core app)
 initChat();

@@ -84,20 +84,20 @@ export function initChat() {
     var fullResponse = '';
 
     try {
-      var response = await fetch('https://api.anthropic.com/v1/messages', {
+      var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': state.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
+          'Authorization': 'Bearer ' + state.openrouterApiKey
         },
         body: JSON.stringify({
-          model: 'claude-opus-4-5',
+          model: 'anthropic/claude-opus-4-5',
           max_tokens: 4096,
           stream: true,
-          system: 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.',
-          messages: state.conversationHistory
+          messages: [
+            { role: 'system', content: 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.' },
+            ...state.conversationHistory
+          ]
         })
       });
 
@@ -128,8 +128,9 @@ export function initChat() {
           if (dataStr === '[DONE]') continue;
           try {
             var evt = JSON.parse(dataStr);
-            if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
-              fullResponse += evt.delta.text;
+            var delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
+            if (delta && delta.content) {
+              fullResponse += delta.content;
               bubble.textContent = fullResponse;
               history.scrollTop = history.scrollHeight;
             }

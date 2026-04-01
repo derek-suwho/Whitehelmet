@@ -6,6 +6,7 @@
 
 export const state = {
   apiKey: '', // loaded from .env via /config endpoint at startup
+  openrouterApiKey: '',
   conversationHistory: [],
   excelState: { instance: null, workbook: null, fileName: null },
 

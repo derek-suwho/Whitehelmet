@@ -10,7 +10,7 @@
 //   - Return true if handled, false to fall through to normal chat
 //   - Use state.excelState.instance (Jspreadsheet CE API) for mutations
 //   - Use state.addMessage(text, 'ai') to post results to chat
-//   - Use state.apiKey for Anthropic API calls if needed
+//   - Use state.openrouterApiKey for OpenRouter API calls if needed
 //   - Use state.conversationHistory for context
 
 import { state } from './state.js';
