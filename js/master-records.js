@@ -175,6 +175,121 @@ export function initMasterRecords() {
     }
   }
 
+  // ── Save Modal ───────────────────────────────────────────
+  function showSaveModal() {
+    var meta = getConsolidationMeta();
+
+    var overlay = document.createElement('div');
+    overlay.className = 'save-modal-overlay';
+
+    var modal = document.createElement('div');
+    modal.className = 'save-modal';
+
+    var title = document.createElement('h3');
+    title.className = 'save-modal-title';
+    title.textContent = 'Save to Records';
+
+    var label = document.createElement('label');
+    label.className = 'save-modal-label';
+    label.textContent = 'Record name';
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'save-modal-input';
+    input.value = generateName();
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('maxlength', '120');
+
+    var errorMsg = document.createElement('p');
+    errorMsg.className = 'save-modal-error';
+
+    var footer = document.createElement('div');
+    footer.className = 'save-modal-footer';
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.className = 'save-modal-cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.type = 'button';
+
+    var saveBtn = document.createElement('button');
+    saveBtn.className = 'save-modal-save';
+    saveBtn.textContent = 'Save';
+    saveBtn.type = 'button';
+
+    function closeModal() {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+
+    function setLoading(loading) {
+      saveBtn.disabled = loading;
+      cancelBtn.disabled = loading;
+      saveBtn.textContent = loading ? 'Saving\u2026' : 'Save';
+    }
+
+    function setError(msg) {
+      errorMsg.textContent = msg || '';
+      if (msg) {
+        input.classList.add('input-error');
+      } else {
+        input.classList.remove('input-error');
+      }
+    }
+
+    cancelBtn.addEventListener('click', closeModal);
+
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) closeModal();
+    });
+
+    saveBtn.addEventListener('click', function () {
+      var name = (input.value || '').trim();
+      if (!name) {
+        setError('Name is required.');
+        input.focus();
+        return;
+      }
+      setError('');
+      setLoading(true);
+
+      var payload = {
+        name:        name,
+        savedAt:     new Date().toISOString(),
+        sourceCount: meta.sourceCount,
+        rowCount:    meta.rowCount,
+        colCount:    meta.colCount
+      };
+
+      apiAdapter.post(payload).then(function (saved) {
+        closeModal();
+        hideSaveBar();
+        if (state.addMessage) {
+          state.addMessage('\u2713 Saved \u201c' + saved.name + '\u201d to records.', 'ai');
+        }
+      }).catch(function (err) {
+        setLoading(false);
+        setError('Save failed. Please try again.');
+        console.error('Save error:', err);
+      });
+    });
+
+    input.addEventListener('input', function () {
+      if (input.value.trim()) setError('');
+    });
+
+    footer.appendChild(cancelBtn);
+    footer.appendChild(saveBtn);
+    modal.appendChild(title);
+    modal.appendChild(label);
+    modal.appendChild(input);
+    modal.appendChild(errorMsg);
+    modal.appendChild(footer);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    // Focus and select all so user can type immediately
+    setTimeout(function () { input.select(); }, 0);
+  }
+
   // ── Sort ─────────────────────────────────────────────────
   function sortRecords(records) {
     var sorted = records.slice();
