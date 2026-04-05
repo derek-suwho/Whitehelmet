@@ -247,14 +247,26 @@ export function initFileIngestion() {
       deleteSource(sourceIdx);
     });
 
-    item.appendChild(chevron);
-    item.appendChild(icon);
-    item.appendChild(info);
-    item.appendChild(delBtn);
-
     // Children container
     var children = document.createElement('div');
     children.className = 'source-folder-children' + (folder.expanded ? ' visible' : '');
+
+    var selectAll = document.createElement('input');
+    selectAll.type = 'checkbox';
+    selectAll.className = 'source-check';
+    selectAll.title = 'Select all files in folder';
+    selectAll.addEventListener('click', function (e) { e.stopPropagation(); });
+    selectAll.addEventListener('change', function (e) {
+      e.stopPropagation();
+      var childChecks = children.querySelectorAll('.source-check');
+      childChecks.forEach(function (cb) { cb.checked = selectAll.checked; });
+    });
+
+    item.appendChild(chevron);
+    item.appendChild(selectAll);
+    item.appendChild(icon);
+    item.appendChild(info);
+    item.appendChild(delBtn);
 
     folder.files.forEach(function (f) {
       var child = document.createElement('div');
@@ -289,6 +301,24 @@ export function initFileIngestion() {
       child.appendChild(cCb);
       child.appendChild(cIcon);
       child.appendChild(cInfo);
+
+      var cDel = document.createElement('button');
+      cDel.className = 'source-item-delete';
+      cDel.innerHTML = DELETE_ICON;
+      cDel.title = 'Remove file';
+      cDel.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (state.closeFile && state.excelState && state.excelState.fileName) {
+          if (f.file.name === state.excelState.fileName) {
+            state.closeFile(f.file.name);
+          }
+        }
+        var fi = folder.files.indexOf(f);
+        if (fi !== -1) folder.files.splice(fi, 1);
+        if (folder.files.length === 0) sources.splice(sourceIdx, 1);
+        render();
+      });
+      child.appendChild(cDel);
 
       // Click to open file
       child.addEventListener('click', function (e) {
