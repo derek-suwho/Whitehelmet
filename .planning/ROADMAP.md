@@ -1,122 +1,45 @@
-# Roadmap: Whitehelmet
+# Roadmap: Whitehelmet AI Chat Operations (Group 1)
 
 ## Overview
 
-Six phases deliver the full AI-powered consolidation engine. The app shell and layout come first to provide the frame. File ingestion and the embedded Excel editor follow as the two foundational components. AI consolidation layers on top of both. AI chat operations extend consolidation with natural language restructuring. Master records close the loop with a dashboard of completed reports.
+Two phases deliver natural language spreadsheet editing on top of the existing Whitehelmet app. Phase 1 wires up the command handler, connects to the Anthropic API for intent parsing, and delivers structural column operations with user feedback. Phase 2 adds row-level data operations (sort, filter, remove empties, aggregate) that depend on the routing and parsing infrastructure Phase 1 establishes.
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [x] **Phase 1: App Shell** - Three-panel NotebookLM-style layout and chat UI frame (completed 2026-03-11)
-- [x] **Phase 2: File Ingestion** - Upload, bulk-add, and source file management in left panel (completed 2026-03-11)
-- [x] **Phase 3: Excel Editor** - Embedded in-browser spreadsheet with read/write editing and download (completed 2026-03-12)
-- [x] **Phase 4: AI Consolidation** - AI merges multiple sub .xlsx files into a master record (completed 2026-03-12)
-- [ ] **Phase 5: AI Chat Operations** - Natural language template restructuring and data operations
-- [ ] **Phase 6: Master Records** - Dashboard, auto-generated metadata, aggregated record views
+- [ ] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback
+- [ ] **Phase 2: Row and Data Operations** - Add sort, filter, remove-empty-rows, and aggregate commands on top of Phase 1 infrastructure
 
 ## Phase Details
 
-### Phase 1: App Shell
-**Goal**: Users can see and navigate the complete three-panel interface
-**Depends on**: Nothing (first phase)
-**Requirements**: UI-01, UI-02
+### Phase 1: Command Routing, Intent Parsing, and Column Operations
+**Goal**: Users can type natural language column commands in chat and see the spreadsheet update immediately, with clear feedback on success or failure
+**Depends on**: Nothing (first phase) — existing infrastructure (state.chatCommandHandler, state.excelState.instance, state.addMessage, state.apiKey) is already in place
+**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03, PARSE-01, PARSE-02, PARSE-03, TMPL-01, TMPL-02, TMPL-03, TMPL-04, UX-01, UX-02, UX-03
 **Success Criteria** (what must be TRUE):
-  1. Three-panel layout renders: sources panel on left, Excel area in center, chat panel on right
-  2. Chat panel shows an input field and message history area
-  3. Layout is stable and does not collapse or overflow at standard desktop viewport
-**Plans:** 2/2 plans complete
-
-Plans:
-- [ ] 01-01-PLAN.md — Three-panel layout shell with sources, Excel placeholder, and chat panels
-- [ ] 01-02-PLAN.md — Chat UI with message input, send action, and scrollable history
-
-### Phase 2: File Ingestion
-**Goal**: Users can upload and view all source .xlsx files in the left panel
-**Depends on**: Phase 1
-**Requirements**: FILE-01, FILE-02, FILE-03
-**Success Criteria** (what must be TRUE):
-  1. User can drag-and-drop one or more .xlsx files onto the sources panel and see them listed
-  2. User can open a file picker to select individual .xlsx files for upload
-  3. User can drop an entire folder and all .xlsx files within it are ingested
-  4. Each uploaded file appears in the left panel with its file name and metadata (size, date)
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 02-01-PLAN.md — Drag-and-drop + file picker upload with file list and metadata display
-- [x] 02-02-PLAN.md — Folder drop support for recursive .xlsx ingestion
-
-### Phase 3: Excel Editor
-**Goal**: Users can view and directly edit spreadsheet data in the browser and download the result
-**Depends on**: Phase 1
-**Requirements**: EXCEL-01, EXCEL-02
-**Success Criteria** (what must be TRUE):
-  1. An Excel-compatible spreadsheet renders in the center panel with rows, columns, and cell values
-  2. User can click any cell and type to edit its value directly in the browser
-  3. User can download the current spreadsheet state as a valid .xlsx file
-**Plans:** 2/2 plans complete
-
-Plans:
-- [ ] 03-01-PLAN.md — Integrate Jspreadsheet CE + SheetJS for click-to-open spreadsheet with cell editing
-- [ ] 03-02-PLAN.md — Add .xlsx export/download of current spreadsheet state
-
-### Phase 4: AI Consolidation
-**Goal**: AI can merge multiple uploaded sub reports into a single master Excel record
-**Depends on**: Phase 2, Phase 3
-**Requirements**: AI-01, AI-04
-**Success Criteria** (what must be TRUE):
-  1. User can trigger AI consolidation on a set of uploaded source files and a merged master appears in the Excel editor
-  2. The consolidated master contains data drawn from all contributing source files
-  3. AI chat maintains conversation history so follow-up messages have context from prior turns
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 04-01-PLAN.md — AI consolidation pipeline: checkboxes, Consolidate button, Claude API call, merged result in editor
-- [x] 04-02-PLAN.md — Real streaming chat with in-memory conversation history replacing mock reply
-
-### Phase 5: AI Chat Operations
-**Goal**: Users can restructure templates and perform data operations through natural language chat
-**Depends on**: Phase 4
-**Requirements**: AI-02, AI-03
-**Success Criteria** (what must be TRUE):
-  1. User can type a chat message to add or remove columns and the Excel editor updates accordingly
-  2. User can type a chat message to change column layout or modify a formula and the change applies in the editor
-  3. User can type a chat message to merge rows, filter data, aggregate values, or fill cells from source files and the result appears in the editor
+  1. Typing a spreadsheet command (e.g. "add a Total column") in chat causes the spreadsheet to update; non-spreadsheet messages fall through to normal chat unchanged
+  2. User can add a new column by name and position, and it appears in the spreadsheet grid
+  3. User can remove an existing column by name, and it disappears from the spreadsheet
+  4. User can rename a column header, and the header text updates in place
+  5. After every command, a confirmation or error message appears in the chat panel; a "thinking..." indicator is shown while Claude processes
 **Plans**: TBD
 
-Plans:
-- [ ] 05-01: Implement AI template restructuring operations (columns, layout, formulas) via chat
-- [ ] 05-02: Implement AI data operations (merge rows, filter, aggregate, fill from sources) via chat
-
-### Phase 6: Master Records
-**Goal**: Users can browse a dashboard of all consolidated reports with auto-generated metadata
-**Depends on**: Phase 4
-**Requirements**: MSTR-01, MSTR-02, MSTR-03
+### Phase 2: Row and Data Operations
+**Goal**: Users can type natural language row and aggregate commands to reorder, clean, and summarize spreadsheet data
+**Depends on**: Phase 1
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04
 **Success Criteria** (what must be TRUE):
-  1. Every completed consolidation automatically generates a master record with report name, type, source files, contributing users, and date
-  2. A dashboard view lists all master records and user can open any record
-  3. Each master record displays aggregated metadata summarizing the contributing sub reports
+  1. User can type "sort by [column] ascending/descending" and rows reorder in the spreadsheet
+  2. User can type a filter condition and non-matching rows are hidden or removed
+  3. User can type "remove empty rows" and blank rows are deleted from the spreadsheet
+  4. User can type "sum/average/count [column]" and the result appears as a message in chat
 **Plans**: TBD
-
-Plans:
-- [ ] 06-01: Auto-generate master record metadata on consolidation completion
-- [ ] 06-02: Build master records dashboard with list view and record open/navigation
-- [ ] 06-03: Display aggregated sub-report metadata within each master record view
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
+Phases execute in numeric order: 1 → 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. App Shell | 2/2 | Complete   | 2026-03-11 |
-| 2. File Ingestion | 2/2 | Complete   | 2026-03-11 |
-| 3. Excel Editor | 2/2 | Complete   | 2026-03-12 |
-| 4. AI Consolidation | 2/2 | Complete   | 2026-03-12 |
-| 5. AI Chat Operations | 0/2 | Not started | - |
-| 6. Master Records | 0/3 | Not started | - |
+| 1. Command Routing, Intent Parsing, and Column Operations | 0/TBD | Not started | - |
+| 2. Row and Data Operations | 0/TBD | Not started | - |

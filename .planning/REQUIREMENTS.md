@@ -1,89 +1,90 @@
-# Requirements: Whitehelmet
+# Requirements: Whitehelmet AI Chat Operations
 
-**Defined:** 2026-03-10
-**Core Value:** Project teams can consolidate dozens of subcontractor Excel reports into a single master record through AI-assisted merging and natural language commands.
+**Defined:** 2026-03-17
+**Core Value:** User can modify the open spreadsheet using plain English chat commands and see the change applied immediately
 
 ## v1 Requirements
 
-### File Management
+### Command Routing
 
-- [x] **FILE-01**: User can upload individual .xlsx files via drag-and-drop or file picker
-- [ ] **FILE-02**: User can drop an entire folder to bulk-upload all .xlsx files within it
-- [x] **FILE-03**: User can view all uploaded source files in left panel with file name and metadata
+- [ ] **ROUTE-01**: `initAiOperations()` registers a handler at `state.chatCommandHandler` during module init
+- [ ] **ROUTE-02**: Handler returns `true` if the message was recognized as a spreadsheet command (preventing fallthrough to normal chat)
+- [ ] **ROUTE-03**: Handler returns `false` if the message is not a spreadsheet command (normal chat proceeds)
 
-### AI Engine
+### Intent Parsing
 
-- [x] **AI-01**: AI consolidates multiple sub .xlsx files into a single master Excel template
-- [ ] **AI-02**: User can instruct AI via chat to modify template structure (add/remove columns, change layout, modify formulas)
-- [ ] **AI-03**: User can instruct AI via chat to perform data operations (merge rows, filter, aggregate, fill from sources)
-- [x] **AI-04**: AI chat maintains conversation history within a session
+- [ ] **PARSE-01**: Handler calls Anthropic API (using `state.apiKey`) with the user's message and current spreadsheet headers to classify intent
+- [ ] **PARSE-02**: Claude returns a structured operation object (type + parameters) that the handler executes
+- [ ] **PARSE-03**: If Claude cannot parse a clear intent, the handler posts an error message via `state.addMessage()` and returns `true`
 
-### Excel View
+### Template Operations
 
-- [x] **EXCEL-01**: Embedded in-browser spreadsheet editor with full read/write cell editing
-- [x] **EXCEL-02**: User can download master record as .xlsx file
+- [ ] **TMPL-01**: User can type a command to add a new column (with optional name and position) and it appears in the spreadsheet
+- [ ] **TMPL-02**: User can type a command to remove an existing column by name and it is deleted from the spreadsheet
+- [ ] **TMPL-03**: User can type a command to rename a column header and the header updates in the spreadsheet
+- [ ] **TMPL-04**: User can type a command to apply a formula to a column and the formula is set on each cell in that column
 
-### Master Records
+### Data Operations
 
-- [ ] **MSTR-01**: System auto-generates master records with report name, type, source, users, and date
-- [ ] **MSTR-02**: Dashboard/list view showing all consolidated master records
-- [ ] **MSTR-03**: Master records display aggregated metadata from contributing sub reports
+- [ ] **DATA-01**: User can type a command to sort rows by a named column (ascending or descending) and rows reorder accordingly
+- [ ] **DATA-02**: User can type a command to filter rows by a condition and non-matching rows are hidden or removed
+- [ ] **DATA-03**: User can type a command to remove empty rows and blank rows are deleted from the spreadsheet
+- [ ] **DATA-04**: User can type a command to aggregate a column (sum, average, count) and the result is posted in chat
 
-### UI/Layout
+### Feedback
 
-- [x] **UI-01**: Three-panel NotebookLM-style layout (sources left | Excel center | chat right)
-- [x] **UI-02**: Right panel AI chat interface with message history
+- [ ] **UX-01**: After a successful operation, the handler posts a confirmation message in chat (e.g. "Added column 'Total'")
+- [ ] **UX-02**: If an operation fails or the intent is ambiguous, the handler posts a clear error message in chat explaining what went wrong
+- [ ] **UX-03**: While Claude is processing, a "thinking..." indicator is shown in chat
 
 ## v2 Requirements
 
-### Authentication
+### Extended Operations
 
-- **AUTH-01**: User can log in with email and password
-- **AUTH-02**: Role-based access control (PM, Analyst, Director, Client)
-- **AUTH-03**: Admin can add/remove users and assign roles
+- **EXT-01**: Fill cells from a pattern or source file data
+- **EXT-02**: Multi-step conversational commands ("now also do X to that column")
+- **EXT-03**: Undo last AI operation
 
-### File Management
+### Robustness
 
-- **FILE-04**: User can connect shared drive/folder that auto-syncs new files
-
-### UI
-
-- **UI-03**: Responsive design for tablet/smaller screens
+- **ROB-01**: Route through `/api/chat` proxy once Group 3's backend is available (currently uses `state.apiKey` directly)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Approval workflows | User deprioritized, not needed for v1 |
-| PDF/CSV ingestion | .xlsx only for v1, most common sub format |
-| Mobile app | Web-first approach |
-| Real-time multi-user collaboration | High complexity, defer to future |
-| Online preview (separate from editor) | Editor serves as preview |
+| Undo/redo | No undo API in Jspreadsheet CE |
+| Multi-turn conversation | Stateless handler keeps v1 simple |
+| Modifying other team files | Group boundary — only `js/ai-operations.js` (and `js/chat.js` if needed) |
+| Formula engine / computed columns | Jspreadsheet CE has limited formula support |
 
 ## Traceability
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| UI-01 | Phase 1 | Complete |
-| UI-02 | Phase 1 | Complete |
-| FILE-01 | Phase 2 | Complete |
-| FILE-02 | Phase 2 | Pending |
-| FILE-03 | Phase 2 | Complete |
-| EXCEL-01 | Phase 3 | Complete |
-| EXCEL-02 | Phase 3 | Complete |
-| AI-01 | Phase 4 | Complete |
-| AI-04 | Phase 4 | Complete |
-| AI-02 | Phase 5 | Pending |
-| AI-03 | Phase 5 | Pending |
-| MSTR-01 | Phase 6 | Pending |
-| MSTR-02 | Phase 6 | Pending |
-| MSTR-03 | Phase 6 | Pending |
+| ROUTE-01 | Phase 1 | Pending |
+| ROUTE-02 | Phase 1 | Pending |
+| ROUTE-03 | Phase 1 | Pending |
+| PARSE-01 | Phase 1 | Pending |
+| PARSE-02 | Phase 1 | Pending |
+| PARSE-03 | Phase 1 | Pending |
+| TMPL-01 | Phase 1 | Pending |
+| TMPL-02 | Phase 1 | Pending |
+| TMPL-03 | Phase 1 | Pending |
+| TMPL-04 | Phase 1 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| DATA-04 | Phase 2 | Pending |
+| UX-01 | Phase 1 | Pending |
+| UX-02 | Phase 1 | Pending |
+| UX-03 | Phase 1 | Pending |
 
 **Coverage:**
-- v1 requirements: 14 total
-- Mapped to phases: 14
-- Unmapped: 0
+- v1 requirements: 17 total
+- Mapped to phases: 17
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 after roadmap creation*
+*Requirements defined: 2026-03-17*
+*Last updated: 2026-03-17 after initial definition*
