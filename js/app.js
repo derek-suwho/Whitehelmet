@@ -29,3 +29,8 @@ initAiOperations();
 
 // Phase 6: Master records dashboard (Group 2)
 initMasterRecords();
+
+// Wire Records button
+document.getElementById('records-btn').addEventListener('click', () => {
+  if (state.showDashboard) state.showDashboard();
+});

@@ -17,6 +17,7 @@ body {
   border-bottom: 1px solid #1e262f;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 20px;
   flex-shrink: 0;
   box-shadow: 0 1px 8px rgba(0,0,0,0.5);
