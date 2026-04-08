@@ -3,4 +3,6 @@ node_modules/
 temporary screenshots/
 .env
 *.md
+!README.md
+!PLAN.md
 .worktrees/
