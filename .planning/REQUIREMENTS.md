@@ -26,10 +26,10 @@
 
 ### Data Operations
 
-- [ ] **DATA-01**: User can type a command to sort rows by a named column (ascending or descending) and rows reorder accordingly
-- [ ] **DATA-02**: User can type a command to filter rows by a condition and non-matching rows are hidden or removed
-- [ ] **DATA-03**: User can type a command to remove empty rows and blank rows are deleted from the spreadsheet
-- [ ] **DATA-04**: User can type a command to aggregate a column (sum, average, count) and the result is posted in chat
+- [x] **DATA-01**: User can type a command to sort rows by a named column (ascending or descending) and rows reorder accordingly
+- [x] **DATA-02**: User can type a command to filter rows by a condition and non-matching rows are hidden or removed
+- [x] **DATA-03**: User can type a command to remove empty rows and blank rows are deleted from the spreadsheet
+- [x] **DATA-04**: User can type a command to aggregate a column (sum, average, count) and the result is posted in chat
 
 ### Feedback
 
@@ -72,10 +72,10 @@
 | TMPL-02 | Phase 1 | Complete |
 | TMPL-03 | Phase 1 | Complete |
 | TMPL-04 | Phase 1 | Complete |
-| DATA-01 | Phase 2 | Pending |
-| DATA-02 | Phase 2 | Pending |
-| DATA-03 | Phase 2 | Pending |
-| DATA-04 | Phase 2 | Pending |
+| DATA-01 | Phase 2 | Complete |
+| DATA-02 | Phase 2 | Complete |
+| DATA-03 | Phase 2 | Complete |
+| DATA-04 | Phase 2 | Complete |
 | UX-01 | Phase 1 | Complete |
 | UX-02 | Phase 1 | Complete |
 | UX-03 | Phase 1 | Complete |
