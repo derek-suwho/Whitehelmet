@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: "Paused at checkpoint 01-02 Task 2: human-verify"
-last_updated: "2026-04-08T01:53:25.953Z"
-last_activity: 2026-03-31 — Plan 01-01 complete (human-verify approved)
+status: complete
+stopped_at: "Completed 01-02-PLAN.md"
+last_updated: "2026-04-08T01:57:37.411Z"
+last_activity: 2026-04-08 — Plan 01-02 complete (human-verify approved)
 progress:
   total_phases: 2
   completed_phases: 1
   total_plans: 2
   completed_plans: 2
-  percent: 50
+  percent: 100
 ---
 
 # Project State
@@ -21,37 +21,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** User can modify the open spreadsheet using plain English chat commands and see the change applied immediately
-**Current focus:** Phase 1 — Command Routing, Intent Parsing, and Column Operations
+**Current focus:** Phase 1 complete — Command Routing, Intent Parsing, and Column Operations
 
 ## Current Position
 
 Phase: 1 of 2 (Command Routing, Intent Parsing, and Column Operations)
-Plan: 1 of 2 in current phase (01-01 complete)
-Status: In progress — 01-02 next
-Last activity: 2026-03-31 — Plan 01-01 complete (human-verify approved)
+Plan: 2 of 2 in current phase (01-02 complete)
+Status: Phase 1 complete
+Last activity: 2026-04-08 — Plan 01-02 complete (human-verify approved)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: ~5 min
-- Total execution time: ~5 min
+- Total plans completed: 2
+- Average duration: ~7 min
+- Total execution time: ~15 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-command-routing | 1 | ~5 min | ~5 min |
+| 01-command-routing | 2 | ~15 min | ~7 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (~5 min)
+- Last 5 plans: 01-01 (~5 min), 01-02 (~10 min)
 - Trend: -
 
 *Updated after each plan completion*
 | Phase 01-command-routing P01 | 5 | 1 tasks | 1 files |
-| Phase 01-command-routing P02 | 5 | 1 tasks | 1 files |
+| Phase 01-command-routing P02 | 10 | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -67,6 +67,7 @@ Recent decisions affecting current work:
 - [Phase 01-command-routing]: Thinking bubble removed (parentElement.remove()) on non-command so no stale message lingers during normal chat response
 - [Phase 01-command-routing]: findColumn helper throws with full available-column list for actionable errors
 - [Phase 01-command-routing]: add_column append-at-end uses insertColumn after last index then setHeader at headers.length
+- [Phase 01-command-routing]: apply_formula uses {row} regex placeholder replacing with 1-based row number for natural formula syntax
 
 ### Pending Todos
 
@@ -74,11 +75,10 @@ None yet.
 
 ### Blockers/Concerns
 
-- TMPL-04 (apply formula to column): Jspreadsheet CE has limited formula support — verify which formula types actually work before implementation
 - DATA-02 (filter rows): CE API may not support native filtering; may need to re-render data subset — check API surface during planning
 
 ## Session Continuity
 
-Last session: 2026-04-08T01:53:25.948Z
-Stopped at: Paused at checkpoint 01-02 Task 2: human-verify
+Last session: 2026-04-08T01:57:37.411Z
+Stopped at: Completed 01-02-PLAN.md
 Resume file: None
