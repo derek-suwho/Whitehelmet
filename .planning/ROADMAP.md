@@ -25,7 +25,7 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
 
 Plans:
 - [x] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
-- [ ] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
+- [x] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
 
 ### Phase 2: Row and Data Operations
 **Goal**: Users can type natural language row and aggregate commands to reorder, clean, and summarize spreadsheet data
@@ -36,7 +36,10 @@ Plans:
   2. User can type a filter condition and non-matching rows are hidden or removed
   3. User can type "remove empty rows" and blank rows are deleted from the spreadsheet
   4. User can type "sum/average/count [column]" and the result appears as a message in chat
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Sort, filter, remove empty rows, and aggregate operations with browser verification
 
 ## Progress
 
@@ -46,4 +49,4 @@ Phases execute in numeric order: 1 -> 2
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Command Routing, Intent Parsing, and Column Operations | 2/2 | Complete   | 2026-04-08 |
-| 2. Row and Data Operations | 0/TBD | Not started | - |
+| 2. Row and Data Operations | 0/1 | Not started | - |
