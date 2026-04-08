@@ -16,7 +16,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function checkSession() {
     try {
-      const resp = await api.get('/api/auth/me')
+      const resp = await api.get<{ data: AuthUser }>('/api/auth/me')
       user.value = resp.data
     } catch {
       user.value = null
@@ -26,7 +26,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(username: string, password: string) {
-    const resp = await api.post('/api/auth/login', { username, password })
+    const resp = await api.post<{ data: { user: AuthUser; csrf_token: string } }>('/api/auth/login', { username, password })
     user.value = resp.data.user
     csrfToken.value = resp.data.csrf_token
   }

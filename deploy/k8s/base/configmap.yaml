@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  labels:
+    app: whitehelmet
+data:
+  ENVIRONMENT: "dev"
+  DB_HOST: "mysql"
+  DB_PORT: "3306"
+  DB_NAME: "whitehelmet"
+  CORS_ORIGINS: '["https://whitehelmet.example.com"]'
+  MAX_UPLOAD_SIZE_MB: "50"
+  UPLOAD_DIR: "/var/data/whitehelmet/uploads"
+  SESSION_EXPIRY_HOURS: "24"
