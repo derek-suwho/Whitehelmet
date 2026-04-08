@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-stopped_at: Completed 01-command-routing 01-01-PLAN.md
-last_updated: "2026-04-01T02:53:56.216Z"
-last_activity: 2026-03-17 — Roadmap created
+status: executing
+stopped_at: "Paused at checkpoint 01-02 Task 2: human-verify"
+last_updated: "2026-04-08T01:53:25.953Z"
+last_activity: 2026-03-31 — Plan 01-01 complete (human-verify approved)
 progress:
   total_phases: 2
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
+  completed_plans: 2
   percent: 50
 ---
 
@@ -51,6 +51,7 @@ Progress: [█████░░░░░] 50%
 
 *Updated after each plan completion*
 | Phase 01-command-routing P01 | 5 | 1 tasks | 1 files |
+| Phase 01-command-routing P02 | 5 | 1 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - Project: Single-command model (no conversation) — keeps handler stateless and simple for v1
 - [Phase 01-command-routing]: executeOp takes only op (not headers) as a parameter — headers not needed in stub; Plan 02 can add when implementing ops
 - [Phase 01-command-routing]: Thinking bubble removed (parentElement.remove()) on non-command so no stale message lingers during normal chat response
+- [Phase 01-command-routing]: findColumn helper throws with full available-column list for actionable errors
+- [Phase 01-command-routing]: add_column append-at-end uses insertColumn after last index then setHeader at headers.length
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T02:53:56.208Z
-Stopped at: Completed 01-command-routing 01-01-PLAN.md
+Last session: 2026-04-08T01:53:25.948Z
+Stopped at: Paused at checkpoint 01-02 Task 2: human-verify
 Resume file: None

@@ -19,10 +19,10 @@
 
 ### Template Operations
 
-- [ ] **TMPL-01**: User can type a command to add a new column (with optional name and position) and it appears in the spreadsheet
-- [ ] **TMPL-02**: User can type a command to remove an existing column by name and it is deleted from the spreadsheet
-- [ ] **TMPL-03**: User can type a command to rename a column header and the header updates in the spreadsheet
-- [ ] **TMPL-04**: User can type a command to apply a formula to a column and the formula is set on each cell in that column
+- [x] **TMPL-01**: User can type a command to add a new column (with optional name and position) and it appears in the spreadsheet
+- [x] **TMPL-02**: User can type a command to remove an existing column by name and it is deleted from the spreadsheet
+- [x] **TMPL-03**: User can type a command to rename a column header and the header updates in the spreadsheet
+- [x] **TMPL-04**: User can type a command to apply a formula to a column and the formula is set on each cell in that column
 
 ### Data Operations
 
@@ -33,8 +33,8 @@
 
 ### Feedback
 
-- [ ] **UX-01**: After a successful operation, the handler posts a confirmation message in chat (e.g. "Added column 'Total'")
-- [ ] **UX-02**: If an operation fails or the intent is ambiguous, the handler posts a clear error message in chat explaining what went wrong
+- [x] **UX-01**: After a successful operation, the handler posts a confirmation message in chat (e.g. "Added column 'Total'")
+- [x] **UX-02**: If an operation fails or the intent is ambiguous, the handler posts a clear error message in chat explaining what went wrong
 - [x] **UX-03**: While Claude is processing, a "thinking..." indicator is shown in chat
 
 ## v2 Requirements
@@ -68,16 +68,16 @@
 | PARSE-01 | Phase 1 | Complete |
 | PARSE-02 | Phase 1 | Complete |
 | PARSE-03 | Phase 1 | Complete |
-| TMPL-01 | Phase 1 | Pending |
-| TMPL-02 | Phase 1 | Pending |
-| TMPL-03 | Phase 1 | Pending |
-| TMPL-04 | Phase 1 | Pending |
+| TMPL-01 | Phase 1 | Complete |
+| TMPL-02 | Phase 1 | Complete |
+| TMPL-03 | Phase 1 | Complete |
+| TMPL-04 | Phase 1 | Complete |
 | DATA-01 | Phase 2 | Pending |
 | DATA-02 | Phase 2 | Pending |
 | DATA-03 | Phase 2 | Pending |
 | DATA-04 | Phase 2 | Pending |
-| UX-01 | Phase 1 | Pending |
-| UX-02 | Phase 1 | Pending |
+| UX-01 | Phase 1 | Complete |
+| UX-02 | Phase 1 | Complete |
 | UX-03 | Phase 1 | Complete |
 
 **Coverage:**

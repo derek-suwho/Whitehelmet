@@ -6,7 +6,7 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
 
 ## Phases
 
-- [ ] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback
+- [x] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback (completed 2026-04-08)
 - [ ] **Phase 2: Row and Data Operations** - Add sort, filter, remove-empty-rows, and aggregate commands on top of Phase 1 infrastructure
 
 ## Phase Details
@@ -21,7 +21,7 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
   3. User can remove an existing column by name, and it disappears from the spreadsheet
   4. User can rename a column header, and the header text updates in place
   5. After every command, a confirmation or error message appears in the chat panel; a "thinking..." indicator is shown while Claude processes
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
@@ -45,5 +45,5 @@ Phases execute in numeric order: 1 -> 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Command Routing, Intent Parsing, and Column Operations | 1/2 | In Progress|  |
+| 1. Command Routing, Intent Parsing, and Column Operations | 2/2 | Complete   | 2026-04-08 |
 | 2. Row and Data Operations | 0/TBD | Not started | - |
