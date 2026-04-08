@@ -17,7 +17,7 @@ import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
 
 // ── Intent Parsing ─────────────────────
 
@@ -64,6 +64,22 @@ function findColumn(headers, name) {
   return idx;
 }
 
+function evaluateCondition(cellVal, operator, value) {
+  var numCell = parseFloat(cellVal);
+  var numVal = parseFloat(value);
+  var bothNumeric = !isNaN(numCell) && !isNaN(numVal);
+  switch (operator) {
+    case '>': return bothNumeric && numCell > numVal;
+    case '<': return bothNumeric && numCell < numVal;
+    case '>=': return bothNumeric && numCell >= numVal;
+    case '<=': return bothNumeric && numCell <= numVal;
+    case '=': return String(cellVal) === String(value);
+    case '!=': return String(cellVal) !== String(value);
+    case 'contains': return String(cellVal).toLowerCase().indexOf(String(value).toLowerCase()) !== -1;
+    default: return false;
+  }
+}
+
 function executeOp(op, headers) {
   switch (op.op) {
     case 'add_column':
@@ -95,6 +111,56 @@ function executeOp(op, headers) {
         state.excelState.instance.setValueFromCoords(idx, r, formula);
       }
       return 'Applied formula to column "' + op.column + '" (' + data.length + ' rows).';
+    case 'sort_rows':
+      var idx = findColumn(headers, op.column);
+      var desc = op.direction === 'desc' ? 1 : 0;
+      state.excelState.instance.orderBy(idx, desc);
+      return 'Sorted by "' + op.column + '" (' + (desc ? 'descending' : 'ascending') + ').';
+    case 'filter_rows':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var hidden = 0;
+      for (var r = 0; r < data.length; r++) {
+        var cellVal = data[r][colIdx];
+        var keep = evaluateCondition(cellVal, op.operator, op.value);
+        if (!keep) {
+          state.excelState.instance.hideRow(r);
+          hidden++;
+        }
+      }
+      return 'Filtered: hiding ' + hidden + ' rows that do not match "' + op.column + ' ' + op.operator + ' ' + op.value + '".';
+    case 'remove_empty_rows':
+      var data = state.excelState.instance.getData();
+      var deleted = 0;
+      for (var r = data.length - 1; r >= 0; r--) {
+        var isEmpty = data[r].every(function(cell) {
+          return cell === '' || cell === null || cell === undefined;
+        });
+        if (isEmpty) {
+          state.excelState.instance.deleteRow(r, 1);
+          deleted++;
+        }
+      }
+      return 'Removed ' + deleted + ' empty row' + (deleted !== 1 ? 's' : '') + '.';
+    case 'aggregate':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var values = [];
+      for (var r = 0; r < data.length; r++) {
+        var v = parseFloat(data[r][colIdx]);
+        if (!isNaN(v)) values.push(v);
+      }
+      var result;
+      if (op.func === 'sum') {
+        result = values.reduce(function(a, b) { return a + b; }, 0);
+        return 'Sum of "' + op.column + '": ' + result;
+      } else if (op.func === 'average') {
+        result = values.length ? values.reduce(function(a, b) { return a + b; }, 0) / values.length : 0;
+        return 'Average of "' + op.column + '": ' + result.toFixed(2);
+      } else if (op.func === 'count') {
+        return 'Count of numeric values in "' + op.column + '": ' + values.length;
+      }
+      throw new Error('Unknown aggregate function: ' + op.func);
     default:
       throw new Error('Unknown operation: ' + op.op);
   }
