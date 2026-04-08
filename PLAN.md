@@ -116,6 +116,45 @@ All files in `deploy/`.
 
 ---
 
+## NEXT SESSION: Remaining Work
+
+**Read this PLAN.md first.** All scaffolding is done. Focus on:
+
+### 1. Backend test coverage → 80% (Phase 7)
+Existing tests: `backend/tests/unit/test_health.py`, `test_records.py`, `test_security.py`. Fixtures in `conftest.py` (SQLite in-memory DB, `auth_client` with session cookie + CSRF).
+
+Need tests for:
+- `app/api/routes/auth.py` — login stub returns 501, logout destroys session, /me returns user
+- `app/api/routes/ai.py` — mock httpx calls to OpenRouter/Anthropic, test SSE streaming, test missing API key returns 503
+- `app/api/routes/files.py` — upload valid xlsx, reject wrong extension, reject oversized, reject bad magic bytes
+- `app/core/dependencies.py` — expired session rejected, missing cookie rejected, CSRF mismatch rejected
+- `app/models/` — model creation, FK constraints
+
+### 2. Frontend test coverage → 70% (Phase 7)
+Setup: Vitest + Vue Test Utils + happy-dom already in `package.json`. Need `vitest.config.ts`.
+
+Need tests for:
+- All 5 Pinia stores (auth, chat, records, sources, spreadsheet)
+- Composables (useApi, useAiOperations, useConsolidation) — mock fetch
+- Components: mount with test utils, verify renders, user interactions
+- Router: auth guard redirects unauthenticated to /login
+
+### 3. E2E tests with Playwright (Phase 7)
+Setup: `@playwright/test` in package.json. Need `playwright.config.ts`.
+- Login flow
+- File upload → consolidation → save record
+- Dashboard CRUD
+
+### 4. Remove Supabase references from MVP code (Phase 2 cleanup)
+Files to clean: `.env` (remove SUPABASE_* vars), `serve.mjs` (/config endpoint), `js/state.js`
+
+### 5. Rate limiting on login (Phase 1)
+Add to `app/api/routes/auth.py`: track failed attempts per IP, lockout after 5.
+
+**Branch:** `artem` on `old-origin` (GitHub). Build verified: `vue-tsc` + `vite build` pass.
+
+---
+
 ## Unresolved Questions
 1. ~~Backend language?~~ **Resolved: FastAPI (Python)**
 2. Auth system type? OAuth2, SAML, LDAP? — **BLOCKING Phase 4**
