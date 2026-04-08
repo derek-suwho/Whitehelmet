@@ -56,16 +56,45 @@ async function parseCommand(userText, headers) {
 
 // ── Operation Dispatch ─────────────────────
 
-function executeOp(op) {
+function findColumn(headers, name) {
+  var idx = headers.indexOf(name);
+  if (idx === -1) {
+    throw new Error('Column "' + name + '" not found. Available columns: ' + headers.join(', '));
+  }
+  return idx;
+}
+
+function executeOp(op, headers) {
   switch (op.op) {
     case 'add_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var instance = state.excelState.instance;
+      var pos = op.position;
+      if (pos === null || pos === undefined || pos >= headers.length) {
+        // Append at end: insert after last column
+        instance.insertColumn(1, headers.length - 1, false);
+        instance.setHeader(headers.length, op.name);
+      } else {
+        // Insert before the specified position
+        instance.insertColumn(1, pos, true);
+        instance.setHeader(pos, op.name);
+      }
+      return 'Added column "' + op.name + '".';
     case 'remove_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.name);
+      state.excelState.instance.deleteColumn(idx, 1);
+      return 'Removed column "' + op.name + '".';
     case 'rename_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.from);
+      state.excelState.instance.setHeader(idx, op.to);
+      return 'Renamed "' + op.from + '" to "' + op.to + '".';
     case 'apply_formula':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.column);
+      var data = state.excelState.instance.getData();
+      for (var r = 0; r < data.length; r++) {
+        var formula = op.formula.replace(/\{row\}/g, String(r + 1));
+        state.excelState.instance.setValueFromCoords(idx, r, formula);
+      }
+      return 'Applied formula to column "' + op.column + '" (' + data.length + ' rows).';
     default:
       throw new Error('Unknown operation: ' + op.op);
   }
@@ -92,7 +121,7 @@ export function initAiOperations() {
         return false;
       }
 
-      var msg = executeOp(op);
+      var msg = executeOp(op, headers);
       thinkingBubble.textContent = msg;
       return true;
     } catch (err) {
