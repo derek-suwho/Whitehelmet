@@ -50,3 +50,33 @@ Phases execute in numeric order: 1 -> 2
 |-------|----------------|--------|-----------|
 | 1. Command Routing, Intent Parsing, and Column Operations | 2/2 | Complete   | 2026-04-08 |
 | 2. Row and Data Operations | 0/1 | Not started | - |
+
+### Phase 3: Fix Broken Foundations
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 2
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] TBD (run /gsd:plan-phase 3 to break down) (completed 2026-04-09)
+
+### Phase 4: Data Awareness
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 4 to break down)
+
+### Phase 5: Master Records
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 5 to break down)

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-04-07T00:00:00.000Z"
-last_activity: 2026-04-07 — Plan 02-01 complete (human-verify approved)
+status: Phase 3 not yet planned
+stopped_at: Completed 03-fix-broken-foundations-01-PLAN.md
+last_updated: "2026-04-09T19:44:43.672Z"
+last_activity: 2026-04-09 — Scope expanded; phases 3, 4, 5 added to roadmap
 progress:
-  total_phases: 2
-  completed_phases: 2
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_phases: 5
+  completed_phases: 3
+  total_plans: 4
+  completed_plans: 4
+  percent: 40
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-17)
 
 **Core value:** User can modify the open spreadsheet using plain English chat commands and see the change applied immediately
-**Current focus:** All phases complete — AI spreadsheet operations fully implemented
+**Current focus:** Phase 3 — Fix broken foundations (consolidation 401, construction-aware prompts, show_all_rows, export op)
 
 ## Current Position
 
-Phase: 2 of 2 (Row and Data Operations)
-Plan: 1 of 1 in current phase (02-01 complete)
-Status: Phase 2 complete — all phases done
-Last activity: 2026-04-07 — Plan 02-01 complete (human-verify approved)
+Phase: 2 of 5 (Row and Data Operations complete — phases 3-5 pending)
+Plan: —
+Status: Phase 3 not yet planned
+Last activity: 2026-04-09 — Scope expanded; phases 3, 4, 5 added to roadmap
 
-Progress: [██████████] 100% (3/3 plans)
+Progress: [████░░░░░░] 40% (phases 1-2 of 5 complete)
 
 ## Performance Metrics
 
@@ -54,6 +54,7 @@ Progress: [██████████] 100% (3/3 plans)
 | Phase 01-command-routing P01 | 5 | 1 tasks | 1 files |
 | Phase 01-command-routing P02 | 10 | 2 tasks | 1 files |
 | Phase 02-row-and-data-operations P01 | 10 | 2 tasks | 1 files |
+| Phase 03-fix-broken-foundations P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,16 @@ Recent decisions affecting current work:
 - [Phase 02-row-and-data-operations]: filter_rows uses hideRow (non-destructive) rather than deleteRow — preserves data while hiding non-matching rows
 - [Phase 02-row-and-data-operations]: remove_empty_rows iterates backwards to avoid index drift when deleteRow shifts indices
 - [Phase 02-row-and-data-operations]: evaluateCondition uses bothNumeric guard — numeric operators only apply when both sides parse as numbers
+- [Phase 03-fix-broken-foundations]: consolidation.js uses /api/chat with OpenAI format — consistent with how ai-operations.js calls the backend
+- [Phase 03-fix-broken-foundations]: SYSTEM_PROMPT includes Source File as first column so PMs can trace merged rows back to origin file
+- [Phase 03-fix-broken-foundations]: show_all_rows calls showRow on every row index — simpler than tracking hidden rows
+- [Phase 03-fix-broken-foundations]: export clicks #download-xlsx-btn rather than re-implementing xlsx generation — avoids duplication
+
+### Roadmap Evolution
+
+- Phase 3 added: Fix Broken Foundations — consolidation.js 401 fix, construction-aware prompt, show_all_rows + export ops
+- Phase 4 added: Data Awareness — spreadsheet snapshot helper, data-aware chat + command parsing, find_duplicates op
+- Phase 5 added: Master Records — dashboard UI, saveMasterRecord, template generation via Claude
 
 ### Pending Todos
 
@@ -80,10 +91,11 @@ None yet.
 
 ### Blockers/Concerns
 
-None — DATA-02 filter blocker resolved: Jspreadsheet CE hideRow works correctly for non-destructive row filtering.
+- consolidation.js still calls Anthropic directly (same 401 issue we fixed in chat.js) — Phase 3 fixes this
+- Group 1 now owns consolidation.js and master-records.js (Group 2 & 3 handed off AI backend responsibility 2026-04-09)
 
 ## Session Continuity
 
-Last session: 2026-04-07T00:00:00.000Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-04-09T19:44:43.668Z
+Stopped at: Completed 03-fix-broken-foundations-01-PLAN.md
 Resume file: None
