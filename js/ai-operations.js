@@ -17,26 +17,23 @@ import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"show_all_rows"}\n{"op":"export"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
 
 // ── Intent Parsing ─────────────────────
 
 async function parseCommand(userText, headers) {
   var userContent = 'Column headers: ' + JSON.stringify(headers) + '\nUser command: ' + userText;
 
-  var response = await fetch('https://api.anthropic.com/v1/messages', {
+  var response = await fetch('/api/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': state.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-opus-4-5',
+      model: 'anthropic/claude-opus-4-5',
       max_tokens: 512,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }]
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userContent }
+      ]
     })
   });
 
@@ -45,7 +42,7 @@ async function parseCommand(userText, headers) {
   }
 
   var json = await response.json();
-  var text = json.content[0].text;
+  var text = json.choices[0].message.content;
 
   try {
     return JSON.parse(text);
@@ -161,6 +158,17 @@ function executeOp(op, headers) {
         return 'Count of numeric values in "' + op.column + '": ' + values.length;
       }
       throw new Error('Unknown aggregate function: ' + op.func);
+    case 'show_all_rows':
+      var data = state.excelState.instance.getData();
+      for (var r = 0; r < data.length; r++) {
+        state.excelState.instance.showRow(r);
+      }
+      return 'Showing all rows — filter cleared.';
+    case 'export':
+      var btn = document.getElementById('download-xlsx-btn');
+      if (!btn) throw new Error('Download button not found.');
+      btn.click();
+      return 'Downloading spreadsheet as .xlsx\u2026';
     default:
       throw new Error('Unknown operation: ' + op.op);
   }
