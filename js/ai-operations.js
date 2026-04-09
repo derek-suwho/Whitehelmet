@@ -215,6 +215,7 @@ function executeOp(op, headers) {
 // ── Initialization ─────────────────────
 
 export function initAiOperations() {
+  state.getSpreadsheetSnapshot = getSpreadsheetSnapshot;
   state.chatCommandHandler = async function(userText) {
     if (!state.excelState.instance) return false;
 
