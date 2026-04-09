@@ -130,6 +130,18 @@ export function initConsolidation() {
       // Open merged result in Excel editor
       state.openFile(syntheticFile);
 
+      // Auto-save to master records if available
+      if (state.saveMasterRecord) {
+        var recDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        state.saveMasterRecord({
+          name: label,
+          date: recDate,
+          sourceCount: checkedFiles.length,
+          rowCount: mergedAoA.length - 1,
+          fileObj: syntheticFile
+        });
+      }
+
       // Post Claude summary to chat
       state.addMessage(summaryText, 'ai');
 

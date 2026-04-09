@@ -17,7 +17,7 @@ import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\nFor find_duplicates: use when user says "find duplicates", "show duplicates", "duplicate rows", "which values repeat", "duplicate entries in".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n{"op":"save_record"}\n{"op":"show_dashboard"}\n{"op":"suggest_template"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\nFor find_duplicates: use when user says "find duplicates", "show duplicates", "duplicate rows", "which values repeat", "duplicate entries in".\nFor save_record: use when user says "save this", "save record", "save master record", "save consolidated data".\nFor show_dashboard: use when user says "show dashboard", "open dashboard", "view saved records", "my records", "master records".\nFor suggest_template: use when user says "suggest template", "what columns should I use", "recommend schema", "template for construction", "standard columns".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
 
 // ── Spreadsheet Snapshot ─────────────────────
 
@@ -196,6 +196,43 @@ function executeOp(op, headers) {
       }
       if (dupes.length === 0) return 'No duplicates found in "' + op.column + '".';
       return 'Duplicates in "' + op.column + '":\n' + dupes.join('\n');
+    case 'save_record':
+      if (!state.saveMasterRecord) throw new Error('Master records not initialized.');
+      var recData = state.excelState.instance.getData();
+      var recHeaders = state.excelState.instance.getHeaders(true);
+      var recDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      var recName = (state.excelState.fileName || 'Master Record') + ' \u2014 ' + recDate;
+      // Build a synthetic File from current spreadsheet data
+      var recAoA = [recHeaders].concat(recData);
+      var recWb = XLSX.utils.book_new();
+      var recWs = XLSX.utils.aoa_to_sheet(recAoA);
+      XLSX.utils.book_append_sheet(recWb, recWs, 'Master');
+      var recArr = XLSX.write(recWb, { bookType: 'xlsx', type: 'array' });
+      var recBlob = new Blob([recArr], { type: 'application/octet-stream' });
+      var recFile = new File([recBlob], recName + '.xlsx', { type: 'application/octet-stream' });
+      state.saveMasterRecord({ name: recName, date: recDate, sourceCount: 1, rowCount: recData.length, fileObj: recFile });
+      return 'Saved "' + recName + '" to master records.';
+    case 'show_dashboard':
+      if (!state.showDashboard) throw new Error('Dashboard not initialized.');
+      state.showDashboard();
+      return 'Opening master records dashboard\u2026';
+    case 'suggest_template':
+      var snapHeaders = state.excelState.instance.getHeaders(true);
+      var snapData = getSpreadsheetSnapshot();
+      return fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'anthropic/claude-opus-4-5',
+          max_tokens: 1024,
+          messages: [
+            { role: 'system', content: 'You are a construction project management expert. Analyze spreadsheet columns and recommend a standardized master record schema for construction subcontractor report consolidation. Be concise and actionable.' },
+            { role: 'user', content: 'Current columns: ' + JSON.stringify(snapHeaders) + (snapData ? '\n\nSample data:\n' + snapData.split('\n').slice(0, 6).join('\n') : '') + '\n\nRecommend a standard column schema for a construction PM master record. Format your response as:\n**Keep:** [columns to keep]\n**Rename:** [old name \u2192 new name]\n**Add:** [missing columns that construction PMs need]\n**Remove:** [columns that add no value]' }
+          ]
+        })
+      }).then(function(r) { return r.json(); }).then(function(j) {
+        return j.choices[0].message.content;
+      });
     case 'show_all_rows':
       var data = state.excelState.instance.getData();
       for (var r = 0; r < data.length; r++) {
@@ -234,7 +271,8 @@ export function initAiOperations() {
         return false;
       }
 
-      var msg = executeOp(op, headers);
+      var msgOrPromise = executeOp(op, headers);
+      var msg = (msgOrPromise && typeof msgOrPromise.then === 'function') ? await msgOrPromise : msgOrPromise;
       thinkingBubble.textContent = msg;
       return true;
     } catch (err) {
