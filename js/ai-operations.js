@@ -17,12 +17,34 @@ import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"show_all_rows"}\n{"op":"export"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\nFor find_duplicates: use when user says "find duplicates", "show duplicates", "duplicate rows", "which values repeat", "duplicate entries in".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+
+// ── Spreadsheet Snapshot ─────────────────────
+
+function getSpreadsheetSnapshot() {
+  if (!state.excelState.instance) return null;
+  var headers = state.excelState.instance.getHeaders(true);
+  var data = state.excelState.instance.getData();
+  var ROW_CAP = 150;
+  var rows = data.length > ROW_CAP ? data.slice(0, ROW_CAP) : data;
+  var truncated = data.length > ROW_CAP;
+
+  var lines = [];
+  lines.push('Current spreadsheet (' + data.length + ' rows' + (truncated ? ', showing first ' + ROW_CAP : '') + '):');
+  lines.push(headers.join('\t'));
+  for (var i = 0; i < rows.length; i++) {
+    lines.push(rows[i].map(function(cell) {
+      return (cell === null || cell === undefined) ? '' : String(cell).slice(0, 80);
+    }).join('\t'));
+  }
+  return lines.join('\n');
+}
 
 // ── Intent Parsing ─────────────────────
 
 async function parseCommand(userText, headers) {
-  var userContent = 'Column headers: ' + JSON.stringify(headers) + '\nUser command: ' + userText;
+  var snapshot = getSpreadsheetSnapshot();
+  var userContent = (snapshot ? snapshot + '\n\n' : 'Column headers: ' + JSON.stringify(headers) + '\n') + 'User command: ' + userText;
 
   var response = await fetch('/api/chat', {
     method: 'POST',
@@ -158,6 +180,22 @@ function executeOp(op, headers) {
         return 'Count of numeric values in "' + op.column + '": ' + values.length;
       }
       throw new Error('Unknown aggregate function: ' + op.func);
+    case 'find_duplicates':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var seen = {};
+      for (var r = 0; r < data.length; r++) {
+        var val = String(data[r][colIdx]).trim();
+        if (!val) continue;
+        if (!seen[val]) seen[val] = [];
+        seen[val].push(r + 1);
+      }
+      var dupes = [];
+      for (var val in seen) {
+        if (seen[val].length > 1) dupes.push('"' + val + '" (rows ' + seen[val].join(', ') + ')');
+      }
+      if (dupes.length === 0) return 'No duplicates found in "' + op.column + '".';
+      return 'Duplicates in "' + op.column + '":\n' + dupes.join('\n');
     case 'show_all_rows':
       var data = state.excelState.instance.getData();
       for (var r = 0; r < data.length; r++) {
