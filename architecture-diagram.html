@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Architecture Diagram</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f7;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1d1d1f;
+      margin-bottom: 8px;
+      letter-spacing: -0.3px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #6e6e73;
+      margin-bottom: 48px;
+    }
+
+    .diagram {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    /* ── LAYER CARDS ── */
+    .layer {
+      width: 100%;
+      border-radius: 16px;
+      padding: 24px 28px;
+      position: relative;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    .layer-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .layer-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .layer-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+
+    .layer-group {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      opacity: 0.55;
+      margin-top: 1px;
+    }
+
+    .layer-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      opacity: 0.75;
+      margin-left: 50px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-left: 50px;
+      margin-top: 10px;
+    }
+
+    .tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      opacity: 0.85;
+    }
+
+    /* ── COLORS ── */
+    .layer-frontend  { background: #eef4ff; border: 1.5px solid #c4d9ff; }
+    .layer-frontend .layer-title  { color: #1a56db; }
+    .layer-frontend .layer-desc   { color: #1e3a8a; }
+    .layer-frontend .layer-icon   { background: #dbeafe; }
+    .layer-frontend .tag          { background: #dbeafe; color: #1a56db; }
+
+    .layer-backend   { background: #f0fdf4; border: 1.5px solid #bbf7d0; }
+    .layer-backend .layer-title   { color: #16a34a; }
+    .layer-backend .layer-desc    { color: #14532d; }
+    .layer-backend .layer-icon    { background: #dcfce7; }
+    .layer-backend .tag           { background: #dcfce7; color: #16a34a; }
+
+    .layer-db        { background: #fff7ed; border: 1.5px solid #fed7aa; }
+    .layer-db .layer-title        { color: #ea580c; }
+    .layer-db .layer-desc         { color: #7c2d12; }
+    .layer-db .layer-icon         { background: #ffedd5; }
+    .layer-db .tag                { background: #ffedd5; color: #ea580c; }
+
+    .layer-ai        { background: #fdf4ff; border: 1.5px solid #e9d5ff; }
+    .layer-ai .layer-title        { color: #9333ea; }
+    .layer-ai .layer-desc         { color: #581c87; }
+    .layer-ai .layer-icon         { background: #f3e8ff; }
+    .layer-ai .tag                { background: #f3e8ff; color: #9333ea; }
+
+    /* ── ARROWS ── */
+    .arrow-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0;
+      margin: 4px 0;
+    }
+
+    .arrow-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .arrow-line {
+      width: 2px;
+      height: 22px;
+      background: #d1d1d6;
+      position: relative;
+    }
+
+    .arrow-line::after {
+      content: '';
+      position: absolute;
+      bottom: -1px;
+      left: 50%;
+      transform: translateX(-50%);
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-top: 7px solid #d1d1d6;
+    }
+
+    .arrow-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6e6e73;
+      background: #e5e5ea;
+      padding: 3px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    /* ── SPLIT ARROW (backend → db + ai) ── */
+    .split-arrows {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 0;
+      width: 100%;
+      margin: 4px 0;
+      position: relative;
+    }
+
+    .split-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+    }
+
+    .split-h-line {
+      height: 2px;
+      background: #d1d1d6;
+      width: 50%;
+    }
+
+    .split-h-line.left  { align-self: flex-end; border-right: none; }
+    .split-h-line.right { align-self: flex-start; border-left: none; }
+
+    .split-center-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d1d1d6;
+      margin-top: -3px;
+      flex-shrink: 0;
+    }
+
+    .split-bottom-row {
+      display: flex;
+      width: 100%;
+      justify-content: space-around;
+      margin-top: -2px;
+    }
+
+    .side-layers {
+      display: flex;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .side-layers .layer {
+      flex: 1;
+    }
+
+    /* horizontal connector */
+    .h-connector {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin: 4px 0;
+    }
+
+    .connector-svg {
+      width: 100%;
+      overflow: visible;
+    }
+
+    /* ── RULE BANNER ── */
+    .rule-banner {
+      margin-top: 40px;
+      background: #1d1d1f;
+      color: #f5f5f7;
+      border-radius: 12px;
+      padding: 16px 24px;
+      width: 100%;
+      max-width: 680px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .rule-banner strong {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .rule-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-top: 6px;
+    }
+
+    .rule-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #636366;
+      margin-top: 7px;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>How It Fits Together</h1>
+  <p class="subtitle">Architecture overview — React + Node/Express + SQL + AI</p>
+
+  <div class="diagram">
+
+    <!-- FRONTEND -->
+    <div class="layer layer-frontend">
+      <div class="layer-header">
+        <div class="layer-icon">🖥️</div>
+        <div>
+          <div class="layer-title">Browser / React Frontend</div>
+          <div class="layer-group">Group 1 + Group 2</div>
+        </div>
+      </div>
+      <div class="layer-desc">
+        Chat interface, spreadsheet editor, dashboard, login UI. Talks to the backend only — never directly to the database or AI.
+      </div>
+      <div class="tags">
+        <span class="tag">Chat UI</span>
+        <span class="tag">Spreadsheet Editor</span>
+        <span class="tag">Dashboard</span>
+        <span class="tag">Login / Auth UI</span>
+      </div>
+    </div>
+
+    <!-- ARROW DOWN -->
+    <div class="arrow-section">
+      <div style="width:2px; height:16px; background:#d1d1d6; margin: 0 auto;"></div>
+      <div class="arrow-row">
+        <div class="arrow-label">REST API · JSON</div>
+      </div>
+      <div class="arrow-line" style="margin: 0 auto;"></div>
+    </div>
+
+    <!-- BACKEND -->
+    <div class="layer layer-backend">
+      <div class="layer-header">
+        <div class="layer-icon">⚙️</div>
+        <div>
+          <div class="layer-title">Node.js / Express Server</div>
+          <div class="layer-group">Group 3</div>
+        </div>
+      </div>
+      <div class="layer-desc">
+        The secure hub. Handles auth, holds the AI key server-side, and exposes all API routes. Groups 1 &amp; 2 talk to this — nothing else.
+      </div>
+      <div class="tags">
+        <span class="tag">Auth &amp; Sessions</span>
+        <span class="tag">AI Proxy</span>
+        <span class="tag">Records API</span>
+        <span class="tag">API Key (secret)</span>
+      </div>
+    </div>
+
+    <!-- SPLIT ARROW: down to DB and AI -->
+    <svg width="100%" height="80" viewBox="0 0 680 80" preserveAspectRatio="none" style="max-width:680px; overflow:visible; margin: 0;">
+      <!-- vertical line down from center -->
+      <line x1="340" y1="0" x2="340" y2="28" stroke="#d1d1d6" stroke-width="2"/>
+      <!-- horizontal line -->
+      <line x1="130" y1="28" x2="550" y2="28" stroke="#d1d1d6" stroke-width="2"/>
+      <!-- left vertical down -->
+      <line x1="130" y1="28" x2="130" y2="58" stroke="#d1d1d6" stroke-width="2"/>
+      <!-- right vertical down -->
+      <line x1="550" y1="28" x2="550" y2="58" stroke="#d1d1d6" stroke-width="2"/>
+      <!-- left arrowhead -->
+      <polygon points="124,58 136,58 130,67" fill="#d1d1d6"/>
+      <!-- right arrowhead -->
+      <polygon points="544,58 556,58 550,67" fill="#d1d1d6"/>
+      <!-- left label -->
+      <rect x="34" y="16" width="92" height="22" rx="11" fill="#e5e5ea"/>
+      <text x="80" y="31" text-anchor="middle" font-size="11" font-weight="600" fill="#6e6e73">SQL queries</text>
+      <!-- right label -->
+      <rect x="554" y="16" width="100" height="22" rx="11" fill="#e5e5ea"/>
+      <text x="604" y="31" text-anchor="middle" font-size="11" font-weight="600" fill="#6e6e73">HTTPS · API key</text>
+    </svg>
+
+    <!-- DB + AI side by side -->
+    <div class="side-layers">
+
+      <div class="layer layer-db">
+        <div class="layer-header">
+          <div class="layer-icon">🗄️</div>
+          <div>
+            <div class="layer-title">SQL Database</div>
+            <div class="layer-group">Group 3</div>
+          </div>
+        </div>
+        <div class="layer-desc">
+          Permanent storage for users, saved records, and conversation history.
+        </div>
+        <div class="tags">
+          <span class="tag">Users</span>
+          <span class="tag">Records</span>
+          <span class="tag">History</span>
+        </div>
+      </div>
+
+      <div class="layer layer-ai">
+        <div class="layer-header">
+          <div class="layer-icon">🤖</div>
+          <div>
+            <div class="layer-title">AI API</div>
+            <div class="layer-group">Group 1 (via Group 3)</div>
+          </div>
+        </div>
+        <div class="layer-desc">
+          Interprets natural language commands and returns structured spreadsheet operations.
+        </div>
+        <div class="tags">
+          <span class="tag">NL → Action</span>
+          <span class="tag">Key stays secret</span>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- KEY RULES -->
+  <div class="rule-banner">
+    <strong>Three rules that govern this architecture</strong>
+    <div class="rule-item"><div class="rule-dot"></div><span>The <strong>frontend never calls the AI directly</strong> — all AI requests go through Express, which holds the key server-side.</span></div>
+    <div class="rule-item"><div class="rule-dot"></div><span>The <strong>frontend never queries the database</strong> — all data access goes through Express API routes.</span></div>
+    <div class="rule-item"><div class="rule-dot"></div><span><strong>API contracts are the handoff point</strong> — Groups 1 &amp; 2 build against agreed request/response shapes while Group 3 builds the real endpoints.</span></div>
+  </div>
+
+</body>
+</html>

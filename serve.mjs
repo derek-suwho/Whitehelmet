@@ -81,24 +81,40 @@ function handleApi(req, res, urlPath) {
 }
 // ── End mock API ─────────────────────────────────────────
 
+// Proxy non-mocked /api/* requests to FastAPI backend on :8000
+function proxyToBackend(req, res) {
+  const proxyOptions = {
+    hostname: 'localhost',
+    port: 8000,
+    path: req.url,
+    method: req.method,
+    headers: { ...req.headers, host: 'localhost:8000' },
+  };
+
+  const proxyReq = http.request(proxyOptions, proxyRes => {
+    res.writeHead(proxyRes.statusCode, proxyRes.headers);
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on('error', err => {
+    res.writeHead(502, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Backend proxy error: ' + err.message + ' (is FastAPI running on :8000?)' }));
+  });
+
+  req.pipe(proxyReq);
+}
+
 const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
 
-  // Config endpoint — exposes env vars to the frontend
-  if (urlPath === '/config') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      apiKey: process.env.ANTHROPIC_API_KEY || '',
-      openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
-      supabaseUrl: process.env.SUPABASE_URL || '',
-      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-    }));
-    return;
+  // Mock /api/records (kept for dev until backend records integration)
+  if (urlPath.startsWith('/api/records')) {
+    return handleApi(req, res, urlPath);
   }
 
-  // Route API requests to mock handler
+  // All other /api/* → FastAPI backend
   if (urlPath.startsWith('/api/')) {
-    return handleApi(req, res, urlPath);
+    return proxyToBackend(req, res);
   }
 
   if (urlPath === '/') urlPath = '/index.html';

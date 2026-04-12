@@ -10,33 +10,53 @@
 //   - Return true if handled, false to fall through to normal chat
 //   - Use state.excelState.instance (Jspreadsheet CE API) for mutations
 //   - Use state.addMessage(text, 'ai') to post results to chat
-//   - Use state.openrouterApiKey for OpenRouter API calls if needed
+//   - Use state.apiKey for Anthropic API calls if needed
 //   - Use state.conversationHistory for context
 
 import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nIf the message is a spreadsheet command, return one of:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old header>","to":"<new header>"}\n{"op":"apply_formula","column":"<header>","formula":"<formula string e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<value>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n{"op":"save_record"}\n{"op":"show_dashboard"}\n{"op":"suggest_template"}\n\nFor show_all_rows: use when user says "show all rows", "clear filter", "reset filter", "show everything", "unfilter".\nFor export: use when user says "export", "download", "save as xlsx", "save to excel", "download this".\nFor find_duplicates: use when user says "find duplicates", "show duplicates", "duplicate rows", "which values repeat", "duplicate entries in".\nFor save_record: use when user says "save this", "save record", "save master record", "save consolidated data".\nFor show_dashboard: use when user says "show dashboard", "open dashboard", "view saved records", "my records", "master records".\nFor suggest_template: use when user says "suggest template", "what columns should I use", "recommend schema", "template for construction", "standard columns".\n\nIf the message is NOT a spreadsheet command, return:\n{"op":null}';
+
+// ── Spreadsheet Snapshot ─────────────────────
+
+function getSpreadsheetSnapshot() {
+  if (!state.excelState.instance) return null;
+  var headers = state.excelState.instance.getHeaders(true);
+  var data = state.excelState.instance.getData();
+  var ROW_CAP = 150;
+  var rows = data.length > ROW_CAP ? data.slice(0, ROW_CAP) : data;
+  var truncated = data.length > ROW_CAP;
+
+  var lines = [];
+  lines.push('Current spreadsheet (' + data.length + ' rows' + (truncated ? ', showing first ' + ROW_CAP : '') + '):');
+  lines.push(headers.join('\t'));
+  for (var i = 0; i < rows.length; i++) {
+    lines.push(rows[i].map(function(cell) {
+      return (cell === null || cell === undefined) ? '' : String(cell).slice(0, 80);
+    }).join('\t'));
+  }
+  return lines.join('\n');
+}
 
 // ── Intent Parsing ─────────────────────
 
 async function parseCommand(userText, headers) {
-  var userContent = 'Column headers: ' + JSON.stringify(headers) + '\nUser command: ' + userText;
+  var snapshot = getSpreadsheetSnapshot();
+  var userContent = (snapshot ? snapshot + '\n\n' : 'Column headers: ' + JSON.stringify(headers) + '\n') + 'User command: ' + userText;
 
-  var response = await fetch('https://api.anthropic.com/v1/messages', {
+  var response = await fetch('/api/ai/chat', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': state.apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-opus-4-5',
+      model: 'anthropic/claude-opus-4-5',
       max_tokens: 512,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userContent }]
+      stream: false,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userContent }
+      ]
     })
   });
 
@@ -45,7 +65,7 @@ async function parseCommand(userText, headers) {
   }
 
   var json = await response.json();
-  var text = json.content[0].text;
+  var text = json.choices[0].message.content;
 
   try {
     return JSON.parse(text);
@@ -56,16 +76,182 @@ async function parseCommand(userText, headers) {
 
 // ── Operation Dispatch ─────────────────────
 
-function executeOp(op) {
+function findColumn(headers, name) {
+  var idx = headers.indexOf(name);
+  if (idx === -1) {
+    throw new Error('Column "' + name + '" not found. Available columns: ' + headers.join(', '));
+  }
+  return idx;
+}
+
+function evaluateCondition(cellVal, operator, value) {
+  var numCell = parseFloat(cellVal);
+  var numVal = parseFloat(value);
+  var bothNumeric = !isNaN(numCell) && !isNaN(numVal);
+  switch (operator) {
+    case '>': return bothNumeric && numCell > numVal;
+    case '<': return bothNumeric && numCell < numVal;
+    case '>=': return bothNumeric && numCell >= numVal;
+    case '<=': return bothNumeric && numCell <= numVal;
+    case '=': return String(cellVal) === String(value);
+    case '!=': return String(cellVal) !== String(value);
+    case 'contains': return String(cellVal).toLowerCase().indexOf(String(value).toLowerCase()) !== -1;
+    default: return false;
+  }
+}
+
+function executeOp(op, headers) {
   switch (op.op) {
     case 'add_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var instance = state.excelState.instance;
+      var pos = op.position;
+      // Find last non-empty header to avoid inserting off-screen
+      var lastNonEmpty = -1;
+      for (var hi = 0; hi < headers.length; hi++) {
+        if (headers[hi] && headers[hi].trim()) lastNonEmpty = hi;
+      }
+      if (lastNonEmpty === -1) lastNonEmpty = 0;
+      if (pos === null || pos === undefined || pos >= headers.length) {
+        // Append after last meaningful column
+        instance.insertColumn(1, lastNonEmpty, false);
+        instance.setHeader(lastNonEmpty + 1, op.name);
+      } else {
+        // Insert before the specified position
+        instance.insertColumn(1, pos, true);
+        instance.setHeader(pos, op.name);
+      }
+      return 'Added column "' + op.name + '".';
     case 'remove_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.name);
+      state.excelState.instance.deleteColumn(idx, 1);
+      return 'Removed column "' + op.name + '".';
     case 'rename_column':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.from);
+      state.excelState.instance.setHeader(idx, op.to);
+      return 'Renamed "' + op.from + '" to "' + op.to + '".';
     case 'apply_formula':
-      throw new Error('Operation not yet implemented: ' + op.op);
+      var idx = findColumn(headers, op.column);
+      var data = state.excelState.instance.getData();
+      for (var r = 0; r < data.length; r++) {
+        var formula = op.formula.replace(/\{row\}/g, String(r + 1));
+        state.excelState.instance.setValueFromCoords(idx, r, formula);
+      }
+      return 'Applied formula to column "' + op.column + '" (' + data.length + ' rows).';
+    case 'sort_rows':
+      var idx = findColumn(headers, op.column);
+      var desc = op.direction === 'desc' ? 1 : 0;
+      state.excelState.instance.orderBy(idx, desc);
+      return 'Sorted by "' + op.column + '" (' + (desc ? 'descending' : 'ascending') + ').';
+    case 'filter_rows':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var hidden = 0;
+      for (var r = 0; r < data.length; r++) {
+        var cellVal = data[r][colIdx];
+        var keep = evaluateCondition(cellVal, op.operator, op.value);
+        if (!keep) {
+          state.excelState.instance.hideRow(r);
+          hidden++;
+        }
+      }
+      return 'Filtered: hiding ' + hidden + ' rows that do not match "' + op.column + ' ' + op.operator + ' ' + op.value + '".';
+    case 'remove_empty_rows':
+      var data = state.excelState.instance.getData();
+      var deleted = 0;
+      for (var r = data.length - 1; r >= 0; r--) {
+        var isEmpty = data[r].every(function(cell) {
+          return cell === '' || cell === null || cell === undefined;
+        });
+        if (isEmpty) {
+          state.excelState.instance.deleteRow(r, 1);
+          deleted++;
+        }
+      }
+      return 'Removed ' + deleted + ' empty row' + (deleted !== 1 ? 's' : '') + '.';
+    case 'aggregate':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var values = [];
+      for (var r = 0; r < data.length; r++) {
+        var v = parseFloat(data[r][colIdx]);
+        if (!isNaN(v)) values.push(v);
+      }
+      var result;
+      if (op.func === 'sum') {
+        result = values.reduce(function(a, b) { return a + b; }, 0);
+        return 'Sum of "' + op.column + '": ' + result;
+      } else if (op.func === 'average') {
+        result = values.length ? values.reduce(function(a, b) { return a + b; }, 0) / values.length : 0;
+        return 'Average of "' + op.column + '": ' + result.toFixed(2);
+      } else if (op.func === 'count') {
+        return 'Count of numeric values in "' + op.column + '": ' + values.length;
+      }
+      throw new Error('Unknown aggregate function: ' + op.func);
+    case 'find_duplicates':
+      var data = state.excelState.instance.getData();
+      var colIdx = findColumn(headers, op.column);
+      var seen = {};
+      for (var r = 0; r < data.length; r++) {
+        var val = String(data[r][colIdx]).trim();
+        if (!val) continue;
+        if (!seen[val]) seen[val] = [];
+        seen[val].push(r + 1);
+      }
+      var dupes = [];
+      for (var val in seen) {
+        if (seen[val].length > 1) dupes.push('"' + val + '" (rows ' + seen[val].join(', ') + ')');
+      }
+      if (dupes.length === 0) return 'No duplicates found in "' + op.column + '".';
+      return 'Duplicates in "' + op.column + '":\n' + dupes.join('\n');
+    case 'save_record':
+      if (!state.saveMasterRecord) throw new Error('Master records not initialized.');
+      var recData = state.excelState.instance.getData();
+      var recHeaders = state.excelState.instance.getHeaders(true);
+      var recDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      var recName = (state.excelState.fileName || 'Master Record') + ' \u2014 ' + recDate;
+      // Build a synthetic File from current spreadsheet data
+      var recAoA = [recHeaders].concat(recData);
+      var recWb = XLSX.utils.book_new();
+      var recWs = XLSX.utils.aoa_to_sheet(recAoA);
+      XLSX.utils.book_append_sheet(recWb, recWs, 'Master');
+      var recArr = XLSX.write(recWb, { bookType: 'xlsx', type: 'array' });
+      var recBlob = new Blob([recArr], { type: 'application/octet-stream' });
+      var recFile = new File([recBlob], recName + '.xlsx', { type: 'application/octet-stream' });
+      state.saveMasterRecord({ name: recName, date: recDate, sourceCount: 1, rowCount: recData.length, fileObj: recFile });
+      return 'Saved "' + recName + '" to master records.';
+    case 'show_dashboard':
+      if (!state.showDashboard) throw new Error('Dashboard not initialized.');
+      state.showDashboard();
+      return 'Opening master records dashboard\u2026';
+    case 'suggest_template':
+      var snapHeaders = state.excelState.instance.getHeaders(true);
+      var snapData = getSpreadsheetSnapshot();
+      return fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'anthropic/claude-opus-4-5',
+          max_tokens: 1024,
+          stream: false,
+          messages: [
+            { role: 'system', content: 'You are a construction project management expert. Analyze spreadsheet columns and recommend a standardized master record schema for construction subcontractor report consolidation. Be concise and actionable.' },
+            { role: 'user', content: 'Current columns: ' + JSON.stringify(snapHeaders) + (snapData ? '\n\nSample data:\n' + snapData.split('\n').slice(0, 6).join('\n') : '') + '\n\nRecommend a standard column schema for a construction PM master record. Format your response as:\n**Keep:** [columns to keep]\n**Rename:** [old name \u2192 new name]\n**Add:** [missing columns that construction PMs need]\n**Remove:** [columns that add no value]' }
+          ]
+        })
+      }).then(function(r) { return r.json(); }).then(function(j) {
+        return j.choices[0].message.content;
+      });
+    case 'show_all_rows':
+      var data = state.excelState.instance.getData();
+      for (var r = 0; r < data.length; r++) {
+        state.excelState.instance.showRow(r);
+      }
+      return 'Showing all rows — filter cleared.';
+    case 'export':
+      var btn = document.getElementById('download-xlsx-btn');
+      if (!btn) throw new Error('Download button not found.');
+      btn.click();
+      return 'Downloading spreadsheet as .xlsx\u2026';
     default:
       throw new Error('Unknown operation: ' + op.op);
   }
@@ -74,6 +260,7 @@ function executeOp(op) {
 // ── Initialization ─────────────────────
 
 export function initAiOperations() {
+  state.getSpreadsheetSnapshot = getSpreadsheetSnapshot;
   state.chatCommandHandler = async function(userText) {
     if (!state.excelState.instance) return false;
 
@@ -92,7 +279,8 @@ export function initAiOperations() {
         return false;
       }
 
-      var msg = executeOp(op);
+      var msgOrPromise = executeOp(op, headers);
+      var msg = (msgOrPromise && typeof msgOrPromise.then === 'function') ? await msgOrPromise : msgOrPromise;
       thinkingBubble.textContent = msg;
       return true;
     } catch (err) {

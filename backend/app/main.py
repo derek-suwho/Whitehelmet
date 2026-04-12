@@ -34,9 +34,15 @@ app.include_router(files.router)
 
 @app.on_event("startup")
 async def startup():
-    """Create tables on startup (use Alembic migrations in production)."""
+    """Create tables on startup (use Alembic migrations in production).
+
+    Tolerant of missing DB so AI proxy routes work without MySQL running.
+    """
     from app.db.session import engine, Base
-    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel
+    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel  # noqa: F401
 
     if settings.environment == "dev":
-        Base.metadata.create_all(bind=engine)
+        try:
+            Base.metadata.create_all(bind=engine)
+        except Exception as e:
+            print(f"⚠️  DB unavailable on startup ({e.__class__.__name__}) — AI routes still work, DB-backed routes will 500")

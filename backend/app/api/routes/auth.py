@@ -1,6 +1,6 @@
 """Auth routes — login, logout, current user."""
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -15,13 +15,24 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login")
-async def login(body: LoginRequest, response: Response, db: Session = Depends(get_db)):
+async def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     """
     Authenticate against Whitehelmet's external auth service.
 
     TODO: Replace stub with actual auth service integration once
     auth system type is confirmed (OAuth2/SAML/LDAP).
     """
+    from app.core.rate_limit import check_rate_limit, record_failed_attempt
+
+    ip = request.client.host if request.client else "unknown"
+    allowed, remaining = check_rate_limit(ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many login attempts. Try again in {remaining} seconds.",
+            headers={"Retry-After": str(remaining)},
+        )
+
     settings = get_settings()
 
     # --- STUB: Replace with real auth service call ---
@@ -29,6 +40,7 @@ async def login(body: LoginRequest, response: Response, db: Session = Depends(ge
     # with credentials, get back user info
     #
     # For now, reject all logins until auth is integrated
+    record_failed_attempt(ip)
     raise HTTPException(
         status_code=status.HTTP_501_NOT_IMPLEMENTED,
         detail="Auth service integration pending — awaiting auth system type confirmation",

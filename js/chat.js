@@ -84,18 +84,18 @@ export function initChat() {
     var fullResponse = '';
 
     try {
-      var response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      var snapshot = state.getSpreadsheetSnapshot ? state.getSpreadsheetSnapshot() : null;
+      var systemContent = 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.' + (snapshot ? '\n\n' + snapshot : '');
+
+      var response = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + state.openrouterApiKey
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'anthropic/claude-opus-4-5',
           max_tokens: 4096,
           stream: true,
           messages: [
-            { role: 'system', content: 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.' },
+            { role: 'system', content: systemContent },
             ...state.conversationHistory
           ]
         })

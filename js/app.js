@@ -13,10 +13,7 @@ import { initConsolidation } from './consolidation.js';
 import { initAiOperations } from './ai-operations.js';
 import { initMasterRecords } from './master-records.js';
 
-// Fetch API key from server before initializing anything
-const config = await fetch('/config').then(r => r.json()).catch(() => ({}));
-if (config.apiKey) state.apiKey = config.apiKey;
-if (config.openrouterApiKey) state.openrouterApiKey = config.openrouterApiKey;
+// API keys live in backend/.env — frontend calls /api/ai/* proxy (see serve.mjs)
 
 // Phase 1–4 modules (core app)
 initChat();

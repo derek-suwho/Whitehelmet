@@ -1,5 +1,11 @@
 """Shared test fixtures."""
 
+import os
+
+# Set environment to 'test' BEFORE importing app — prevents startup event
+# from connecting to MySQL (it only creates tables when environment == 'dev')
+os.environ["ENVIRONMENT"] = "test"
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -8,6 +14,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db.session import Base, get_db
 from app.main import app
+from app.core.config import Settings, get_settings
 from app.models.user import User
 from app.models.session import SessionModel
 from app.core.security import generate_session_token, session_expiry
@@ -78,3 +85,20 @@ def auth_client(client, db, test_user):
     csrf = generate_csrf_token(token)
     client.headers["X-CSRF-Token"] = csrf
     return client
+
+
+@pytest.fixture
+def settings_override(tmp_path):
+    """Settings with empty API keys and tmp upload dir."""
+    s = Settings(
+        anthropic_api_key="",
+        openrouter_api_key="",
+        upload_dir=str(tmp_path / "uploads"),
+        max_upload_size_mb=50,
+        session_secret="test-secret",
+        csrf_secret="test-csrf-secret",
+        db_password="",
+    )
+    app.dependency_overrides[get_settings] = lambda: s
+    yield s
+    app.dependency_overrides.pop(get_settings, None)
