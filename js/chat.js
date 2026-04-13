@@ -90,29 +90,36 @@ export function initChat() {
     state.abortSignal = controller.signal;
     setProcessing(true);
 
-    // Show thinking bubble immediately
-    var thinkWrapper = document.createElement('div');
-    thinkWrapper.className = 'msg msg-ai';
-    var bubble = document.createElement('div');
-    bubble.className = 'msg-bubble';
-    injectThinkingDots(bubble);
-    thinkWrapper.appendChild(bubble);
-    history.appendChild(thinkWrapper);
-    history.scrollTop = history.scrollHeight;
-
+    var thinkWrapper = null;
+    var bubble = null;
     var fullResponse = '';
+
+    function createThinkBubble() {
+      thinkWrapper = document.createElement('div');
+      thinkWrapper.className = 'msg msg-ai';
+      bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      injectThinkingDots(bubble);
+      thinkWrapper.appendChild(bubble);
+      history.appendChild(thinkWrapper);
+      history.scrollTop = history.scrollHeight;
+    }
+
+    // Show dots immediately
+    createThinkBubble();
 
     try {
       // Check if a command handler wants to intercept this message
       if (state.chatCommandHandler) {
+        // Remove our bubble first — the command handler creates its own
+        thinkWrapper.remove();
         var handled = await state.chatCommandHandler(text);
-        if (handled) {
-          thinkWrapper.remove(); // command handler renders its own bubble
-          return;
-        }
+        if (handled) return;
+        // Not a spreadsheet command — create a fresh bubble for regular chat
+        createThinkBubble();
       }
 
-      // Regular chat path — reuse the thinking bubble
+      // Regular chat path — use the thinking bubble
       state.conversationHistory.push({ role: 'user', content: text });
 
       var snapshot = state.getSpreadsheetSnapshot ? state.getSpreadsheetSnapshot() : null;
@@ -181,11 +188,10 @@ export function initChat() {
 
     } catch (err) {
       if (err.name === 'AbortError') {
-        // User stopped — keep partial content if any, otherwise remove bubble
-        if (!fullResponse) thinkWrapper.remove();
+        if (thinkWrapper && !fullResponse) thinkWrapper.remove();
       } else {
-        bubble.innerHTML = '';
-        bubble.textContent = 'Sorry, something went wrong: ' + err.message;
+        if (bubble) { bubble.innerHTML = ''; bubble.textContent = 'Sorry, something went wrong: ' + err.message; }
+        else addMessage('Error: ' + err.message, 'ai');
       }
     } finally {
       state._abortController = null;
