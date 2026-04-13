@@ -36,6 +36,39 @@ export function initChat() {
   // Register on shared state so other modules can post messages
   state.addMessage = addMessage;
 
+  // ── Stop button ───────────────────────────────────────────────
+  var stopBtn = document.createElement('button');
+  stopBtn.id = 'chat-stop-btn';
+  stopBtn.className = 'chat-send-btn';
+  stopBtn.title = 'Stop';
+  stopBtn.style.display = 'none';
+  stopBtn.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10"><rect x="0" y="0" width="10" height="10" rx="1.5" fill="currentColor"/></svg>';
+  sendBtn.parentElement.insertBefore(stopBtn, sendBtn.nextSibling);
+
+  function setProcessing(on) {
+    sendBtn.style.display = on ? 'none' : '';
+    stopBtn.style.display = on ? '' : 'none';
+    input.disabled = on;
+    badge.textContent = on ? 'Thinking\u2026' : 'Ready';
+  }
+
+  function injectThinkingDots(bubbleEl) {
+    if (!document.getElementById('thinking-styles')) {
+      var s = document.createElement('style');
+      s.id = 'thinking-styles';
+      s.textContent = '.thinking-dots{display:inline-flex;gap:5px;align-items:center;height:20px}.thinking-dots span{width:6px;height:6px;border-radius:50%;background:#8090a4;animation:thinkBounce 1.2s ease-in-out infinite}.thinking-dots span:nth-child(1){animation-delay:0s}.thinking-dots span:nth-child(2){animation-delay:0.2s}.thinking-dots span:nth-child(3){animation-delay:0.4s}@keyframes thinkBounce{0%,60%,100%{transform:translateY(0);opacity:0.35}30%{transform:translateY(-6px);opacity:1}}';
+      document.head.appendChild(s);
+    }
+    var dots = document.createElement('span');
+    dots.className = 'thinking-dots';
+    dots.innerHTML = '<span></span><span></span><span></span>';
+    bubbleEl.appendChild(dots);
+  }
+
+  stopBtn.addEventListener('click', function() {
+    if (state._abortController) state._abortController.abort();
+  });
+
   async function sendMessage() {
     var text = input.value.trim();
     if (!text) return;
@@ -51,45 +84,47 @@ export function initChat() {
     input.value = '';
     input.focus();
 
-    // Check if a command handler wants to intercept this message
-    // (e.g. ai-operations.js for spreadsheet NL commands)
-    if (state.chatCommandHandler) {
-      try {
-        var handled = await state.chatCommandHandler(text);
-        if (handled) return;
-      } catch (handlerErr) {
-        addMessage('Command error: ' + handlerErr.message, 'ai');
-        return;
-      }
-    }
+    // Create abort controller for this request (shared with command handler via state)
+    var controller = new AbortController();
+    state._abortController = controller;
+    state.abortSignal = controller.signal;
+    setProcessing(true);
 
-    // Disable inputs while responding
-    input.disabled = true;
-    sendBtn.disabled = true;
-    badge.textContent = 'Thinking\u2026';
-
-    // Append user message to history
-    state.conversationHistory.push({ role: 'user', content: text });
-
-    // Create an empty AI bubble for streaming into
-    var wrapper = document.createElement('div');
-    wrapper.className = 'msg msg-ai';
+    // Show thinking bubble immediately
+    var thinkWrapper = document.createElement('div');
+    thinkWrapper.className = 'msg msg-ai';
     var bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
-    bubble.textContent = '';
-    wrapper.appendChild(bubble);
-    history.appendChild(wrapper);
+    injectThinkingDots(bubble);
+    thinkWrapper.appendChild(bubble);
+    history.appendChild(thinkWrapper);
     history.scrollTop = history.scrollHeight;
 
     var fullResponse = '';
 
     try {
+      // Check if a command handler wants to intercept this message
+      if (state.chatCommandHandler) {
+        var handled = await state.chatCommandHandler(text);
+        if (handled) {
+          thinkWrapper.remove(); // command handler renders its own bubble
+          return;
+        }
+      }
+
+      // Regular chat path — reuse the thinking bubble
+      state.conversationHistory.push({ role: 'user', content: text });
+
       var snapshot = state.getSpreadsheetSnapshot ? state.getSpreadsheetSnapshot() : null;
-      var systemContent = 'You are an AI assistant for Whitehelmet, a tool that consolidates subcontractor Excel reports. Help users understand their consolidated data and answer questions about it.' + (snapshot ? '\n\n' + snapshot : '');
+      var selectedSources = state.getSelectedSourcesSnapshot ? await state.getSelectedSourcesSnapshot() : null;
+      var systemContent = 'You are a helpful assistant for Whitehelmet, a construction subcontractor report consolidation tool. Be conversational and concise — 1-3 sentences max unless the user asks for detail. Never dump raw data, file names, column lists, or JSON in your responses. Use the context below only to answer questions accurately, not to summarize it back. IMPORTANT: You have NO tools to read files. The only source data available to you is what is explicitly provided in this context (headers + up to 5 sample rows per file). If the context does not contain enough information to answer, say so plainly — do NOT output XML tags, tool calls, or pretend to access files.'
+        + (selectedSources ? '\n\n' + selectedSources : '')
+        + (snapshot ? '\n\n' + snapshot : '');
 
       var response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           model: 'anthropic/claude-opus-4-5',
           max_tokens: 4096,
@@ -130,6 +165,7 @@ export function initChat() {
             var evt = JSON.parse(dataStr);
             var delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
             if (delta && delta.content) {
+              if (!fullResponse) bubble.innerHTML = ''; // clear thinking dots
               fullResponse += delta.content;
               bubble.textContent = fullResponse;
               history.scrollTop = history.scrollHeight;
@@ -141,15 +177,20 @@ export function initChat() {
       }
 
       // Push complete assistant message to history
-      state.conversationHistory.push({ role: 'assistant', content: fullResponse });
+      if (fullResponse) state.conversationHistory.push({ role: 'assistant', content: fullResponse });
 
     } catch (err) {
-      bubble.textContent = 'Sorry, something went wrong: ' + err.message;
-      // Don't push failed response to history (keep it clean)
+      if (err.name === 'AbortError') {
+        // User stopped — keep partial content if any, otherwise remove bubble
+        if (!fullResponse) thinkWrapper.remove();
+      } else {
+        bubble.innerHTML = '';
+        bubble.textContent = 'Sorry, something went wrong: ' + err.message;
+      }
     } finally {
-      input.disabled = false;
-      sendBtn.disabled = false;
-      badge.textContent = 'Ready';
+      state._abortController = null;
+      state.abortSignal = null;
+      setProcessing(false);
       input.focus();
     }
   }
