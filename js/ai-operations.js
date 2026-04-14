@@ -177,34 +177,44 @@ async function detectFileLayout(aoa) {
 
 // ── Read All Sheets from a Workbook ─────────────────────
 
-async function extractAllSheetsData(wb) {
-  var results = [];
-  for (var si = 0; si < wb.SheetNames.length; si++) {
-    var ws = wb.Sheets[wb.SheetNames[si]];
-    if (!ws || !ws['!ref']) continue;
+// ── Strip columns with no data ───────────────────────────────────────────────
+
+function dropEmptyColumns(headers, dataRows) {
+  if (!dataRows.length) return { headers: headers, rows: dataRows };
+  var keep = headers.map(function(_, ci) {
+    var filled = dataRows.filter(function(row) {
+      var v = row[ci];
+      return v !== '' && v !== null && v !== undefined;
+    }).length;
+    // Keep column only if more than 50% of rows have data
+    return filled / dataRows.length > 0.5;
+  });
+  var filteredHeaders = headers.filter(function(_, ci) { return keep[ci]; });
+  var filteredRows = dataRows.map(function(row) {
+    return row.filter(function(_, ci) { return keep[ci]; });
+  });
+  return { headers: filteredHeaders, rows: filteredRows };
+}
+
+// ── Raw file content reader (all sheets as text, for AI inference) ──────────
+
+function getRawFileContent(file, wb) {
+  var lines = ['=== File: ' + file.name + ' ==='];
+  var ROW_LIMIT = 80;
+  wb.SheetNames.forEach(function(sheetName) {
+    var ws = wb.Sheets[sheetName];
+    if (!ws || !ws['!ref']) return;
     var aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
-    if (!aoa.length) continue;
-    var layout = await detectFileLayout(aoa);
-    var sourceHeaders, sourceDataRows;
-    if (layout.orientation === 'horizontal') {
-      var hCol = layout.header_col !== undefined ? layout.header_col : 0;
-      var dCol = layout.data_start_col !== undefined ? layout.data_start_col : 1;
-      sourceHeaders = aoa.map(function(row) { return row[hCol] !== undefined ? String(row[hCol]) : ''; });
-      var rawData = aoa.map(function(row) { return row.slice(dCol); });
-      sourceDataRows = rawData.length && rawData[0].length
-        ? rawData[0].map(function(_, ci) { return rawData.map(function(row) { return row[ci] !== undefined ? row[ci] : ''; }); })
-        : [];
-    } else {
-      var hRow = layout.header_row !== undefined ? layout.header_row : 0;
-      var dRow = layout.data_start_row !== undefined ? layout.data_start_row : 1;
-      sourceHeaders = (aoa[hRow] || []).map(function(h) { return h !== null && h !== undefined ? String(h) : ''; });
-      sourceDataRows = aoa.slice(dRow);
-    }
-    if (sourceHeaders.some(function(h) { return h && h.trim(); })) {
-      results.push({ sheetName: wb.SheetNames[si], sourceHeaders: sourceHeaders, sourceDataRows: sourceDataRows });
-    }
-  }
-  return results;
+    if (!aoa.length) return;
+    lines.push('\n--- Sheet: ' + sheetName + ' ---');
+    var rows = aoa.slice(0, ROW_LIMIT);
+    rows.forEach(function(row) {
+      var cells = row.map(function(c) { return c !== null && c !== undefined ? String(c).slice(0, 60) : ''; });
+      if (cells.some(function(c) { return c.trim(); })) lines.push(cells.join('\t'));
+    });
+    if (aoa.length > ROW_LIMIT) lines.push('... (' + (aoa.length - ROW_LIMIT) + ' more rows)');
+  });
+  return lines.join('\n');
 }
 
 // ── Consolidate Sources into Template ─────────────────────
@@ -263,55 +273,41 @@ async function executeConsolidateToTemplate(headers, thinkingBubble, userQuery) 
 
   for (var i = 0; i < n; i++) {
     var file = fileRefs[i];
-
-    thinkingBubble.textContent = 'Analyzing file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
-
+    thinkingBubble.textContent = 'Reading file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
     var buf = await file.arrayBuffer();
     var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    var sheets = await extractAllSheetsData(wb);
+    var rawContent = getRawFileContent(file, wb);
 
-    for (var si = 0; si < sheets.length; si++) {
-      var sourceHeaders = sheets[si].sourceHeaders;
-      var sourceDataRows = sheets[si].sourceDataRows;
-      thinkingBubble.textContent = 'Mapping ' + sheets[si].sheetName + ' (' + file.name + ')\u2026';
-
-      var mappingResponse = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'anthropic/claude-opus-4-5',
-          max_tokens: 256,
-          stream: false,
-          messages: [
-            { role: 'system', content: 'Return ONLY a JSON object. Keys are template column names, values are the best matching source column name or null if no match.' },
-            { role: 'user', content: 'Template columns: ' + JSON.stringify(templateHeaders) + '\nSource columns: ' + JSON.stringify(sourceHeaders) }
-          ]
-        })
+    thinkingBubble.textContent = 'Generating rows from ' + file.name + '\u2026';
+    var inferResponse = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-opus-4-5',
+        max_tokens: 4096,
+        stream: false,
+        messages: [
+          { role: 'system', content: 'You are a construction PM data analyst. Read the raw source data and populate the template columns. Return ONLY a JSON array of row arrays (no header row). Each element is a row of values matching the template columns in order. Use "" for missing values. Make intelligent inferences — parse dates, sum totals, resolve field names across tabs, etc.' },
+          { role: 'user', content: 'Template columns: ' + JSON.stringify(templateHeaders) + '\n\nSource data:\n' + rawContent + '\n\nReturn a JSON array of rows.' }
+        ]
+      })
+    });
+    if (!inferResponse.ok) throw new Error('Inference API error ' + inferResponse.status);
+    var inferJson = await inferResponse.json();
+    var inferText = inferJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+    var rows = JSON.parse(inferText);
+    if (Array.isArray(rows)) {
+      rows.forEach(function(row) {
+        if (Array.isArray(row) && row.some(function(c) { return c !== '' && c !== null; })) {
+          outputRows.push(row);
+        }
       });
-
-      if (!mappingResponse.ok) throw new Error('Mapping API error ' + mappingResponse.status);
-      var mappingJson = await mappingResponse.json();
-      var mappingText = mappingJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-      var mapping = JSON.parse(mappingText);
-
-      for (var r = 0; r < sourceDataRows.length; r++) {
-        var sourceRow = sourceDataRows[r];
-        var isEmpty = sourceRow.every(function(cell) { return cell === '' || cell === null || cell === undefined; });
-        if (isEmpty) continue;
-        var mappedRow = templateHeaders.map(function(col) {
-          var srcCol = mapping[col];
-          if (!srcCol) return '';
-          var srcIdx = sourceHeaders.indexOf(srcCol);
-          return srcIdx >= 0 && sourceRow[srcIdx] !== undefined ? sourceRow[srcIdx] : '';
-        });
-        outputRows.push(mappedRow);
-      }
     }
   }
 
-  var finalAOA = [templateHeaders].concat(outputRows);
-  state.excelState.instance.loadData(finalAOA);
-  return 'Filled template with ' + outputRows.length + ' row(s) from ' + n + ' file(s) (all sheets).';
+  var cleaned = dropEmptyColumns(templateHeaders, outputRows);
+  state.excelState.instance.loadData([cleaned.headers].concat(cleaned.rows));
+  return 'Filled template with ' + cleaned.rows.length + ' row(s) and ' + cleaned.headers.length + ' columns (empty columns removed).';
 }
 
 // ── Dynamic Report ─────────────────────
@@ -364,65 +360,47 @@ async function executeDynamicReport(userText, thinkingBubble) {
     return '"' + (plan.title || 'Report') + '" headers set (' + templateHeaders.length + ' columns). Select source files and run again to fill data.';
   }
 
-  // Phase 2 — Build: detect layout + map each source file
+  // Phase 2 — Fill: send raw source data to AI for intelligent row generation
   var n = fileRefs.length;
   var outputRows = [];
 
-  // Build column list with source_field hints for the mapping prompt
-  var templateColsWithHints = planColumns.map(function(c) {
-    return c.name + (c.source_field ? ' [hint: "' + c.source_field + '"]' : '');
-  });
-
   for (var i = 0; i < n; i++) {
     var file = fileRefs[i];
-    thinkingBubble.textContent = 'Analyzing file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
-
+    thinkingBubble.textContent = 'Reading file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
     var buf = await file.arrayBuffer();
     var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    var sheets = await extractAllSheetsData(wb);
+    var rawContent = getRawFileContent(file, wb);
 
-    for (var si = 0; si < sheets.length; si++) {
-      var sourceHeaders = sheets[si].sourceHeaders;
-      var sourceDataRows = sheets[si].sourceDataRows;
-      thinkingBubble.textContent = 'Mapping ' + sheets[si].sheetName + ' (' + file.name + ')\u2026';
-
-      var mappingResponse = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'anthropic/claude-opus-4-5',
-          max_tokens: 512,
-          stream: false,
-          messages: [
-            { role: 'system', content: 'Return ONLY a JSON object. Keys are template column names, values are the best matching source column name or null if no match. Hints in brackets are suggestions — use them if the source column matches.' },
-            { role: 'user', content: 'Template columns: ' + JSON.stringify(templateColsWithHints) + '\nSource columns: ' + JSON.stringify(sourceHeaders) }
-          ]
-        })
+    thinkingBubble.textContent = 'Generating rows from ' + file.name + '\u2026';
+    var inferResponse = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-opus-4-5',
+        max_tokens: 4096,
+        stream: false,
+        messages: [
+          { role: 'system', content: 'You are a construction PM data analyst. Read the raw source data from all sheets and populate the template columns intelligently. Return ONLY a JSON array of row arrays (no header row). Each element is a row of values matching the template columns in order. Use "" for missing values. Make intelligent inferences — parse dates, sum totals, resolve field names across tabs, combine related data from multiple sheets into single rows.' },
+          { role: 'user', content: 'Template columns: ' + JSON.stringify(templateHeaders) + '\n\nSource data:\n' + rawContent + '\n\nReturn a JSON array of rows.' }
+        ]
+      })
+    });
+    if (!inferResponse.ok) throw new Error('Inference API error ' + inferResponse.status);
+    var inferJson = await inferResponse.json();
+    var inferText = inferJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+    var rows = JSON.parse(inferText);
+    if (Array.isArray(rows)) {
+      rows.forEach(function(row) {
+        if (Array.isArray(row) && row.some(function(c) { return c !== '' && c !== null; })) {
+          outputRows.push(row);
+        }
       });
-
-      if (!mappingResponse.ok) throw new Error('Mapping API error ' + mappingResponse.status);
-      var mappingJson = await mappingResponse.json();
-      var mappingText = mappingJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-      var mapping = JSON.parse(mappingText);
-
-      for (var r = 0; r < sourceDataRows.length; r++) {
-        var sourceRow = sourceDataRows[r];
-        var isEmpty = sourceRow.every(function(cell) { return cell === '' || cell === null || cell === undefined; });
-        if (isEmpty) continue;
-        var mappedRow = templateHeaders.map(function(col) {
-          var srcCol = mapping[col];
-          if (!srcCol) return '';
-          var srcIdx = sourceHeaders.indexOf(srcCol);
-          return srcIdx >= 0 && sourceRow[srcIdx] !== undefined ? sourceRow[srcIdx] : '';
-        });
-        outputRows.push(mappedRow);
-      }
     }
   }
 
-  var finalAOA = [templateHeaders].concat(outputRows);
-  state.excelState.instance.loadData(finalAOA);
-  return '"' + (plan.title || 'Report') + '" built with ' + outputRows.length + ' row(s) from ' + n + ' file(s) (all sheets).';
+  var cleaned = dropEmptyColumns(templateHeaders, outputRows);
+  state.excelState.instance.loadData([cleaned.headers].concat(cleaned.rows));
+  return '"' + (plan.title || 'Report') + '" built with ' + cleaned.rows.length + ' row(s) and ' + cleaned.headers.length + ' columns (sparse columns removed).';
 }
 
 // ── Extend Report (add columns, keep existing data) ─────────────────────
@@ -471,64 +449,55 @@ async function executeExtendReport(userText, thinkingBubble) {
 
   var allHeaders = existingHeadersClean.concat(newHeaders);
 
-  // Read source files and collect new-column values per non-empty row
+  // Read source files and use AI to infer new column values
   var n = fileRefs.length;
   var newColumnRows = [];
+  var existingDataSample = existingDataRows.slice(0, 5).map(function(row) {
+    return existingHeadersClean.reduce(function(obj, h, i) { obj[h] = row[i] || ''; return obj; }, {});
+  });
+
   for (var i = 0; i < n; i++) {
     var file = fileRefs[i];
-    thinkingBubble.textContent = 'Analyzing file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
+    thinkingBubble.textContent = 'Reading file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
     var buf = await file.arrayBuffer();
     var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-    var sheets = await extractAllSheetsData(wb);
+    var rawContent = getRawFileContent(file, wb);
 
-    for (var si = 0; si < sheets.length; si++) {
-      var sourceHeaders = sheets[si].sourceHeaders;
-      var sourceDataRows = sheets[si].sourceDataRows;
-      thinkingBubble.textContent = 'Mapping new columns from ' + sheets[si].sheetName + ' (' + file.name + ')\u2026';
-
-      var mappingResponse = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'anthropic/claude-opus-4-5',
-          max_tokens: 256,
-          stream: false,
-          messages: [
-            { role: 'system', content: 'Return ONLY a JSON object. Keys are template column names, values are the best matching source column name or null if no match.' },
-            { role: 'user', content: 'Template columns: ' + JSON.stringify(newHeaders) + '\nSource columns: ' + JSON.stringify(sourceHeaders) }
-          ]
-        })
-      });
-      if (!mappingResponse.ok) throw new Error('Mapping API error ' + mappingResponse.status);
-      var mappingJson = await mappingResponse.json();
-      var mappingText = mappingJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
-      var mapping = JSON.parse(mappingText);
-
-      for (var r = 0; r < sourceDataRows.length; r++) {
-        var sourceRow = sourceDataRows[r];
-        var isEmpty = sourceRow.every(function(cell) { return cell === '' || cell === null || cell === undefined; });
-        if (isEmpty) continue;
-        var mappedVals = newHeaders.map(function(col) {
-          var srcCol = mapping[col];
-          if (!srcCol) return '';
-          var srcIdx = sourceHeaders.indexOf(srcCol);
-          return srcIdx >= 0 && sourceRow[srcIdx] !== undefined ? sourceRow[srcIdx] : '';
-        });
-        newColumnRows.push(mappedVals);
-      }
+    thinkingBubble.textContent = 'Inferring new columns from ' + file.name + '\u2026';
+    var inferResponse = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-opus-4-5',
+        max_tokens: 4096,
+        stream: false,
+        messages: [
+          { role: 'system', content: 'You are a construction PM data analyst. The spreadsheet already has rows of data. Add values for NEW columns only. Return ONLY a JSON array of row arrays. Each element contains values for the new columns in order, one row per existing data row. Use "" for missing values. Make intelligent inferences from all sheets.' },
+          { role: 'user', content: 'Existing data sample (for context/row matching):\n' + JSON.stringify(existingDataSample) + '\n\nTotal existing rows: ' + existingDataRows.length + '\n\nNew columns to fill: ' + JSON.stringify(newHeaders) + '\n\nSource data:\n' + rawContent + '\n\nReturn a JSON array with exactly ' + existingDataRows.length + ' row arrays.' }
+        ]
+      })
+    });
+    if (!inferResponse.ok) throw new Error('Inference API error ' + inferResponse.status);
+    var inferJson = await inferResponse.json();
+    var inferText = inferJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+    var rows = JSON.parse(inferText);
+    if (Array.isArray(rows) && rows.length) {
+      newColumnRows = rows; // use last file's inference (or could merge)
     }
   }
 
   // Merge: preserve existing rows, stitch new column values in by position
   var mergedData = existingDataRows.map(function(row, i) {
     var base = existingHeadersClean.map(function(_, ci) { return row[ci] !== undefined ? row[ci] : ''; });
-    var newVals = newColumnRows[i] || newHeaders.map(function() { return ''; });
+    var newVals = (newColumnRows[i] && Array.isArray(newColumnRows[i]))
+      ? newColumnRows[i]
+      : newHeaders.map(function() { return ''; });
     return base.concat(newVals);
   });
 
-  var finalAOA = [allHeaders].concat(mergedData);
-  instance.loadData(finalAOA);
-  return 'Added ' + newHeaders.length + ' column(s) (' + newHeaders.join(', ') + ') while keeping all existing data.';
+  var cleaned = dropEmptyColumns(allHeaders, mergedData);
+  instance.loadData([cleaned.headers].concat(cleaned.rows));
+  return 'Added columns (' + newHeaders.join(', ') + ') while keeping all existing data (sparse columns removed).';
 }
 
 // ── Operation Dispatch ─────────────────────
