@@ -17,7 +17,11 @@ import { state } from './state.js';
 
 // ── System Prompt ─────────────────────
 
-var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nSupported operations:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old>","to":"<new>"}\n{"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n{"op":"save_record"}\n{"op":"show_dashboard"}\n{"op":"suggest_template"}\n{"op":"consolidate_to_template"}\n{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"underline":true,"color":"#hex","bgColor":"#hex","align":"left|center|right","numFormat":"number|currency|percent|date","wrapText":true}}\n{"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}\n{"op":"add_row","count":<number>,"position":<0-based or null for end>}\n{"op":"highlight_column","column":"<header>","bgColor":"#hex"}\n{"op":"clear_format","column":"<header or null>"}\n\nNotes:\n- format_cells: bold/italic/color/bgColor/align/numFormat. column=null means whole-sheet context. row=null means all data rows of that column.\n- conditional_format: apply bgColor/color/bold to rows where column matches condition.\n- highlight_column: fill entire column header+data with bgColor.\n- clear_format: remove all custom formatting from a column or entire sheet.\n- aggregate supports min and max in addition to sum/average/count.\n- show_all_rows: "show all","clear filter","unfilter".\n- export: "download","save as xlsx".\n- save_record: "save this","save record".\n- show_dashboard: "open dashboard","my records".\n- suggest_template: "suggest template","what columns".\n- consolidate_to_template: "fill template", "populate template", "consolidate into template", "map sources to template", "fill in from sources", "fill it out".\n\nIf NOT a spreadsheet command return: {"op":null}';
+var SYSTEM_PROMPT = 'You are a spreadsheet command parser. Given a user message and a list of column headers, return ONLY a JSON object (no other text, no markdown fences).\n\nSupported operations:\n{"op":"add_column","name":"<header>","position":<0-based index or null for end>}\n{"op":"remove_column","name":"<header>"}\n{"op":"rename_column","from":"<old>","to":"<new>"}\n{"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}\n{"op":"sort_rows","column":"<header>","direction":"asc|desc"}\n{"op":"filter_rows","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}\n{"op":"remove_empty_rows"}\n{"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}\n{"op":"find_duplicates","column":"<header>"}\n{"op":"show_all_rows"}\n{"op":"export"}\n{"op":"save_record"}\n{"op":"show_dashboard"}\n{"op":"suggest_template"}\n{"op":"consolidate_to_template"}\n{"op":"dynamic_report"}\n{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"underline":true,"color":"#hex","bgColor":"#hex","align":"left|center|right","numFormat":"number|currency|percent|date","wrapText":true}}\n{"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}\n{"op":"add_row","count":<number>,"position":<0-based or null for end>}\n{"op":"highlight_column","column":"<header>","bgColor":"#hex"}\n{"op":"clear_format","column":"<header or null>"}\n\nNotes:\n- format_cells: bold/italic/color/bgColor/align/numFormat. column=null means whole-sheet context. row=null means all data rows of that column.\n- conditional_format: apply bgColor/color/bold to rows where column matches condition.\n- highlight_column: fill entire column header+data with bgColor.\n- clear_format: remove all custom formatting from a column or entire sheet.\n- aggregate supports min and max in addition to sum/average/count.\n- show_all_rows: "show all","clear filter","unfilter".\n- export: "download","save as xlsx".\n- save_record: "save this","save record".\n- show_dashboard: "open dashboard","my records".\n- suggest_template: "suggest template","what columns".\n- consolidate_to_template: "fill template", "populate template", "consolidate into template", "map sources to template", "fill in from sources", "fill it out".\n- dynamic_report: "create a report", "show me a summary of", "build a X report", "make a X tracker", "give me cost analysis", "generate a risk register", "analyze sources". Use for any open-ended build/create/analyze/generate request that is not a simple cell-level edit.\n\nIf NOT a spreadsheet command return: {"op":null}';
+
+// ── Dynamic Report Plan Prompt ─────────────────────
+
+var DYNAMIC_PLAN_PROMPT = 'You are an expert construction PM data analyst. Given source file data and a user request, design the optimal spreadsheet report structure.\n\nReturn ONLY a JSON object (no other text, no markdown fences) in this exact format:\n{"title":"Report Title","columns":[{"name":"Column Name","source_field":"exact source column name or null","type":"text|number|date|currency|percent"}]}\n\nRules:\n- Design columns specifically for the user\'s query — not generic PM defaults\n- Match source_field exactly to source column names when a clear match exists, otherwise null\n- Include 6-16 columns total\n- title should be concise and descriptive of the specific report requested\n- type should reflect how the data will be used (currency for money, percent for rates, date for dates, number for counts, text for everything else)';
 
 // ── Handsontable helpers (row 0 = header row) ────────────
 
@@ -164,7 +168,7 @@ async function detectFileLayout(aoa) {
 
 // ── Consolidate Sources into Template ─────────────────────
 
-async function executeConsolidateToTemplate(headers, thinkingBubble) {
+async function executeConsolidateToTemplate(headers, thinkingBubble, userQuery) {
   var templateHeaders = headers.filter(function(h) { return h && String(h).trim(); });
 
   var checkboxes = document.querySelectorAll('.source-check:checked');
@@ -180,6 +184,14 @@ async function executeConsolidateToTemplate(headers, thinkingBubble) {
   if (!templateHeaders.length) {
     thinkingBubble.textContent = 'Analyzing source files to generate template headers…';
     var sourceSnapshot = await getSelectedSourcesSnapshot();
+    var hdrUserContent, hdrSystemContent;
+    if (userQuery) {
+      hdrSystemContent = 'You are a construction PM expert. Return ONLY a JSON array of column header strings — no other text, no markdown.';
+      hdrUserContent = (sourceSnapshot || '') + '\n\nUser request: ' + userQuery + '\n\nDesign a master template column list tailored to this specific request. Use the available source fields where relevant and add any standard construction PM fields needed to fulfill the request. Return 8-14 columns.';
+    } else {
+      hdrSystemContent = 'You are a construction PM expert. Return ONLY a JSON array of column header strings — no other text, no markdown.';
+      hdrUserContent = (sourceSnapshot || '') + '\n\nCreate a master template column list that captures the most important daily report metrics from these source files. Include standard construction PM fields (Date, Subcontractor, Trade, Workers On Site, Work Completed, Issues/Delays, Weather, etc.) merged with any relevant columns from the sources. Return 8-14 columns.';
+    }
     var hdrResponse = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -188,8 +200,8 @@ async function executeConsolidateToTemplate(headers, thinkingBubble) {
         max_tokens: 256,
         stream: false,
         messages: [
-          { role: 'system', content: 'You are a construction PM expert. Return ONLY a JSON array of column header strings — no other text, no markdown.' },
-          { role: 'user', content: (sourceSnapshot || '') + '\n\nCreate a master template column list that captures the most important daily report metrics from these source files. Include standard construction PM fields (Date, Subcontractor, Trade, Workers On Site, Work Completed, Issues/Delays, Weather, etc.) merged with any relevant columns from the sources. Return 8-14 columns.' }
+          { role: 'system', content: hdrSystemContent },
+          { role: 'user', content: hdrUserContent }
         ]
       })
     });
@@ -259,6 +271,8 @@ async function executeConsolidateToTemplate(headers, thinkingBubble) {
 
     for (var r = 0; r < sourceDataRows.length; r++) {
       var sourceRow = sourceDataRows[r];
+      var isEmpty = sourceRow.every(function(cell) { return cell === '' || cell === null || cell === undefined; });
+      if (isEmpty) continue;
       var mappedRow = templateHeaders.map(function(col) {
         var srcCol = mapping[col];
         if (!srcCol) return '';
@@ -272,6 +286,132 @@ async function executeConsolidateToTemplate(headers, thinkingBubble) {
   var finalAOA = [templateHeaders].concat(outputRows);
   state.excelState.instance.loadData(finalAOA);
   return 'Filled template with ' + outputRows.length + ' row(s) from ' + n + ' file(s).';
+}
+
+// ── Dynamic Report ─────────────────────
+
+async function executeDynamicReport(userText, thinkingBubble) {
+  // Phase 1 — Plan: design columns for this specific query
+  thinkingBubble.textContent = 'Planning report structure…';
+  var sourceSnapshot = await getSelectedSourcesSnapshot();
+
+  var planResponse = await fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'anthropic/claude-opus-4-5',
+      max_tokens: 1024,
+      stream: false,
+      messages: [
+        { role: 'system', content: DYNAMIC_PLAN_PROMPT },
+        { role: 'user', content: (sourceSnapshot ? sourceSnapshot + '\n\n' : '') + 'User request: ' + userText }
+      ]
+    })
+  });
+
+  if (!planResponse.ok) throw new Error('Plan API error ' + planResponse.status);
+  var planJson = await planResponse.json();
+  var planText = planJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+  var plan = JSON.parse(planText);
+  var planColumns = plan.columns || [];
+  var templateHeaders = planColumns.map(function(c) { return c.name; });
+
+  if (!templateHeaders.length) throw new Error('Could not design report columns. Try a more specific request.');
+
+  // Write headers into the spreadsheet
+  var instance = state.excelState.instance;
+  for (var hi = 0; hi < templateHeaders.length; hi++) {
+    instance.setDataAtCell(0, hi, templateHeaders[hi]);
+  }
+
+  // If no sources selected, just set up headers and return
+  var checkboxes = document.querySelectorAll('.source-check:checked');
+  if (!checkboxes.length) {
+    return '"' + (plan.title || 'Report') + '" headers set (' + templateHeaders.length + ' columns). Select source files and run again to fill data.';
+  }
+
+  var fileRefs = [];
+  for (var i = 0; i < checkboxes.length; i++) {
+    if (checkboxes[i]._fileRef) fileRefs.push(checkboxes[i]._fileRef);
+  }
+  if (!fileRefs.length) {
+    return '"' + (plan.title || 'Report') + '" headers set (' + templateHeaders.length + ' columns). Select source files and run again to fill data.';
+  }
+
+  // Phase 2 — Build: detect layout + map each source file
+  var n = fileRefs.length;
+  var outputRows = [];
+
+  // Build column list with source_field hints for the mapping prompt
+  var templateColsWithHints = planColumns.map(function(c) {
+    return c.name + (c.source_field ? ' [hint: "' + c.source_field + '"]' : '');
+  });
+
+  for (var i = 0; i < n; i++) {
+    var file = fileRefs[i];
+    thinkingBubble.textContent = 'Analyzing file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
+
+    var buf = await file.arrayBuffer();
+    var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    var ws = wb.Sheets[wb.SheetNames[0]];
+    var aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+
+    var layout = await detectFileLayout(aoa);
+
+    var sourceHeaders, sourceDataRows;
+    if (layout.orientation === 'horizontal') {
+      var hCol = layout.header_col !== undefined ? layout.header_col : 0;
+      var dCol = layout.data_start_col !== undefined ? layout.data_start_col : 1;
+      sourceHeaders = aoa.map(function(row) { return row[hCol] !== undefined ? String(row[hCol]) : ''; });
+      var rawData = aoa.map(function(row) { return row.slice(dCol); });
+      sourceDataRows = rawData.length && rawData[0].length
+        ? rawData[0].map(function(_, ci) { return rawData.map(function(row) { return row[ci] !== undefined ? row[ci] : ''; }); })
+        : [];
+    } else {
+      var hRow = layout.header_row !== undefined ? layout.header_row : 0;
+      var dRow = layout.data_start_row !== undefined ? layout.data_start_row : 1;
+      sourceHeaders = (aoa[hRow] || []).map(function(h) { return h !== null && h !== undefined ? String(h) : ''; });
+      sourceDataRows = aoa.slice(dRow);
+    }
+
+    thinkingBubble.textContent = 'Mapping file ' + (i + 1) + ' of ' + n + ': ' + file.name + '\u2026';
+
+    var mappingResponse = await fetch('/api/ai/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'anthropic/claude-opus-4-5',
+        max_tokens: 512,
+        stream: false,
+        messages: [
+          { role: 'system', content: 'Return ONLY a JSON object. Keys are template column names, values are the best matching source column name or null if no match. Hints in brackets are suggestions — use them if the source column matches.' },
+          { role: 'user', content: 'Template columns: ' + JSON.stringify(templateColsWithHints) + '\nSource columns: ' + JSON.stringify(sourceHeaders) }
+        ]
+      })
+    });
+
+    if (!mappingResponse.ok) throw new Error('Mapping API error ' + mappingResponse.status);
+    var mappingJson = await mappingResponse.json();
+    var mappingText = mappingJson.choices[0].message.content.trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim();
+    var mapping = JSON.parse(mappingText);
+
+    for (var r = 0; r < sourceDataRows.length; r++) {
+      var sourceRow = sourceDataRows[r];
+      var isEmpty = sourceRow.every(function(cell) { return cell === '' || cell === null || cell === undefined; });
+      if (isEmpty) continue;
+      var mappedRow = templateHeaders.map(function(col) {
+        var srcCol = mapping[col];
+        if (!srcCol) return '';
+        var srcIdx = sourceHeaders.indexOf(srcCol);
+        return srcIdx >= 0 && sourceRow[srcIdx] !== undefined ? sourceRow[srcIdx] : '';
+      });
+      outputRows.push(mappedRow);
+    }
+  }
+
+  var finalAOA = [templateHeaders].concat(outputRows);
+  state.excelState.instance.loadData(finalAOA);
+  return '"' + (plan.title || 'Report') + '" built with ' + outputRows.length + ' row(s) from ' + n + ' file(s).';
 }
 
 // ── Operation Dispatch ─────────────────────
@@ -300,7 +440,7 @@ function evaluateCondition(cellVal, operator, value) {
   }
 }
 
-function executeOp(op, headers, thinkingBubble) {
+function executeOp(op, headers, thinkingBubble, userText) {
   switch (op.op) {
     case 'add_column':
       var instance = state.excelState.instance;
@@ -540,7 +680,9 @@ function executeOp(op, headers, thinkingBubble) {
     }
 
     case 'consolidate_to_template':
-      return executeConsolidateToTemplate(headers, thinkingBubble);
+      return executeConsolidateToTemplate(headers, thinkingBubble, userText);
+    case 'dynamic_report':
+      return executeDynamicReport(userText, thinkingBubble);
 
     default:
       throw new Error('Unknown operation: ' + op.op);
@@ -731,7 +873,7 @@ export function initAiOperations() {
         return false;
       }
 
-      var msgOrPromise = executeOp(op, headers, thinkingBubble);
+      var msgOrPromise = executeOp(op, headers, thinkingBubble, userText);
       var msg = (msgOrPromise && typeof msgOrPromise.then === 'function') ? await msgOrPromise : msgOrPromise;
       thinkingBubble.innerHTML = '';
       thinkingBubble.textContent = msg;

@@ -7,3 +7,11 @@ temporary screenshots/
 !PLAN.md
 dist/
 .worktrees/
+__pycache__/
+*.pyc
+*.pyo
+backend/.venv/
+backend/.coverage
+frontend/coverage/
+frontend/test-results/
+.claude/

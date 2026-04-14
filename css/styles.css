@@ -676,108 +676,94 @@ body {
   color: #34d399;
 }
 
-/* ── Jspreadsheet dark theme overrides ───────────────── */
+/* ── Handsontable Excel-like overrides ───────────────── */
 #excel-container {
   width: 100%;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
-/* Override jspreadsheet CE v5 table styles (v5 uses .jss prefix) */
-.jss_content {
+/* Column letter headers (A, B, C) and row number headers */
+.handsontable thead th,
+.handsontable th {
+  background: #f2f2f2 !important;
+  color: #444444 !important;
+  border-color: #d0d0d0 !important;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'Inter', system-ui, sans-serif;
+}
+
+/* Data cells — no !important on background/color so custom renderer inline styles work */
+.handsontable td {
   background: #ffffff;
   color: #111111;
+  border-color: #d0d0d0 !important;
+  font-size: 12px;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
-.jss > thead > tr > td,
-.jss > tbody > tr > td:first-child {
-  background: #1d242e !important;
-  color: #8c99ae !important;
-  border-color: #262e3a !important;
-  font-size: 11px;
+/* Row 0 styled as header (bold, shaded) */
+.handsontable td.ht-header-row {
+  background: #e9f0e9 !important;
+  font-weight: 600 !important;
+  color: #111111 !important;
 }
 
-.jss > tbody > tr > td {
+/* Selection area highlight */
+.handsontable td.area {
+  background: rgba(33,115,70,0.1) !important;
+}
+
+/* Selection border */
+.wtBorder.current {
+  background: #217346 !important;
+}
+
+/* Selection corner handle */
+.wtBorder.corner {
+  background: #217346 !important;
+  border-color: #217346 !important;
+}
+
+/* Cell editor */
+.handsontableInput {
   background: #ffffff !important;
   color: #111111 !important;
-  border-color: #d1d5db !important;
-  font-size: 12px;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif !important;
+  font-size: 12px !important;
+  border: 2px solid #217346 !important;
 }
 
-.jss > tbody > tr:hover > td {
-  background: #f9fafb !important;
-}
-
-.jss > tbody > tr > td.highlight,
-.jss > tbody > tr > td.highlight-top,
-.jss > tbody > tr > td.highlight-bottom,
-.jss > tbody > tr > td.highlight-left,
-.jss > tbody > tr > td.highlight-right {
-  background: rgba(226,154,53,0.08) !important;
-}
-
-.jss > tbody > tr > td.selected {
-  background: rgba(226,154,53,0.15) !important;
-}
-
-/* Selected cell border */
-.jss_corner {
-  background: #e29a35 !important;
-  border-color: #e29a35 !important;
-}
-
-/* Editor input */
-.jss > tbody > tr > td.edition {
-  background: #262e3a !important;
-}
-
-.jss > tbody > tr > td.edition > input,
-.jss > tbody > tr > td.edition > textarea {
-  background: #262e3a !important;
-  color: #e8ecf2 !important;
-  font-family: 'Inter', system-ui, sans-serif;
+/* Context menu */
+.htContextMenu table tbody tr td {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border-color: #d0d0d0 !important;
   font-size: 12px;
 }
 
-/* Worksheet tabs */
-.jss_tabs {
-  background: #171c23 !important;
-  border-color: #262e3a !important;
-  position: sticky !important;
-  left: 0 !important;
-  z-index: 5 !important;
+.htContextMenu table tbody tr td:hover,
+.htContextMenu table tbody tr td.current {
+  background: #e8f0ea !important;
+  color: #111111 !important;
 }
 
-.jss_tab, .jtabs-headers > * {
-  color: #000000 !important;
+/* HOT scrollbars */
+.wtHolder::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
 }
-
-/* Toolbar — hide it */
-.jss_toolbar {
-  display: none !important;
+.wtHolder::-webkit-scrollbar-track {
+  background: #f5f5f5;
 }
-
-/* Column resizer */
-.jss_resizeColumn {
-  background: #e29a35 !important;
+.wtHolder::-webkit-scrollbar-thumb {
+  background: #c0c0c0;
+  border-radius: 4px;
 }
-
-/* Scrollbar */
-.jss_content::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.jss_content::-webkit-scrollbar-track {
-  background: #1a2030;
-}
-.jss_content::-webkit-scrollbar-thumb {
-  background: #262e3a;
-  border-radius: 3px;
-}
-.jss_content::-webkit-scrollbar-thumb:hover {
-  background: #363e4d;
+.wtHolder::-webkit-scrollbar-thumb:hover {
+  background: #999;
 }
 
 /* Panel body no padding when spreadsheet active */
@@ -788,61 +774,56 @@ body {
   flex-direction: column;
 }
 
-/* Tab bar — fixed header above sheet */
-.panel-body.has-spreadsheet > .jtabs-headers {
+/* ── Sheet tab bar — bottom, Excel-style ─────────────── */
+.sheet-tabs {
   flex-shrink: 0;
-  display: flex !important;
-  flex-direction: row !important;
+  display: flex;
+  flex-direction: row;
   flex-wrap: nowrap;
-  background: #d0d3d8 !important;
-  border-bottom: 1px solid #b0b3b8;
-  padding: 0;
+  background: #e8e8e8;
+  border-top: 1px solid #c0c0c0;
+  padding: 0 0 0 4px;
   margin: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  align-items: flex-end;
+  height: 30px;
 }
-.panel-body.has-spreadsheet > .jtabs-headers::-webkit-scrollbar {
+
+.sheet-tabs::-webkit-scrollbar {
   display: none;
 }
-/* Individual tab buttons — boxy Excel-style, touching */
-.panel-body.has-spreadsheet > .jtabs-headers > * {
-  display: inline-block !important;
-  padding: 7px 24px !important;
-  background: #c0c3c8 !important;
-  color: #444444 !important;
-  border: 1px solid #b0b3b8 !important;
-  border-bottom: none !important;
-  border-left: none !important;
-  border-radius: 0 !important;
-  font-size: 12px !important;
-  font-family: 'Inter', system-ui, sans-serif !important;
+
+.sheet-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 16px;
+  height: 26px;
+  background: #d0d0d0;
+  color: #555555;
+  border: 1px solid #b0b0b0;
+  border-bottom: none;
+  border-left: none;
+  border-radius: 3px 3px 0 0;
+  font-size: 11.5px;
+  font-family: 'Inter', system-ui, sans-serif;
   cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
+  outline: none;
+  margin-right: 2px;
 }
-.panel-body.has-spreadsheet > .jtabs-headers > *:first-child {
-  border-left: 1px solid #b0b3b8 !important;
+
+.sheet-tab-btn:first-child {
+  border-left: 1px solid #b0b0b0;
 }
-/* Active tab — white, merges seamlessly with sheet below */
-.panel-body.has-spreadsheet > .jtabs-headers > *.jtabs-selected,
-.panel-body.has-spreadsheet > .jtabs-headers > *[data-selected="true"] {
-  background: #ffffff !important;
-  color: #111111 !important;
-  font-weight: 600 !important;
-  border-bottom: 1px solid #ffffff !important;
-  margin-bottom: -1px;
-}
-/* Hide empty/nameless tab (jspreadsheet add-sheet button) */
-.panel-body.has-spreadsheet > .jtabs-headers > *:empty {
-  display: none !important;
-}
-/* Remove any top gap between tab bar and sheet content */
-#excel-container .jtabs-content,
-#excel-container .jss_spreadsheet,
-#excel-container .jss_content,
-#excel-container .jss_container {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
+
+.sheet-tab-btn.active {
+  background: #ffffff;
+  color: #111111;
+  font-weight: 600;
+  border-color: #b0b0b0;
+  height: 28px;
 }
 
 /* ── Panel header action button ──────────────────────── */
@@ -885,4 +866,229 @@ body {
   cursor: pointer;
   accent-color: #e29a35;
   margin-right: 4px;
+}
+
+/* ── Excel Toolbar ───────────────────────────────────────── */
+.xt-toolbar {
+  flex-shrink: 0;
+  background: #f0f0f0;
+  border-bottom: 1px solid #c0c0c0;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px;
+  gap: 1px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  height: 34px;
+  scrollbar-width: none;
+}
+.xt-toolbar::-webkit-scrollbar { display: none; }
+
+.xt-toolbar-btn {
+  height: 26px;
+  min-width: 26px;
+  padding: 0 5px;
+  border-radius: 3px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  color: #333;
+  gap: 2px;
+  flex-shrink: 0;
+  transition: background 0.1s ease;
+  position: relative;
+  white-space: nowrap;
+}
+.xt-toolbar-btn:hover {
+  background: rgba(0,0,0,0.09);
+  border-color: rgba(0,0,0,0.18);
+}
+.xt-toolbar-btn.active {
+  background: rgba(33,115,70,0.15);
+  border-color: rgba(33,115,70,0.45);
+}
+.xt-toolbar-btn:active { background: rgba(0,0,0,0.16); }
+.xt-toolbar-btn:focus-visible { outline: 2px solid #217346; outline-offset: -1px; }
+
+.xt-zoom-level {
+  min-width: 38px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: #55627a;
+  font-family: Inter, sans-serif;
+}
+
+.xt-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: #c0c0c0;
+  margin: 0 3px;
+  flex-shrink: 0;
+}
+
+.xt-toolbar-select {
+  height: 26px;
+  padding: 0 5px;
+  border: 1px solid #c0c0c0;
+  border-radius: 3px;
+  background: #fff;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  color: #333;
+  cursor: pointer;
+  outline: none;
+  flex-shrink: 0;
+}
+.xt-toolbar-select:focus { border-color: #217346; }
+
+.xt-color-bar {
+  height: 3px;
+  width: 14px;
+  margin-top: 1px;
+  border-radius: 1px;
+}
+
+/* ── Formula Bar ─────────────────────────────────────────── */
+.xt-formula-bar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 26px;
+  background: #fff;
+  border-bottom: 1px solid #d0d0d0;
+}
+.xt-cell-ref {
+  width: 68px;
+  flex-shrink: 0;
+  padding: 0 8px;
+  font-size: 11px;
+  font-family: 'Inter', sans-serif;
+  color: #333;
+  background: #f5f5f5;
+  border-right: 1px solid #d0d0d0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  user-select: none;
+}
+.xt-formula-sep {
+  width: 1px;
+  height: 16px;
+  background: #d0d0d0;
+  flex-shrink: 0;
+}
+.xt-formula-input {
+  flex: 1;
+  height: 100%;
+  border: none;
+  outline: none;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  color: #111;
+  background: #fff;
+}
+.xt-formula-input:focus { background: #fffce8; }
+
+/* ── Color Picker Dropdown ───────────────────────────────── */
+.xt-color-dropdown {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 0;
+  background: #fff;
+  border: 1px solid #c0c0c0;
+  border-radius: 4px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(8, 16px);
+  gap: 3px;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+}
+.xt-color-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.15);
+  transition: transform 0.1s ease;
+}
+.xt-color-swatch:hover { transform: scale(1.25); }
+
+/* ── Find & Replace Modal ────────────────────────────────── */
+.xt-find-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border: 1px solid #c0c0c0;
+  border-radius: 7px;
+  padding: 18px;
+  z-index: 99999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+  width: 320px;
+}
+.xt-find-modal h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 12px;
+  font-family: 'Inter', sans-serif;
+}
+.xt-find-modal label {
+  font-size: 11px;
+  color: #555;
+  display: block;
+  margin-bottom: 3px;
+  font-family: 'Inter', sans-serif;
+}
+.xt-find-modal input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #c0c0c0;
+  border-radius: 3px;
+  font-size: 12px;
+  margin-bottom: 10px;
+  outline: none;
+  font-family: 'Inter', sans-serif;
+}
+.xt-find-modal input:focus { border-color: #217346; }
+.xt-find-modal-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.xt-find-modal-btns button {
+  flex: 1;
+  padding: 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid #c0c0c0;
+  background: #f5f5f5;
+  color: #333;
+  font-family: 'Inter', sans-serif;
+  transition: background 0.1s ease;
+}
+.xt-find-modal-btns button:hover { background: #e8e8e8; }
+.xt-find-modal-btns button.primary {
+  background: #217346;
+  color: #fff;
+  border-color: #1a5c38;
+}
+.xt-find-modal-btns button.primary:hover { background: #1e6640; }
+.xt-find-status {
+  font-size: 11px;
+  color: #666;
+  margin-top: 8px;
+  min-height: 16px;
+  font-family: 'Inter', sans-serif;
 }
