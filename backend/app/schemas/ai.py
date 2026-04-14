@@ -1,5 +1,7 @@
 """AI proxy request/response schemas."""
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -22,5 +24,5 @@ class CommandRequest(BaseModel):
 
 
 class CommandResponse(BaseModel):
-    op: str | None
+    op: Optional[str]
     raw: dict

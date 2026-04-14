@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 50
     upload_dir: str = "/var/data/whitehelmet/uploads"
 
-    model_config = {"env_file": ".env", "case_sensitive": False}
+    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 
 
 @lru_cache
