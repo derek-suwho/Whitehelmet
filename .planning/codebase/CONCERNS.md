@@ -1,116 +1,106 @@
-# CONCERNS.md
+# Codebase Concerns
 
-## Technical Debt
-
-### Monolithic HTML File
-**File:** `Whitehelmet/index.html` (739 lines)
-- All HTML, CSS (inline `<style>`), and JavaScript live in a single file
-- No component separation, no build pipeline, no module splitting
-- Makes navigation, testing, and parallel development difficult
-- Grows increasingly unmanageable with each new feature
-
-### DOM-Only State Management
-- All application state lives in the DOM (active tab classes, displayed data)
-- No state object, no reactive framework, no persistence
-- State is lost on page refresh
-- Makes debugging and testing complex
-
-### Hardcoded User Paths
-**File:** `Whitehelmet/screenshot.mjs`
-- Chrome executable paths hardcoded for two specific users (`artemd`, `dereksu`)
-- Breaks for any other developer immediately
-- Should use `puppeteer.executablePath()` or environment variable
+**Analyzed:** 2026-03-17
+**Focus:** Technical debt, security issues, fragile patterns, missing features
 
 ---
 
-## Known Bugs / Issues
+## Critical Security Issues
 
-### Chat Scroll Timing
-- Chat UI may have scroll-to-bottom timing issues after messages are appended (common pattern in DOM-only chat)
-- No explicit scroll management observed
+### 1. Hardcoded API Key Placeholder
+- **File:** `js/state.js`
+- **Issue:** `apiKey: 'YOUR_KEY_HERE'` — users replace this inline and may accidentally commit real keys
+- **Risk:** API key exposure in version control
+- **Fix:** Use environment variable or prompt user at runtime, never store in source
 
-### Screenshot Silent Failure
-- `screenshot.mjs` only tries two hardcoded Chrome paths; no fallback, no clear error if both fail
-- `resolvedChrome` will be `undefined` and Puppeteer will silently use its default or throw cryptic error
+### 2. Direct Browser-to-Anthropic API Calls
+- **Files:** `js/consolidation.js`, `js/ai-operations.js`
+- **Issue:** API calls go directly from browser to Anthropic, bypassing the intended `/api/chat` proxy (Group 3's backend)
+- **Risk:** API key exposed in browser network tab; no rate limiting or auth layer
+- **Fix:** Route all Anthropic calls through `/api/chat` once backend is ready
 
-### Missing File Upload Handlers
-- UI appears to reference file upload functionality (based on product docs and Excel test data in `resources/`)
-- No actual file upload or XLSX parsing implementation in `index.html`
+### 3. Path Traversal in Dev Server
+- **File:** `serve.mjs`
+- **Issue:** Static file serving may not sanitize `..` path segments
+- **Risk:** Arbitrary file read on developer machines (dev-only, but still bad practice)
+- **Fix:** Validate and normalize paths before serving
 
----
+### 4. CSV/Formula Injection
+- **File:** `js/excel-editor.js`, AI-generated cell content
+- **Issue:** AI-generated cell values are written directly to spreadsheet without sanitizing formula prefixes (`=`, `+`, `-`, `@`)
+- **Risk:** Formula injection if spreadsheet is opened in Excel/LibreOffice
+- **Fix:** Strip or quote formula-starting characters in AI-generated content
 
-## Security Concerns
-
-### Unsanitized Input
-- No evidence of input sanitization for chat messages or any form fields
-- Risk of XSS if user input is ever rendered as `innerHTML`
-
-### API Key Exposure
-- If/when AI API integration is added, there is no env var pattern or secrets management in place
-- Current `serve.mjs` serves all files in the directory — an `.env` file would be publicly accessible
-
-### No CORS / Auth
-- `serve.mjs` has no authentication, no CORS headers, no rate limiting
-- Anyone on the local network can access the running server
-
----
-
-## Performance Concerns
-
-### Single Large HTML File
-- Browser must parse 739 lines of HTML + inline styles + inline scripts before anything renders
-- No lazy loading, no code splitting
-
-### No Virtual Scrolling
-- Data tables (e.g., Excel/KPI data displays) render all rows at once
-- Will degrade with large datasets (1000+ rows)
-
-### CDN Dependencies at Startup
-- Tailwind CSS and Google Fonts are loaded from CDN on every page load
-- No fallback if CDN is unavailable; no local caching strategy
+### 5. No SRI Hashes on CDN Libraries
+- **File:** `index.html`
+- **Issue:** CDN-loaded libraries (Jspreadsheet, SheetJS, etc.) have no `integrity` attributes
+- **Risk:** Supply chain attack if CDN is compromised
+- **Fix:** Add `integrity` + `crossorigin` attributes to all `<script>` and `<link>` tags
 
 ---
 
-## Fragile Areas
+## Unimplemented Stubs
 
-### CSS Grid Layout Coupling
-- Layout structure tightly couples sidebar width, content area, and header height via CSS Grid
-- Changes to one area likely break others without careful adjustment
+### 6. `js/ai-operations.js` — Empty Stub
+- **Issue:** File exists but contains no implementation; `state.chatCommandHandler` is never registered
+- **Impact:** Phase 5 (AI Chat Operations) is entirely unbuilt
+- **Status:** Planned work for Phase 5
 
-### CDN Tailwind Config
-- Tailwind is loaded via CDN `<script>`, which allows inline `tailwind.config` customization
-- CDN version has limitations vs. PostCSS build (no JIT purging, larger bundle, version drift)
-
----
-
-## Scaling Limits
-
-- **Single user:** No concept of multiple users, sessions, or data isolation
-- **In-memory only:** All data resets on page refresh — unsuitable for production use
-- **No API layer:** Cannot be consumed by mobile apps or other clients
-- **Monorepo gap:** `Whitehelmet/` subdirectory structure suggests future multi-package intent, but not realized
+### 7. `js/master-records.js` — Empty Stub
+- **Issue:** File exists but contains no implementation
+- **Impact:** Phase 6 (Master Records) is entirely unbuilt
+- **Status:** Planned work for Phase 6
 
 ---
 
-## Missing Infrastructure
+## Data Integrity Issues
 
-| Item | Status |
-|------|--------|
-| Test suite | ✗ None |
-| CI/CD pipeline | ✗ None |
-| Linter / formatter | ✗ None |
-| Environment variable management | ✗ None |
-| Error monitoring | ✗ None |
-| Logging | ✗ None |
-| Build pipeline | ✗ None |
-| Deployment configuration | ✗ None |
+### 8. String-Only Cell Coercion
+- **File:** `js/excel-editor.js`
+- **Issue:** All cell values are coerced to strings when loaded into Jspreadsheet CE
+- **Impact:** Numeric sorting, date handling, and formula evaluation break silently
+- **Fix:** Detect and preserve numeric/date types when populating the spreadsheet
+
+### 9. Name-Only File Deduplication
+- **File:** `js/file-ingestion.js`
+- **Issue:** Duplicate file detection uses filename only (no content hash)
+- **Impact:** Two different files with the same name — one is silently discarded
+- **Fix:** Use file size + name, or a content hash, for deduplication
 
 ---
 
-## Dependency Risks
+## Reliability Issues
 
-| Dependency | Risk |
-|------------|------|
-| `puppeteer ^24.39.0` | Pinned to `^` — minor/patch updates auto-applied, major breakage possible |
-| Tailwind CDN | Version not pinned in CDN URL — behavior could change |
-| Google Fonts CDN | External availability dependency |
+### 10. Unbounded `conversationHistory` Growth
+- **File:** `js/consolidation.js`
+- **Issue:** Conversation history array grows indefinitely across consolidation calls
+- **Impact:** Eventually exceeds Claude's context window, causing silent failures or truncation
+- **Fix:** Trim history to last N messages or implement sliding window
+
+### 11. No Error Boundaries in AI Response Parsing
+- **Files:** `js/consolidation.js`, `js/chat.js`
+- **Issue:** JSON parsing of AI responses has no structured error handling
+- **Impact:** Malformed AI response silently breaks consolidation with no user feedback
+- **Fix:** Wrap parse logic in try/catch, show user-friendly error messages
+
+---
+
+## Testing
+
+### 12. Zero Automated Tests
+- **Issue:** No test files, no test framework, no test scripts in `package.json`
+- **Impact:** All validation is manual; regressions go undetected
+- **Note:** TESTING.md documents this absence explicitly
+
+---
+
+## Minor / Low Priority
+
+- `js/chat.js` has tight coupling to DOM structure — fragile if `index.html` layout changes
+- No loading/spinner state during AI calls — UX issue, not a bug
+- `serve.mjs` dev server has no HTTPS; browser security policies may block features in some environments
+- No input length validation on chat messages before sending to API
+
+---
+
+*Generated by gsd-codebase-mapper concerns agent, 2026-03-17*

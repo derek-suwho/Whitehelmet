@@ -1,84 +1,49 @@
-# Roadmap: WhiteHelmet Reporting Engine
+# Roadmap: Whitehelmet AI Chat Operations (Group 1)
 
 ## Overview
 
-Four phases that build the complete reporting loop: first establish the backend API and role-aware UI shell, then let admins create templates, then let contractors fill and submit reports, then close the loop with auto-consolidation and PM review. Each phase delivers a coherent, verifiable capability that unblocks the next.
+Two phases deliver natural language spreadsheet editing on top of the existing Whitehelmet app. Phase 1 wires up the command handler, connects to the Anthropic API for intent parsing, and delivers structural column operations with user feedback. Phase 2 adds row-level data operations (sort, filter, remove empties, aggregate) that depend on the routing and parsing infrastructure Phase 1 establishes.
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [ ] **Phase 1: Foundation** - Node.js backend API, JSON file storage, UI shell extended with role switcher
-- [ ] **Phase 2: Template Management** - Admin can create, configure, and persist report templates
-- [ ] **Phase 3: Report Submission** - Contractor can select a template, fill the grid, and submit a report
-- [ ] **Phase 4: Consolidation and Review** - Reports auto-consolidate per work package; PM sees master record
+- [ ] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback
+- [ ] **Phase 2: Row and Data Operations** - Add sort, filter, remove-empty-rows, and aggregate commands on top of Phase 1 infrastructure
 
 ## Phase Details
 
-### Phase 1: Foundation
-**Goal**: The backend API handles file I/O and the UI shell supports role-based navigation — making all subsequent workflows possible
-**Depends on**: Nothing (first phase)
-**Requirements**: INFRA-01, INFRA-02, INFRA-03, ROLE-01, ROLE-02
+### Phase 1: Command Routing, Intent Parsing, and Column Operations
+**Goal**: Users can type natural language column commands in chat and see the spreadsheet update immediately, with clear feedback on success or failure
+**Depends on**: Nothing (first phase) — existing infrastructure (state.chatCommandHandler, state.excelState.instance, state.addMessage, state.apiKey) is already in place
+**Requirements**: ROUTE-01, ROUTE-02, ROUTE-03, PARSE-01, PARSE-02, PARSE-03, TMPL-01, TMPL-02, TMPL-03, TMPL-04, UX-01, UX-02, UX-03
 **Success Criteria** (what must be TRUE):
-  1. Node.js server handles API requests for template storage and report submission (not just static file serving)
-  2. Data written by the server appears as JSON files on disk in the correct directory structure
-  3. The three-panel UI shell renders without breaking existing Sources, Excel Editor, and AI Chat panels
-  4. A role switcher control is visible and selecting a role changes which panels and actions are displayed
-  5. Each role (Contractor, Project Manager, System Admin, Project Director) shows a distinct, appropriate view
-**Plans**: 3 plans
+  1. Typing a spreadsheet command (e.g. "add a Total column") in chat causes the spreadsheet to update; non-spreadsheet messages fall through to normal chat unchanged
+  2. User can add a new column by name and position, and it appears in the spreadsheet grid
+  3. User can remove an existing column by name, and it disappears from the spreadsheet
+  4. User can rename a column header, and the header text updates in place
+  5. After every command, a confirmation or error message appears in the chat panel; a "thinking..." indicator is shown while Claude processes
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 01-01-PLAN.md — Extend serve.mjs into REST API server with JSON file persistence (INFRA-01, INFRA-02)
-- [ ] 01-02-PLAN.md — Add role switcher and CSS role-visibility to index.html (INFRA-03, ROLE-01, ROLE-02)
-- [ ] 01-03-PLAN.md — Human verification checkpoint for complete Phase 1 foundation
+- [x] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
+- [ ] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
 
-### Phase 2: Template Management
-**Goal**: An admin can create a report template with named sheets and typed column headers, and that template is available for contractors to use
+### Phase 2: Row and Data Operations
+**Goal**: Users can type natural language row and aggregate commands to reorder, clean, and summarize spreadsheet data
 **Depends on**: Phase 1
-**Requirements**: TMPL-01, TMPL-02, TMPL-03, TMPL-04, TMPL-05
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04
 **Success Criteria** (what must be TRUE):
-  1. Admin can create a new template by entering a name and description through the UI
-  2. Admin can define multiple named sheet tabs within a template
-  3. Admin can define column headers with data types for each sheet
-  4. Admin can upload an .xlsx file and have its sheet/column structure used as the template
-  5. Created templates appear in the contractor's template selection list after page refresh
-**Plans**: TBD
-
-### Phase 3: Report Submission
-**Goal**: A contractor can open a template, fill in report data in a spreadsheet-style grid with correct header fields, and submit — with the result persisted to disk
-**Depends on**: Phase 2
-**Requirements**: SUBM-01, SUBM-02, SUBM-03, SUBM-04, SUBM-05
-**Success Criteria** (what must be TRUE):
-  1. Contractor can select an available template and see a spreadsheet grid matching its sheet/column structure
-  2. Contractor can enter data cell-by-cell in the grid
-  3. Report header captures contract reference, work order number, submission date, and submitter name before submission
-  4. Contractor can submit the completed report and receives confirmation
-  5. Submitted report appears as a JSON file on disk containing all entered data and header fields
-**Plans**: TBD
-
-### Phase 4: Consolidation and Review
-**Goal**: Submitted reports are automatically merged into a per-work-package master record, and the project manager can view that consolidated data in the spreadsheet panel
-**Depends on**: Phase 3
-**Requirements**: CONS-01, CONS-02, VIEW-01, VIEW-02
-**Success Criteria** (what must be TRUE):
-  1. Submitting a report immediately updates the master record for its work package without any manual trigger
-  2. The master record contains aggregated rows from all submitted reports for that work package
-  3. Project Manager can select a work package and see the consolidated master record
-  4. Master record is displayed as a spreadsheet-style table in the Excel Editor panel
+  1. User can type "sort by [column] ascending/descending" and rows reorder in the spreadsheet
+  2. User can type a filter condition and non-matching rows are hidden or removed
+  3. User can type "remove empty rows" and blank rows are deleted from the spreadsheet
+  4. User can type "sum/average/count [column]" and the result appears as a message in chat
 **Plans**: TBD
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 -> 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
-| 2. Template Management | 0/TBD | Not started | - |
-| 3. Report Submission | 0/TBD | Not started | - |
-| 4. Consolidation and Review | 0/TBD | Not started | - |
+| 1. Command Routing, Intent Parsing, and Column Operations | 1/2 | In Progress|  |
+| 2. Row and Data Operations | 0/TBD | Not started | - |

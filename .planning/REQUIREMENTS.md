@@ -1,121 +1,90 @@
-# Requirements: WhiteHelmet Reporting Engine
+# Requirements: Whitehelmet AI Chat Operations
 
-**Defined:** 2026-03-10
-**Core Value:** Contractors can submit structured daily reports and project managers can see consolidated master records — eliminating 60+ hours/month of manual reporting
+**Defined:** 2026-03-17
+**Core Value:** User can modify the open spreadsheet using plain English chat commands and see the change applied immediately
 
 ## v1 Requirements
 
-### Template Management
+### Command Routing
 
-- [ ] **TMPL-01**: Admin can create a new report template with a name and description
-- [ ] **TMPL-02**: Admin can define sheet tabs within a template (multiple sheets per template)
-- [ ] **TMPL-03**: Admin can define column headers for each sheet (name, data type)
-- [ ] **TMPL-04**: Admin can upload an existing .xlsx file to use as a template structure
-- [ ] **TMPL-05**: Created templates are persisted to disk and available for contractor use
+- [x] **ROUTE-01**: `initAiOperations()` registers a handler at `state.chatCommandHandler` during module init
+- [x] **ROUTE-02**: Handler returns `true` if the message was recognized as a spreadsheet command (preventing fallthrough to normal chat)
+- [x] **ROUTE-03**: Handler returns `false` if the message is not a spreadsheet command (normal chat proceeds)
 
-### Report Submission
+### Intent Parsing
 
-- [ ] **SUBM-01**: Contractor can select an available template to fill out
-- [ ] **SUBM-02**: Contractor can fill in report data in a spreadsheet-style grid (cell-level entry)
-- [ ] **SUBM-03**: Report header captures: contract reference, work order number, submission date, submitter name
-- [ ] **SUBM-04**: Contractor can submit the completed report
-- [ ] **SUBM-05**: Submitted report is persisted to disk as a JSON file via Node.js backend
+- [x] **PARSE-01**: Handler calls Anthropic API (using `state.apiKey`) with the user's message and current spreadsheet headers to classify intent
+- [x] **PARSE-02**: Claude returns a structured operation object (type + parameters) that the handler executes
+- [x] **PARSE-03**: If Claude cannot parse a clear intent, the handler posts an error message via `state.addMessage()` and returns `true`
 
-### Consolidation
+### Template Operations
 
-- [ ] **CONS-01**: System automatically consolidates submitted report into the master record for its work package on submit
-- [ ] **CONS-02**: Master record aggregates all submitted rows across all reports for a work package
+- [ ] **TMPL-01**: User can type a command to add a new column (with optional name and position) and it appears in the spreadsheet
+- [ ] **TMPL-02**: User can type a command to remove an existing column by name and it is deleted from the spreadsheet
+- [ ] **TMPL-03**: User can type a command to rename a column header and the header updates in the spreadsheet
+- [ ] **TMPL-04**: User can type a command to apply a formula to a column and the formula is set on each cell in that column
 
-### Review & Management
+### Data Operations
 
-- [ ] **VIEW-01**: Project Manager can view the consolidated master record for a work package
-- [ ] **VIEW-02**: Master record displays aggregated data in a spreadsheet-style table
+- [ ] **DATA-01**: User can type a command to sort rows by a named column (ascending or descending) and rows reorder accordingly
+- [ ] **DATA-02**: User can type a command to filter rows by a condition and non-matching rows are hidden or removed
+- [ ] **DATA-03**: User can type a command to remove empty rows and blank rows are deleted from the spreadsheet
+- [ ] **DATA-04**: User can type a command to aggregate a column (sum, average, count) and the result is posted in chat
 
-### Role Navigation
+### Feedback
 
-- [ ] **ROLE-01**: UI provides a role switcher to toggle between Contractor, Project Manager, System Admin, and Project Director views
-- [ ] **ROLE-02**: Each role sees only the panels/actions relevant to their workflow
-
-### Infrastructure
-
-- [ ] **INFRA-01**: Node.js backend API endpoints handle template storage, report submission, and consolidation
-- [ ] **INFRA-02**: Data persisted as JSON files on disk (no database required)
-- [ ] **INFRA-03**: Existing three-panel UI shell extended to support reporting workflows
+- [ ] **UX-01**: After a successful operation, the handler posts a confirmation message in chat (e.g. "Added column 'Total'")
+- [ ] **UX-02**: If an operation fails or the intent is ambiguous, the handler posts a clear error message in chat explaining what went wrong
+- [x] **UX-03**: While Claude is processing, a "thinking..." indicator is shown in chat
 
 ## v2 Requirements
 
-### Report Submission
+### Extended Operations
 
-- **SUBM-06**: Contractor can save a report as draft and return to complete it later
-- **SUBM-07**: Multi-sheet reports supported within a single submission
-- **SUBM-08**: File attachments can be added to a report submission
+- **EXT-01**: Fill cells from a pattern or source file data
+- **EXT-02**: Multi-step conversational commands ("now also do X to that column")
+- **EXT-03**: Undo last AI operation
 
-### Template Management
+### Robustness
 
-- **TMPL-06**: Template versioning — submissions retain the template version they were created with
-- **TMPL-07**: Admin can deactivate templates (archived templates no longer available for new submissions)
-
-### Review & Management
-
-- **VIEW-03**: Project Manager can view list of all submitted reports with filter by date / status / work package
-- **VIEW-04**: Project Manager can open individual report to review submitted data
-- **VIEW-05**: Project Director sees cross-work-package summary view
-
-### Consolidation
-
-- **CONS-03**: Manual consolidation trigger — PM selects date range and work package to re-consolidate
-- **CONS-04**: Export consolidated master record to .xlsx
-
-### Notifications
-
-- **NOTF-01**: PM receives notification when new report is submitted for their work package
-- **NOTF-02**: Contractor receives confirmation notification after successful submission
+- **ROB-01**: Route through `/api/chat` proxy once Group 3's backend is available (currently uses `state.apiKey` directly)
 
 ## Out of Scope
 
 | Feature | Reason |
 |---------|--------|
-| Authentication / user accounts | No auth in v1 — role switcher replaces it; auth adds significant complexity |
-| Real AI / Asif Chat integration | Separate AI Data Analysis module; mock chat sufficient for v1 |
-| GIS / geospatial data integration | Requires external platform integration — future milestone |
-| Mobile app | Web-first; mobile is separate milestone |
-| WhiteHelmet platform API integration | Standalone only for v1; integration is separate milestone |
-| Custom formulas / macros in cells | Excel-like grid only; no formula engine in v1 |
-| Real-time collaboration | Single-user submit flow for v1 |
-| Historical master record versions | Only current consolidated state retained in v1 |
-| Report approval workflow | PM review is view-only in v1; approval/rejection is v2 |
+| Undo/redo | No undo API in Jspreadsheet CE |
+| Multi-turn conversation | Stateless handler keeps v1 simple |
+| Modifying other team files | Group boundary — only `js/ai-operations.js` (and `js/chat.js` if needed) |
+| Formula engine / computed columns | Jspreadsheet CE has limited formula support |
 
 ## Traceability
 
-All 19 v1 requirements mapped to phases. Updated during roadmap creation (2026-03-10).
-
-| Requirement | Phase | Phase Name | Status |
-|-------------|-------|------------|--------|
-| INFRA-01 | Phase 1 | Foundation | Pending |
-| INFRA-02 | Phase 1 | Foundation | Pending |
-| INFRA-03 | Phase 1 | Foundation | Pending |
-| ROLE-01 | Phase 1 | Foundation | Pending |
-| ROLE-02 | Phase 1 | Foundation | Pending |
-| TMPL-01 | Phase 2 | Template Management | Pending |
-| TMPL-02 | Phase 2 | Template Management | Pending |
-| TMPL-03 | Phase 2 | Template Management | Pending |
-| TMPL-04 | Phase 2 | Template Management | Pending |
-| TMPL-05 | Phase 2 | Template Management | Pending |
-| SUBM-01 | Phase 3 | Report Submission | Pending |
-| SUBM-02 | Phase 3 | Report Submission | Pending |
-| SUBM-03 | Phase 3 | Report Submission | Pending |
-| SUBM-04 | Phase 3 | Report Submission | Pending |
-| SUBM-05 | Phase 3 | Report Submission | Pending |
-| CONS-01 | Phase 4 | Consolidation and Review | Pending |
-| CONS-02 | Phase 4 | Consolidation and Review | Pending |
-| VIEW-01 | Phase 4 | Consolidation and Review | Pending |
-| VIEW-02 | Phase 4 | Consolidation and Review | Pending |
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ROUTE-01 | Phase 1 | Complete |
+| ROUTE-02 | Phase 1 | Complete |
+| ROUTE-03 | Phase 1 | Complete |
+| PARSE-01 | Phase 1 | Complete |
+| PARSE-02 | Phase 1 | Complete |
+| PARSE-03 | Phase 1 | Complete |
+| TMPL-01 | Phase 1 | Pending |
+| TMPL-02 | Phase 1 | Pending |
+| TMPL-03 | Phase 1 | Pending |
+| TMPL-04 | Phase 1 | Pending |
+| DATA-01 | Phase 2 | Pending |
+| DATA-02 | Phase 2 | Pending |
+| DATA-03 | Phase 2 | Pending |
+| DATA-04 | Phase 2 | Pending |
+| UX-01 | Phase 1 | Pending |
+| UX-02 | Phase 1 | Pending |
+| UX-03 | Phase 1 | Complete |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 19
-- Unmapped: 0
+- v1 requirements: 17 total
+- Mapped to phases: 17
+- Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-03-10*
-*Last updated: 2026-03-10 — traceability confirmed after roadmap creation*
+*Requirements defined: 2026-03-17*
+*Last updated: 2026-03-17 after initial definition*

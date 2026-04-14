@@ -1,14 +1,33 @@
 import { state } from './state.js';
 
 export function initConsolidation() {
-  var ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-
   var SYSTEM_PROMPT = [
-    'You are a data consolidation assistant. You will receive data from multiple Excel sub-reports as JSON.',
-    'Merge them into a single unified master spreadsheet.',
-    'Return ONLY a JSON array-of-arrays (rows x columns) — the first row should be column headers derived from the source files.',
+    'You are a data consolidation assistant for construction project management.',
+    'You will receive data from multiple Excel sub-reports (subcontractor submissions) as JSON.',
+    'Merge them into a single unified master spreadsheet following these rules:',
+    '',
+    'COLUMN NORMALIZATION:',
+    '- Treat these as the same column and merge under one standard name:',
+    '  "Invoice Amt", "Invoice Amount", "Inv. Amount", "Amount" → "Invoice Amount"',
+    '  "PO #", "PO Number", "Purchase Order", "PO No." → "PO Number"',
+    '  "Sub", "Subcontractor", "Company", "Contractor Name", "Sub Name" → "Subcontractor"',
+    '  "Pay Status", "Payment Status", "Status", "Paid?" → "Payment Status"',
+    '  "Description", "Desc", "Scope", "Work Description" → "Description"',
+    '  "Date", "Invoice Date", "Submission Date" → "Date"',
+    '- For any other columns that appear in multiple files with slightly different names, merge them under the most descriptive name',
+    '- Preserve all columns that appear in at least one file',
+    '',
+    'DATA RULES:',
+    '- Include a "Source File" column as the first column showing which file each row came from',
+    '- Do NOT drop duplicate rows — construction PMs need to see all submissions even if similar',
+    '- Preserve all numeric values exactly as-is (do not round or reformat)',
+    '- Empty cells are fine — do not fill them in',
+    '',
+    'OUTPUT FORMAT:',
+    'Return ONLY a JSON array-of-arrays (rows x columns) — the first row must be column headers.',
     'Do not include any explanatory text, markdown code fences, or commentary. Return raw JSON only.',
-    'After the JSON, on a new line beginning with "SUMMARY:", write a one-paragraph plain-text summary of what was merged and any notable decisions (e.g. conflicting columns resolved, duplicate rows dropped).'
+    'After the JSON, on a new line beginning with "SUMMARY:", write a one-paragraph plain-text summary',
+    'covering: how many files were merged, total row count, columns normalized, and any conflicts resolved.'
   ].join('\n');
 
   function getCheckedFiles() {
@@ -68,20 +87,18 @@ export function initConsolidation() {
 
       var userContent = 'Consolidate the following Excel files:\n\n' + JSON.stringify(fileDataArr, null, 2);
 
-      // Call Anthropic Messages API (non-streaming — structured JSON response required)
-      var response = await fetch(ANTHROPIC_API_URL, {
+      // Call backend proxy (non-streaming — structured JSON response required)
+      var response = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': state.apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-opus-4-5',
+          model: 'anthropic/claude-opus-4-5',
           max_tokens: 8192,
-          system: SYSTEM_PROMPT,
-          messages: [{ role: 'user', content: userContent }]
+          stream: false,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userContent }
+          ]
         })
       });
 
@@ -91,7 +108,7 @@ export function initConsolidation() {
       }
 
       var json = await response.json();
-      var rawText = json.content[0].text;
+      var rawText = json.choices[0].message.content;
 
       // Split response: JSON AoA + summary text
       var summaryIdx = rawText.indexOf('\nSUMMARY:');
@@ -113,6 +130,18 @@ export function initConsolidation() {
 
       // Open merged result in Excel editor
       state.openFile(syntheticFile);
+
+      // Auto-save to master records if available
+      if (state.saveMasterRecord) {
+        var recDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        state.saveMasterRecord({
+          name: label,
+          date: recDate,
+          sourceCount: checkedFiles.length,
+          rowCount: mergedAoA.length - 1,
+          fileObj: syntheticFile
+        });
+      }
 
       // Post Claude summary to chat
       state.addMessage(summaryText, 'ai');

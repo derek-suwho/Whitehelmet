@@ -1,30 +1,29 @@
-# Group 2 — Frontend: Records, Dashboard & File Upload
+# Group 1 — AI Spreadsheet Operations
 
 ## What you're building
-Two things: (1) the file/folder upload experience so users can bring their Excel reports into the app, and (2) a saved records dashboard so users can save consolidations, browse past ones, and reopen them.
+Natural language spreadsheet editing. When a user types a command like "add a Total column" or "remove empty rows" in the chat, your code intercepts it, calls Claude to understand the intent, and applies the change to the open spreadsheet.
 
 ## Your files
-- `js/file-ingestion.js` — file and folder upload logic
-- `js/master-records.js` — saved records data layer and dashboard logic
-- `css/master-records.css` — all your styles go here
+- `js/ai-operations.js` — **your main file, implement everything here**
+- `js/chat.js` — you may modify this if needed for command routing
 
 ## Do not touch
 Everything else. Especially `js/state.js`, `js/app.js`, and `index.html` — these are pre-wired for you.
 
 ## How it works
-- Dashboard renders inside the `#dashboard-root` div (already in index.html, hidden by default)
-- Register `state.showDashboard()` and `state.hideDashboard()` to toggle it
-- Register `state.saveMasterRecord(record)` to save a record to `state.masterRecords[]`
-- Use `state.openFile(fileObj)` to reopen a saved record in the spreadsheet editor
-- Use `state.addMessage(text, 'ai')` to post notifications to chat
-- All persistence goes through Group 3's API (`/api/records`) — no localStorage
-- Match the existing dark theme: base `#0f1217`, amber accent `#e29a35`, see `css/styles.css` for all tokens
+- Your code registers itself on `state.chatCommandHandler`
+- When a user sends a chat message, `chat.js` calls your handler first
+- Return `true` if you handled it (skips normal chat), `false` to pass through
+- Use `state.excelState.instance` to mutate the spreadsheet (Jspreadsheet CE API)
+- Use `state.addMessage(text, 'ai')` to post results back to chat
+- Use `state.apiKey` for Anthropic API calls
+- The backend proxy endpoint for AI calls will be at `/api/chat` (Group 3 builds this)
 
 ## Two roles
-- **Person 2A (Data Layer):** Save/load/delete records, metadata extraction (date, source files, row/column counts), calls Group 3's `/api/records` endpoints
-- **Person 2B (Dashboard UI):** Card or table layout listing all saved records, click to reopen, styling in `css/master-records.css`
+- **Person 1A (Command Parser):** Call Claude to classify the message and extract structured intent — what operation, what parameters
+- **Person 1B (Spreadsheet Mutator):** Take that structured intent and apply it to the spreadsheet using the Jspreadsheet CE API
 
 ## Getting started
 1. Run `node serve.mjs` to start the local server at http://localhost:3000
 2. Run `/gsd:new-project` in Claude Code to set up your planning
-3. Group 3's API endpoints (`/api/records`) won't exist yet — stub them out or mock locally while you wait
+3. Replace `YOUR_KEY_HERE` in `js/state.js` with a real Anthropic API key to test

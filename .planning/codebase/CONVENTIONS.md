@@ -1,137 +1,126 @@
 # Coding Conventions
 
-**Analysis Date:** 2026-03-10
+**Analysis Date:** 2026-03-17
 
 ## Naming Patterns
 
 **Files:**
-- Module files use `.mjs` extension for ES modules (e.g., `serve.mjs`, `screenshot.mjs`)
-- HTML files use lowercase with `.html` extension (e.g., `index.html`)
-- Directory names use lowercase with spaces for descriptive names (e.g., `temporary screenshots`)
+- kebab-case for JS modules: `ai-operations.js`, `excel-editor.js`, `file-ingestion.js`, `master-records.js`
+- kebab-case for CSS: `master-records.css`, `styles.css`
+- camelCase for server/tool scripts: `serve.mjs`, `screenshot.mjs`
 
 **Functions:**
-- Function names use camelCase (e.g., `addMessage`, `sendMessage`, `createServer`)
-- Event handlers use camelCase with descriptive action verbs (e.g., `addEventListener`, `sendMessage`)
-- Variable names use camelCase for single words or multi-word identifiers (e.g., `chatHistory`, `chatInput`, `emptyState`)
+- camelCase for all function names: `initChat()`, `initExcelEditor()`, `addMessage()`, `sendMessage()`, `readFileAsAOA()`, `getCheckedFiles()`, `formatFileSize()`, `truncateName()`, `deleteSource()`, `wireEmptyState()`
+- `init*` prefix for module entry-point functions: `initChat`, `initExcelEditor`, `initFileIngestion`, `initConsolidation`, `initAiOperations`, `initMasterRecords`
+- `create*` prefix for DOM factory functions: `createFileItem()`, `createFolderItem()`
+- Event handler functions are anonymous: `sendBtn.addEventListener('click', function () { ... })`
 
 **Variables:**
-- DOM element references use camelCase with element type suffix (e.g., `chatHistory`, `chatInput`, `chatSendBtn`)
-- Constants use UPPER_SNAKE_CASE (e.g., `AI_MOCK_REPLY`, `MIME_TYPES`, `CHROME_PATHS`, `PORT`)
-- Local variables use camelCase (e.g., `urlPath`, `filePath`, `contentType`)
+- camelCase for local variables: `checkedFiles`, `fileDataArr`, `currentInstance`, `panelBody`, `fullResponse`
+- ALL_CAPS for module-level constants: `ANTHROPIC_API_URL`, `SYSTEM_PROMPT`, `EMPTY_CENTER_HTML`, `FILE_ICON`, `FOLDER_ICON`
+- MIME_TYPES in `serve.mjs`
+- Short abbreviations are common for DOM references: `cb` (checkbox), `dz` (drop zone), `wb` (workbook), `ws` (worksheet), `f` (file)
 
 **Types:**
-- Object properties use camelCase (e.g., `executablePath`, `headless`, `waitUntil`)
-- HTML element IDs use camelCase (e.g., `chatHistory`, `chatInput`, `chatEmptyState`)
-- CSS class names use kebab-case with BEM-like structure (e.g., `chat-bubble`, `chat-bubble-user`, `panel-header`)
+- No TypeScript. No JSDoc type annotations. Types are implicit.
+
+**CSS Classes:**
+- BEM-style with hyphens: `.panel-left`, `.panel-header`, `.panel-body`, `.source-item`, `.source-item-name`, `.source-item-meta`, `.source-folder-children`, `.msg-bubble`, `.chat-empty-state`
 
 ## Code Style
 
 **Formatting:**
-- No explicit linter configured (no ESLint, Prettier)
-- Consistent 2-space indentation throughout codebase
-- Lines wrap naturally; no strict line length enforcement observed
-- Single quotes preferred in JavaScript code (`'text'`)
+- No formatter configured (no `.prettierrc`, no `biome.json`, no `.editorconfig`)
+- Indentation: 2 spaces throughout all JS files
+- Single quotes for strings in JS (consistent across all modules)
+- Semicolons used at end of statements
+
+**Variable declarations:**
+- `var` is the primary declaration keyword throughout all existing modules (`js/chat.js`, `js/excel-editor.js`, `js/file-ingestion.js`, `js/consolidation.js`)
+- `const` and `let` appear only in `serve.mjs` (Node.js ESM context)
+- New group code in `js/ai-operations.js` should use `var` to match existing style
 
 **Linting:**
-- No linting configuration file present
-- Manual code review approach appears to be in use
+- No ESLint config detected. No linting enforced.
 
 ## Import Organization
 
-**Order:**
-1. Node.js built-in modules first (`http`, `fs`, `path`)
-2. Third-party packages next (`puppeteer`)
-3. Utility imports (`fileURLToPath`)
-4. Constant declarations follow imports
+**Pattern:**
+- Single import per module: `import { state } from './state.js';`
+- All modules import only from `./state.js` — no cross-module imports
+- External libraries (SheetJS, Jspreadsheet, Tailwind) are loaded globally via CDN in `index.html` and accessed as globals (`XLSX`, `jspreadsheet`)
+- No barrel files
 
-**Path Aliases:**
-- No path aliases configured
-- Relative file paths use `path.join()` and `path.dirname()` for cross-platform compatibility
-- Uses ES module URL resolution with `import.meta.url` for obtaining directory paths
-
-**Pattern (ES Modules):**
-```javascript
-import http from 'http';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-```
+**Module system:**
+- Native ES modules (`type: "module"` in `package.json`)
+- Each module exports exactly one named function: `export function init*() { ... }`
+- `js/app.js` is the sole orchestrator that imports and calls all `init*` functions
 
 ## Error Handling
 
 **Patterns:**
-- Server-side: Callback-based error handling with status code checks (e.g., `err.code === 'ENOENT'`)
-- HTTP errors: Explicit response codes (404 Not Found, 500 Internal Server Error)
-- CLI validation: Early exit pattern with `process.exit(1)` for missing required arguments
-- Puppeteer operations: Uses async/await with timeout configuration
+- `try/catch/finally` blocks wrap async API calls in `js/chat.js` and `js/consolidation.js`
+- `finally` block always re-enables UI inputs and resets badge text
+- Errors are surfaced to the user via `state.addMessage(message, 'ai')` — no console logging
+- Silent catch for expected failures: `try { currentInstance.destroy(); } catch (ex) {}` in `js/excel-editor.js`
+- JSON parse errors in SSE stream are silently ignored: `catch (parseErr) { // Ignore malformed SSE lines }`
+- Error messages concatenate `err.message` directly into user-visible strings: `'Consolidation failed: ' + err.message + '. Please try again.'`
+- Command handler errors in `js/chat.js` are caught at the call site and shown in chat: `addMessage('Command error: ' + handlerErr.message, 'ai')`
 
-**Observed approach:**
-- Errors logged to console with `console.error()` and `console.log()`
-- Response headers set before sending body data
-- File system operations use error callbacks in `fs.readFile()`
+**Guard clauses:**
+- Early returns for invalid state: `if (!state.excelState.instance) return false;`
+- Guard for missing checked files: `if (checkedFiles.length === 0) { state.addMessage(...); return; }`
+- Null checks before calling registered functions: `if (state.openFile) state.openFile(f.file);`
 
 ## Logging
 
-**Framework:** `console` object (no external logging library)
+**Framework:** None — no logging library.
 
 **Patterns:**
-- Informational messages use `console.log()` with user-facing information
-- Error conditions use `console.error()` for stderr output
-- Logs include contextual information: `http://localhost:${PORT}`, `Screenshot saved: ${outputPath}`
-- Logging includes variable interpolation with template literals
-
-**Locations:**
-- Server startup: `serve.mjs` line 51-52
-- Screenshot completion: `screenshot.mjs` line 44
-- CLI errors: `screenshot.mjs` line 9
+- No `console.log` calls in any JS module
+- `console.log` appears only in `serve.mjs`: `console.log(\`Server running at http://localhost:${PORT}\`)`
+- User-visible feedback is delivered exclusively via `state.addMessage(text, 'ai')` or direct DOM manipulation
 
 ## Comments
 
 **When to Comment:**
-- Inline comments explain non-obvious logic or configuration
-- Comments describe the purpose of code sections (e.g., "Mock AI response after 500ms")
-- Comments clarify browser chrome paths and their purpose
+- Block comments at top of each file declare ownership and purpose: `// ── AI Spreadsheet Operations (Group 1) ─────────────────`
+- Inline section dividers use the Unicode dash pattern: `// ── Section Name ─────────────────────`
+- Inline comments on non-obvious logic: `// Keep incomplete line in buffer`, `// Split on newline SSE boundaries`
+- TODOs use format: `// TODO: Group 1 implements here`
 
 **JSDoc/TSDoc:**
-- No JSDoc comments observed in codebase
-- Not applicable for this project (no type annotations)
+- Not used anywhere in the codebase.
 
 ## Function Design
 
-**Size:**
-- Small, focused functions (most under 15 lines)
-- `addMessage()`: 13 lines (DOM manipulation + scrolling)
-- `sendMessage()`: 13 lines (input handling + async response)
-- Server request handler: 25 lines with error handling
+**Size:** Functions are medium-length. `sendMessage()` in `js/chat.js` is ~115 lines and handles the full async SSE flow inline. `consolidate()` in `js/consolidation.js` is ~90 lines. Smaller helper functions (`formatFileSize`, `truncateName`, `formatDate`) are 3–8 lines.
 
-**Parameters:**
-- Limited parameters per function (1-2 typical)
-- DOM elements passed as references
-- Configuration passed as plain objects (e.g., `{ recursive: true }`)
+**Parameters:** Functions use zero to two parameters. DOM event handlers are zero-parameter. Module-internal helpers take simple values: `deleteSource(index)`, `truncateName(name, max)`, `addMessage(text, sender, skipHistory)`.
 
 **Return Values:**
-- DOM manipulation functions return created elements
-- Event handlers typically return void
-- File operations use callbacks with error-first pattern
+- Init functions return nothing (side-effect only)
+- `chatCommandHandler` must return a boolean (`true` = handled, `false` = pass through) — this is the interface contract for `js/ai-operations.js`
+- DOM factory functions return the created element: `createFileItem()`, `createFolderItem()`
+- Promise-returning functions: `readFileAsAOA(file)` returns `Promise<object>`, `traverseDirectory(dirEntry)` returns `Promise<File[]>`
 
 ## Module Design
 
 **Exports:**
-- Server script (`serve.mjs`): No explicit exports; runs as standalone HTTP server
-- Screenshot script (`screenshot.mjs`): No exports; executes directly with CLI arguments
-- HTML file (`index.html`): Embedded inline scripts; no module exports
+- Each module exports exactly one named function: `export function init*() { ... }`
+- All inter-module communication goes through `state` object — never import other modules
 
-**Barrel Files:**
-- Not applicable; no barrel/index pattern used
-- Each script is independently executable
+**State registration pattern:**
+- Modules register their functions onto `state` during init:
+  ```js
+  state.chatCommandHandler = async function (userText) { ... };
+  state.addMessage = addMessage;
+  state.openFile = function (fileObj) { ... };
+  ```
+- Consumers check for null before calling: `if (state.chatCommandHandler) { ... }`
 
-**Module Pattern:**
-- Server uses IIFE (Immediately Invoked Function Expression) in HTML for encapsulation
-- CLI scripts execute at module load time without wrapping
-- Separation of concerns: separate scripts for server, screenshots, and UI
+**Barrel files:** Not used.
 
 ---
 
-*Convention analysis: 2026-03-10*
+*Convention analysis: 2026-03-17*
