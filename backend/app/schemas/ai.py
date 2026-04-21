@@ -16,11 +16,12 @@ class ConsolidateRequest(BaseModel):
 
 
 class CommandRequest(BaseModel):
-    user_text: str
-    column_headers: list[str]
+    message: str
+    headers: list[str]
+    snapshot: str | None = None
     model: str = "anthropic/claude-opus-4-5"
 
 
 class CommandResponse(BaseModel):
     op: str | None
-    raw: dict
+    params: dict = {}
