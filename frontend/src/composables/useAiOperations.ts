@@ -511,13 +511,14 @@ async function applyOperation(
       const operator = String(p.operator ?? '=')
       const value = String(p.value ?? '')
       const tbody = jss.el?.querySelector('table tbody') as HTMLElement | null
-      const trs = tbody?.querySelectorAll('tr')
+      if (!tbody) return 'Filter unavailable: spreadsheet not mounted.'
+      const trs = tbody.querySelectorAll('tr')
       let hidden = 0
       for (let r = 0; r < data.length; r++) {
         const cellVal = (data[r] as unknown[])[colIdx]
         const keep = evaluateCondition(cellVal, operator, value)
         if (!keep) {
-          if (trs && trs[r]) (trs[r] as HTMLElement).style.display = 'none'
+          if (trs[r]) (trs[r] as HTMLElement).style.display = 'none'
           hiddenRows.add(r)
           hidden++
         }
