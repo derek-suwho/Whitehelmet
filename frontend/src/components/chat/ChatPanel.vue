@@ -34,13 +34,11 @@ async function sendMessage() {
   if (!text || chat.isStreaming) return
 
   input.value = ''
+  chat.addMessage(text, 'user')
 
-  // handleCommand adds the user message internally
   const handled = await handleCommand(text)
   if (handled) return
 
-  // Regular chat — add user message here since sendMessage no longer does it
-  chat.addMessage(text, 'user')
   await chat.sendMessage(text)
 }
 

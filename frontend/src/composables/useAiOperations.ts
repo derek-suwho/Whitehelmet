@@ -714,9 +714,6 @@ export function useAiOperations() {
     const spreadsheet = useSpreadsheetStore()
     const jss = spreadsheet.instance
 
-    // Always echo user message to chat
-    chat.addMessage(text, 'user')
-
     // ── Keyword shortcuts (bypass /api/ai/command) ──
     if (NEW_TEMPLATE_RE.test(text)) {
       chat.addMessage('Use the "New" button in the editor panel to create a blank template.', 'ai')
