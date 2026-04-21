@@ -35,11 +35,12 @@ async function sendMessage() {
 
   input.value = ''
 
-  // Try AI operations first
+  // handleCommand adds the user message internally
   const handled = await handleCommand(text)
   if (handled) return
 
-  // Otherwise send as regular chat
+  // Regular chat — add user message here since sendMessage no longer does it
+  chat.addMessage(text, 'user')
   await chat.sendMessage(text)
 }
 
