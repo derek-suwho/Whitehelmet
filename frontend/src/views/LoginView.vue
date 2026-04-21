@@ -6,21 +6,21 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 
-const username = ref('')
+const email = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
 async function handleSubmit() {
   error.value = ''
-  if (!username.value.trim() || !password.value) {
-    error.value = 'Username and password are required.'
+  if (!email.value.trim() || !password.value) {
+    error.value = 'Email and password are required.'
     return
   }
 
   loading.value = true
   try {
-    await auth.login(username.value.trim(), password.value)
+    await auth.login(email.value.trim(), password.value)
     router.push({ name: 'workspace' })
   } catch (err) {
     if (err instanceof Error) {
@@ -67,22 +67,22 @@ async function handleSubmit() {
           {{ error }}
         </div>
 
-        <!-- Username -->
+        <!-- Email -->
         <div class="mb-4">
           <label
-            for="login-username"
+            for="login-email"
             class="mb-1.5 block text-sm font-medium text-gray-400"
           >
-            Username
+            Email
           </label>
           <input
-            id="login-username"
-            v-model="username"
-            type="text"
-            autocomplete="username"
+            id="login-email"
+            v-model="email"
+            type="email"
+            autocomplete="email"
             required
             class="w-full rounded-lg border border-white/10 bg-surface px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 transition-colors duration-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/30"
-            placeholder="Enter your username"
+            placeholder="Enter your email"
           />
         </div>
 

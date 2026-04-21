@@ -21,5 +21,14 @@ export const useSpreadsheetStore = defineStore('spreadsheet', () => {
     fileName.value = null
   }
 
-  return { instance, workbook, fileName, setInstance, clear }
+  function loadWorkbook(wb: any, name: string) {
+    if (instance.value?.destroy) {
+      instance.value.destroy()
+    }
+    instance.value = null
+    fileName.value = name
+    workbook.value = wb
+  }
+
+  return { instance, workbook, fileName, setInstance, clear, loadWorkbook }
 })

@@ -25,7 +25,7 @@ export function useConsolidation() {
 
     try {
       // Parse each xlsx file client-side
-      const payload: ConsolidationPayload = { files: [] }
+      const payload: ConsolidationPayload = { files_data: [] }
 
       for (const file of files) {
         const buffer = await file.arrayBuffer()
@@ -40,10 +40,10 @@ export function useConsolidation() {
         const headers = (json[0] as unknown[]).map(String)
         const rows = json.slice(1)
 
-        payload.files.push({ name: file.name, headers, rows })
+        payload.files_data.push({ name: file.name, headers, rows })
       }
 
-      if (payload.files.length === 0) {
+      if (payload.files_data.length === 0) {
         chat.addMessage('No valid spreadsheet data found in selected files.', 'system')
         return
       }
@@ -100,7 +100,7 @@ export function useConsolidation() {
 
       spreadsheet.setInstance(jss, readWb, 'consolidated.xlsx')
       chat.addMessage(
-        `Consolidated ${payload.files.length} files: ${colHeaders.length} columns, ${dataRows.length} rows.`,
+        `Consolidated ${payload.files_data.length} files: ${colHeaders.length} columns, ${dataRows.length} rows.`,
         'ai',
       )
     } catch (err) {

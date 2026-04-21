@@ -1,11 +1,17 @@
 """Auth request/response schemas."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class LoginRequest(BaseModel):
-    username: str
+    email: EmailStr
     password: str
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+    display_name: str
 
 
 class UserResponse(BaseModel):

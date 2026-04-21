@@ -1,27 +1,45 @@
-"""Auth routes — login, logout, current user."""
+"""Auth routes — login, logout, register, current user."""
+
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user
-from app.core.security import generate_session_token, generate_csrf_token, session_expiry
+from app.core.security import (
+    generate_session_token, generate_csrf_token, session_expiry,
+    hash_password, verify_password,
+)
 from app.db.session import get_db
 from app.models.session import SessionModel
 from app.models.user import User
-from app.schemas.auth import LoginRequest, UserResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(body: RegisterRequest, db: Session = Depends(get_db)):
+    """Create a new local email/password account."""
+    if db.query(User).filter(User.email == body.email).first():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+
+    user = User(
+        external_id=str(uuid.uuid4()),
+        email=body.email,
+        display_name=body.display_name,
+        password_hash=hash_password(body.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.post("/login")
 async def login(body: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
-    """
-    Authenticate against Whitehelmet's external auth service.
-
-    TODO: Replace stub with actual auth service integration once
-    auth system type is confirmed (OAuth2/SAML/LDAP).
-    """
+    """Authenticate with email and password."""
     from app.core.rate_limit import check_rate_limit, record_failed_attempt
 
     ip = request.client.host if request.client else "unknown"
@@ -33,43 +51,27 @@ async def login(body: LoginRequest, request: Request, response: Response, db: Se
             headers={"Retry-After": str(remaining)},
         )
 
+    user = db.query(User).filter(User.email == body.email).first()
+    if not user or not user.password_hash or not verify_password(body.password, user.password_hash):
+        record_failed_attempt(ip)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
     settings = get_settings()
+    token = generate_session_token()
+    session = SessionModel(token=token, user_id=user.id, expires_at=session_expiry())
+    db.add(session)
+    db.commit()
 
-    # --- STUB: Replace with real auth service call ---
-    # Example: POST {settings.auth_service_url}/validate
-    # with credentials, get back user info
-    #
-    # For now, reject all logins until auth is integrated
-    record_failed_attempt(ip)
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Auth service integration pending — awaiting auth system type confirmation",
+    response.set_cookie(
+        key="session_id",
+        value=token,
+        httponly=True,
+        secure=settings.environment != "dev",
+        samesite="strict",
+        max_age=settings.session_expiry_hours * 3600,
     )
-    # --- END STUB ---
-
-    # After successful auth validation, this is how session creation works:
-    # user = db.query(User).filter(User.external_id == external_user_id).first()
-    # if not user:
-    #     user = User(external_id=..., email=..., display_name=...)
-    #     db.add(user)
-    #     db.commit()
-    #     db.refresh(user)
-    #
-    # token = generate_session_token()
-    # session = SessionModel(token=token, user_id=user.id, expires_at=session_expiry())
-    # db.add(session)
-    # db.commit()
-    #
-    # response.set_cookie(
-    #     key="session_id",
-    #     value=token,
-    #     httponly=True,
-    #     secure=True,
-    #     samesite="strict",
-    #     max_age=settings.session_expiry_hours * 3600,
-    # )
-    # csrf = generate_csrf_token(token)
-    # return {"user": UserResponse.model_validate(user), "csrf_token": csrf}
+    csrf = generate_csrf_token(token)
+    return {"user": UserResponse.model_validate(user), "csrf_token": csrf}
 
 
 @router.post("/logout")
