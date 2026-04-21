@@ -30,10 +30,14 @@ export const useRecordsStore = defineStore('records', () => {
     return resp
   }
 
+  async function fetchRecord(id: number): Promise<MasterRecord & { headers: string[]; rows: unknown[][] }> {
+    return api.get(`/api/records/${id}`)
+  }
+
   async function deleteRecord(id: number) {
     await api.delete(`/api/records/${id}`)
     records.value = records.value.filter((r) => r.id !== id)
   }
 
-  return { records, loading, fetchRecords, createRecord, deleteRecord }
+  return { records, loading, fetchRecords, fetchRecord, createRecord, deleteRecord }
 })

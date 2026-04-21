@@ -1,111 +1,104 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
-import * as XLSX from 'xlsx'
+import { useRecordsStore } from '@/stores/records'
+import {
+  useSpreadsheetEditor,
+  sheetNames,
+  currentSheetIdx,
+  zoomLevel,
+  formulaRef,
+  formulaValue,
+  fmtState,
+  lastTextColor,
+  lastFillColor,
+} from '@/composables/useSpreadsheetEditor'
 
 const spreadsheet = useSpreadsheetStore()
-const containerRef = ref<HTMLElement | null>(null)
+const records = useRecordsStore()
 
-// Watch for workbook changes to mount Jspreadsheet
+const {
+  openFile,
+  closeFile,
+  switchSheet,
+  stepZoom,
+  toolbarAction,
+  setNumFormat,
+  handleFormulaEnter,
+  handleFormulaEscape,
+  showColorPicker,
+  downloadXlsx,
+  wireKeyboardShortcuts,
+  cleanupKeyboardShortcuts,
+} = useSpreadsheetEditor()
+
+// Save bar / modal state
+const showSaveModal = ref(false)
+const saveName = ref('')
+const saving = ref(false)
+const saveError = ref('')
+
+const zoomPercent = computed(() => Math.round(zoomLevel.value * 100) + '%')
+
 watch(
   () => spreadsheet.workbook,
   async (wb) => {
     if (!wb) return
     await nextTick()
-    if (!containerRef.value) return
-    mountSpreadsheet(wb)
+    openFile(wb)
   },
 )
 
 onMounted(() => {
-  if (spreadsheet.workbook && containerRef.value) {
-    mountSpreadsheet(spreadsheet.workbook)
+  wireKeyboardShortcuts()
+  if (spreadsheet.workbook) {
+    openFile(spreadsheet.workbook)
   }
 })
 
-function mountSpreadsheet(wb: any) {
-  if (!containerRef.value) return
-
-  // If instance was already set by consolidation, skip re-mounting
-  if (spreadsheet.instance) return
-
-  const sheetName = wb.SheetNames[0]
-  if (!sheetName) return
-
-  const sheet = wb.Sheets[sheetName]
-  const json = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
-  if (json.length === 0) return
-
-  const headers = (json[0] as unknown[]).map(String)
-  const rows = json.slice(1).map((row) =>
-    headers.map((_, i) => {
-      const val = (row as unknown[])[i]
-      return val !== undefined && val !== null ? String(val) : ''
-    }),
-  )
-
-  // Clear container
-  containerRef.value.innerHTML = ''
-
-  // Assign the container an id for useConsolidation compatibility
-  containerRef.value.id = 'spreadsheet-container'
-
-  // @ts-expect-error jspreadsheet-ce global
-  const jss = window.jspreadsheet
-    ? // @ts-expect-error jspreadsheet-ce global
-      window.jspreadsheet(containerRef.value, {
-        data: rows.length > 0 ? rows : [headers.map(() => '')],
-        columns: headers.map((h: string) => ({ title: h, width: 150 })),
-        minDimensions: [headers.length, 1],
-      })
-    : null
-
-  if (jss) {
-    spreadsheet.setInstance(jss, wb, spreadsheet.fileName ?? 'Sheet')
-  }
-}
+onBeforeUnmount(() => {
+  cleanupKeyboardShortcuts()
+})
 
 function handleDownload() {
-  const instance = spreadsheet.instance
-  const wb = spreadsheet.workbook
-  if (!instance && !wb) return
-
-  let outWb: any
-
-  if (instance?.getData && instance?.getHeaders) {
-    const headers: string[] = instance.getHeaders()
-    const data: unknown[][] = instance.getData()
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...data])
-    outWb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(outWb, ws, 'Sheet1')
-  } else if (wb) {
-    outWb = wb
-  }
-
-  if (!outWb) return
-
-  const wbOut = XLSX.write(outWb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([wbOut], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = spreadsheet.fileName ?? 'spreadsheet.xlsx'
-  a.click()
-  URL.revokeObjectURL(url)
+  downloadXlsx(spreadsheet.fileName ?? 'spreadsheet.xlsx')
 }
 
 function handleClose() {
-  if (containerRef.value) {
-    containerRef.value.innerHTML = ''
-  }
-  spreadsheet.clear()
+  showSaveModal.value = false
+  spreadsheet.clearPendingSave()
+  closeFile()
 }
 
-onBeforeUnmount(() => {
-  // Don't destroy instance on unmount — store manages lifecycle
-})
+function openSaveModal() {
+  saveName.value = spreadsheet.fileName?.replace(/\.xlsx$/i, '') ?? 'Consolidated'
+  saveError.value = ''
+  showSaveModal.value = true
+}
+
+async function handleSave() {
+  if (!saveName.value.trim()) {
+    saveError.value = 'Name is required.'
+    return
+  }
+  saving.value = true
+  saveError.value = ''
+  try {
+    const data = spreadsheet.pendingSave
+    if (!data) throw new Error('No data to save.')
+    await records.createRecord({ name: saveName.value.trim(), headers: data.headers, rows: data.rows })
+    showSaveModal.value = false
+    spreadsheet.clearPendingSave()
+  } catch (err) {
+    saveError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    saving.value = false
+  }
+}
+
+function onColorBtn(e: MouseEvent, type: 'text' | 'fill') {
+  showColorPicker(e.currentTarget as HTMLElement, type)
+}
 </script>
 
 <template>
@@ -113,60 +106,187 @@ onBeforeUnmount(() => {
     class="flex flex-1 flex-col overflow-hidden bg-surface-light"
     aria-label="Spreadsheet editor"
   >
-    <!-- Toolbar -->
+    <!-- ── Toolbar ── -->
     <div
       v-if="spreadsheet.fileName"
-      class="flex items-center justify-between border-b border-white/5 px-4 py-2"
+      class="flex flex-wrap items-center gap-0.5 border-b border-white/5 bg-surface px-2 py-1"
     >
-      <div class="flex items-center gap-3">
-        <svg
-          class="h-4 w-4 text-green-500/70"
-          fill="currentColor"
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-        >
-          <path
-            fill-rule="evenodd"
-            d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5z"
-            clip-rule="evenodd"
-          />
+      <!-- File name -->
+      <span class="mr-2 flex items-center gap-1.5 text-xs text-gray-400">
+        <svg class="h-3.5 w-3.5 text-green-500/70" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+          <path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 003 3.5v13A1.5 1.5 0 004.5 18h11a1.5 1.5 0 001.5-1.5V7.621a1.5 1.5 0 00-.44-1.06l-4.12-4.122A1.5 1.5 0 0011.378 2H4.5z" clip-rule="evenodd"/>
         </svg>
-        <span class="text-sm font-medium text-gray-200">{{ spreadsheet.fileName }}</span>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <button
-          type="button"
-          class="rounded-md px-3 py-1.5 text-sm text-gray-400 transition-colors duration-200 hover:bg-white/5 hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-light active:bg-white/10"
-          aria-label="Download spreadsheet"
-          @click="handleDownload"
-        >
-          <svg class="mr-1 inline-block h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17v3a2 2 0 002 2h14a2 2 0 002-2v-3" />
-          </svg>
-          Download
-        </button>
-        <button
-          type="button"
-          class="rounded-md px-3 py-1.5 text-sm text-gray-400 transition-colors duration-200 hover:bg-white/5 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-light active:bg-white/10"
-          aria-label="Close spreadsheet"
-          @click="handleClose"
-        >
-          Close
-        </button>
-      </div>
+        {{ spreadsheet.fileName }}
+      </span>
+
+      <div class="xt-sep" />
+
+      <!-- Undo / Redo -->
+      <button type="button" class="xt-btn" title="Undo (Ctrl+Z)" @click="toolbarAction('undo')">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"/></svg>
+      </button>
+      <button type="button" class="xt-btn" title="Redo (Ctrl+Y)" @click="toolbarAction('redo')">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 10H11a8 8 0 00-8 8v2m18-10l-6 6m6-6l-6-6"/></svg>
+      </button>
+
+      <div class="xt-sep" />
+
+      <!-- Bold / Italic / Underline -->
+      <button type="button" :class="['xt-btn font-bold', fmtState.bold && 'xt-btn-active']" title="Bold (Ctrl+B)" @click="toolbarAction('bold')">B</button>
+      <button type="button" :class="['xt-btn italic', fmtState.italic && 'xt-btn-active']" title="Italic (Ctrl+I)" @click="toolbarAction('italic')">I</button>
+      <button type="button" :class="['xt-btn underline', fmtState.underline && 'xt-btn-active']" title="Underline (Ctrl+U)" @click="toolbarAction('underline')">U</button>
+
+      <div class="xt-sep" />
+
+      <!-- Text color -->
+      <button type="button" class="xt-btn xt-color-btn" title="Text color" @click="onColorBtn($event, 'text')">
+        <span class="text-xs leading-none">A</span>
+        <span class="xt-color-bar" :style="{ backgroundColor: lastTextColor }" />
+      </button>
+      <!-- Fill color -->
+      <button type="button" class="xt-btn xt-color-btn" title="Fill color" @click="onColorBtn($event, 'fill')">
+        <svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 012-2h8a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>
+        <span class="xt-color-bar" :style="{ backgroundColor: lastFillColor }" />
+      </button>
+
+      <div class="xt-sep" />
+
+      <!-- Alignment -->
+      <button type="button" :class="['xt-btn', fmtState.align === 'left' && 'xt-btn-active']" title="Align left" @click="toolbarAction('align-left')">
+        <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zm0 5a1 1 0 011-1h8a1 1 0 110 2H3a1 1 0 01-1-1zm0 5a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+      </button>
+      <button type="button" :class="['xt-btn', fmtState.align === 'center' && 'xt-btn-active']" title="Align center" @click="toolbarAction('align-center')">
+        <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zm3 5a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1zm-3 5a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+      </button>
+      <button type="button" :class="['xt-btn', fmtState.align === 'right' && 'xt-btn-active']" title="Align right" @click="toolbarAction('align-right')">
+        <svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M2 4a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1zm5 5a1 1 0 011-1h8a1 1 0 110 2H8a1 1 0 01-1-1zm-5 5a1 1 0 011-1h14a1 1 0 110 2H3a1 1 0 01-1-1z" clip-rule="evenodd"/></svg>
+      </button>
+
+      <div class="xt-sep" />
+
+      <!-- Merge / Wrap -->
+      <button type="button" class="xt-btn text-[10px]" title="Merge cells" @click="toolbarAction('merge')">Merge</button>
+      <button type="button" :class="['xt-btn', fmtState.wrapText && 'xt-btn-active']" title="Wrap text" @click="toolbarAction('wrap')">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h12a4 4 0 010 8H8m0 0l3-3m-3 3l3 3"/></svg>
+      </button>
+
+      <div class="xt-sep" />
+
+      <!-- Number format -->
+      <select class="xt-select" title="Number format" :value="fmtState.numFormat" @change="setNumFormat(($event.target as HTMLSelectElement).value)">
+        <option value="">Default</option>
+        <option value="number">Number</option>
+        <option value="currency">Currency</option>
+        <option value="percent">Percent</option>
+        <option value="date">Date</option>
+      </select>
+
+      <div class="xt-sep" />
+
+      <!-- Row / Col ops -->
+      <button type="button" class="xt-btn text-[10px]" title="Insert row above" @click="toolbarAction('insert-row')">+Row</button>
+      <button type="button" class="xt-btn text-[10px]" title="Insert column left" @click="toolbarAction('insert-col')">+Col</button>
+      <button type="button" class="xt-btn text-[10px]" title="Delete selected row(s)" @click="toolbarAction('delete-row')">-Row</button>
+      <button type="button" :class="['xt-btn text-[10px]', fmtState.freeze && 'xt-btn-active']" title="Freeze first row" @click="toolbarAction('freeze')">Freeze</button>
+
+      <div class="xt-sep" />
+
+      <!-- Find -->
+      <button type="button" class="xt-btn" title="Find & Replace (Ctrl+F)" @click="toolbarAction('find')">
+        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      </button>
+
+      <div class="xt-sep" />
+
+      <!-- Zoom -->
+      <button type="button" class="xt-btn" title="Zoom out" @click="stepZoom(-0.1)">−</button>
+      <span class="xt-zoom-label">{{ zoomPercent }}</span>
+      <button type="button" class="xt-btn" title="Zoom in" @click="stepZoom(0.1)">+</button>
+      <button type="button" class="xt-btn text-[10px]" title="Reset zoom" @click="toolbarAction('zoom-reset')">Reset</button>
+
+      <!-- Spacer -->
+      <div class="flex-1" />
+
+      <!-- Download / Close -->
+      <button
+        type="button"
+        class="rounded-md px-2.5 py-1 text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-gray-200"
+        @click="handleDownload"
+      >
+        Download
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2.5 py-1 text-xs text-gray-400 transition-colors hover:bg-white/5 hover:text-red-400"
+        @click="handleClose"
+      >
+        Close
+      </button>
     </div>
 
-    <!-- Spreadsheet container -->
+    <!-- ── Formula bar ── -->
+    <div v-if="spreadsheet.fileName" class="xt-formula-bar">
+      <span class="xt-cell-ref">{{ formulaRef }}</span>
+      <span class="xt-formula-sep" />
+      <input
+        id="xt-formula-input"
+        class="xt-formula-input"
+        :value="formulaValue"
+        spellcheck="false"
+        @input="formulaValue = ($event.target as HTMLInputElement).value"
+        @keydown.enter.prevent="handleFormulaEnter"
+        @keydown.escape.prevent="handleFormulaEscape"
+      />
+    </div>
+
+    <!-- ── Save bar (shown after consolidation) ── -->
+    <div
+      v-if="spreadsheet.pendingSave"
+      class="flex items-center gap-3 border-b border-brand-500/20 bg-brand-500/10 px-4 py-2"
+    >
+      <svg class="h-4 w-4 shrink-0 text-brand-400" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+      </svg>
+      <span class="flex-1 text-xs text-gray-300">Save this consolidation to master records?</span>
+      <button
+        type="button"
+        class="rounded-md bg-brand-500 px-3 py-1 text-xs font-medium text-gray-900 hover:bg-brand-400 transition-colors"
+        @click="openSaveModal"
+      >
+        Save
+      </button>
+      <button
+        type="button"
+        class="rounded-md px-2 py-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+        @click="spreadsheet.clearPendingSave()"
+      >
+        Dismiss
+      </button>
+    </div>
+
+    <!-- ── Spreadsheet container ── -->
     <div
       v-if="spreadsheet.fileName"
-      ref="containerRef"
       id="spreadsheet-container"
       class="flex-1 overflow-auto"
     />
 
-    <!-- Empty state -->
+    <!-- ── Sheet tabs ── -->
+    <div v-if="sheetNames.length > 1" class="xt-sheet-tabs">
+      <button
+        v-for="(name, idx) in sheetNames"
+        :key="idx"
+        type="button"
+        :class="['xt-sheet-tab', idx === currentSheetIdx && 'active']"
+        @click="switchSheet(idx)"
+      >
+        {{ name }}
+      </button>
+    </div>
+
+    <!-- ── Empty state ── -->
     <div
-      v-else
+      v-if="!spreadsheet.fileName"
       class="flex flex-1 flex-col items-center justify-center"
     >
       <div class="text-center">
@@ -190,5 +310,44 @@ onBeforeUnmount(() => {
         </p>
       </div>
     </div>
+
+    <!-- ── Save modal ── -->
+    <Teleport to="body">
+      <div
+        v-if="showSaveModal"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+        @click.self="showSaveModal = false"
+      >
+        <div class="w-80 rounded-xl border border-white/10 bg-surface-light p-6 shadow-2xl">
+          <h3 class="mb-4 font-display text-base font-semibold text-gray-200">Save to Records</h3>
+          <label class="mb-1.5 block text-xs text-gray-400">Record name</label>
+          <input
+            v-model="saveName"
+            type="text"
+            class="mb-4 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:border-brand-500/50 focus:outline-none"
+            placeholder="e.g. Q1 Consolidation"
+            @keydown.enter="handleSave"
+          />
+          <p v-if="saveError" class="mb-3 text-xs text-red-400">{{ saveError }}</p>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              :disabled="saving"
+              class="flex-1 rounded-md bg-brand-500 py-2 text-sm font-medium text-gray-900 transition-colors hover:bg-brand-400 disabled:opacity-50"
+              @click="handleSave"
+            >
+              {{ saving ? 'Saving…' : 'Save' }}
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md border border-white/10 py-2 text-sm text-gray-400 transition-colors hover:bg-white/5"
+              @click="showSaveModal = false"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </main>
 </template>

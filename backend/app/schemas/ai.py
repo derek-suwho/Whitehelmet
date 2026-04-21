@@ -1,5 +1,7 @@
 """AI proxy request/response schemas."""
 
+from __future__ import annotations
+from typing import Optional
 from pydantic import BaseModel
 
 
@@ -18,10 +20,10 @@ class ConsolidateRequest(BaseModel):
 class CommandRequest(BaseModel):
     message: str
     headers: list[str]
-    snapshot: str | None = None
+    snapshot: Optional[str] = None
     model: str = "anthropic/claude-opus-4-5"
 
 
 class CommandResponse(BaseModel):
-    op: str | None
+    op: Optional[str]
     params: dict = {}

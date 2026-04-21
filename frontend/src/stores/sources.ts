@@ -13,8 +13,15 @@ export const useSourcesStore = defineStore('sources', () => {
 
   const checkedCount = computed(() => checkedIds.value.size)
 
+  function _topLevelNames(): Set<string> {
+    return new Set(sources.value.map((s) => s.name))
+  }
+
   function addFiles(files: FileList) {
+    const existing = _topLevelNames()
     for (const file of Array.from(files)) {
+      if (existing.has(file.name)) continue
+      existing.add(file.name)
       sources.value.push({
         id: uid(),
         name: file.name,
@@ -33,10 +40,11 @@ export const useSourcesStore = defineStore('sources', () => {
     )
     if (xlsxFiles.length === 0) return
 
-    // Extract folder name from webkitRelativePath
     const first = files[0]
     const parts = (first as any).webkitRelativePath?.split('/') ?? []
     const folderName = parts[0] || 'Folder'
+
+    if (_topLevelNames().has(folderName)) return
 
     const folderId = uid()
     const children: Source[] = xlsxFiles.map((file) => ({
@@ -59,6 +67,8 @@ export const useSourcesStore = defineStore('sources', () => {
 
   function addFolderFromDrop(folderName: string, files: File[]) {
     if (files.length === 0) return
+    if (_topLevelNames().has(folderName)) return
+
     const folderId = uid()
     const children: Source[] = files.map((file) => ({
       id: uid(),

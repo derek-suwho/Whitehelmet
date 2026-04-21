@@ -1,4 +1,5 @@
 import Handsontable from 'handsontable'
+import { HyperFormula } from 'hyperformula'
 import * as XLSX from 'xlsx'
 import { ref } from 'vue'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
@@ -100,7 +101,8 @@ Handsontable.renderers.registerRenderer(
   function (hot, TD, row, col, prop, value, cellProps) {
     Handsontable.renderers
       .getRenderer('text')
-      .apply(this, [hot, TD, row, col, prop, value, cellProps])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .apply(null as any, [hot, TD, row, col, prop, value, cellProps])
 
     const fmt = _getFmt(_currentSheetIdx, row, col)
     // Header row defaults
@@ -311,6 +313,7 @@ export function useSpreadsheetEditor() {
       width: '100%',
       height: '100%',
       licenseKey: 'non-commercial-and-evaluation',
+      formulas: { engine: HyperFormula },
       colWidths: _allSheetColWidths[0] ?? 100,
       manualColumnResize: true,
       manualRowResize: true,
@@ -511,8 +514,8 @@ export function useSpreadsheetEditor() {
     )
       return
     switch (action) {
-      case 'undo':         _currentInstance!.undo(); break
-      case 'redo':         _currentInstance!.redo(); break
+      case 'undo':         (_currentInstance!.getPlugin('undoRedo') as any).undo(); break
+      case 'redo':         (_currentInstance!.getPlugin('undoRedo') as any).redo(); break
       case 'bold':         _toggleFmt('bold'); break
       case 'italic':       _toggleFmt('italic'); break
       case 'underline':    _toggleFmt('underline'); break
