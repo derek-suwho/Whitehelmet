@@ -28,29 +28,50 @@ export const useSourcesStore = defineStore('sources', () => {
   function addFolder(files: FileList) {
     if (files.length === 0) return
 
+    const xlsxFiles = Array.from(files).filter((f) =>
+      /\.(xlsx|xls)$/i.test(f.name),
+    )
+    if (xlsxFiles.length === 0) return
+
     // Extract folder name from webkitRelativePath
     const first = files[0]
     const parts = (first as any).webkitRelativePath?.split('/') ?? []
     const folderName = parts[0] || 'Folder'
 
     const folderId = uid()
-    const children: Source[] = []
-
-    for (const file of Array.from(files)) {
-      children.push({
-        id: uid(),
-        name: file.name,
-        size: file.size,
-        file,
-        type: 'file',
-      })
-    }
+    const children: Source[] = xlsxFiles.map((file) => ({
+      id: uid(),
+      name: file.name,
+      size: file.size,
+      file,
+      type: 'file' as const,
+    }))
 
     sources.value.push({
       id: folderId,
       name: folderName,
       size: children.reduce((sum, c) => sum + c.size, 0),
-      file: files[0], // reference file for the folder entry
+      file: xlsxFiles[0],
+      type: 'folder',
+      children,
+    })
+  }
+
+  function addFolderFromDrop(folderName: string, files: File[]) {
+    if (files.length === 0) return
+    const folderId = uid()
+    const children: Source[] = files.map((file) => ({
+      id: uid(),
+      name: file.name,
+      size: file.size,
+      file,
+      type: 'file' as const,
+    }))
+    sources.value.push({
+      id: folderId,
+      name: folderName,
+      size: children.reduce((sum, c) => sum + c.size, 0),
+      file: files[0],
       type: 'folder',
       children,
     })
@@ -136,6 +157,7 @@ export const useSourcesStore = defineStore('sources', () => {
     checkedCount,
     addFiles,
     addFolder,
+    addFolderFromDrop,
     removeSource,
     toggleCheck,
     getCheckedFiles,

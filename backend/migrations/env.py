@@ -9,10 +9,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import all models so Alembic can detect them
+from app.core.config import get_settings
 from app.db.session import Base
 from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel
 
 target_metadata = Base.metadata
+
+# Inject DATABASE_URL from app settings, overriding alembic.ini
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 
 
 def run_migrations_offline():

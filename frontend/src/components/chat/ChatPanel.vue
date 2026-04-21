@@ -34,12 +34,11 @@ async function sendMessage() {
   if (!text || chat.isStreaming) return
 
   input.value = ''
+  chat.addMessage(text, 'user')
 
-  // Try AI operations first
   const handled = await handleCommand(text)
   if (handled) return
 
-  // Otherwise send as regular chat
   await chat.sendMessage(text)
 }
 

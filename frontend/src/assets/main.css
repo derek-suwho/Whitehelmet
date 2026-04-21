@@ -1,3 +1,169 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Spreadsheet toolbar ─────────────────────────────────────── */
+.xt-btn {
+  @apply flex items-center justify-center rounded px-1.5 py-1 text-xs text-gray-300 transition-colors duration-100;
+  @apply hover:bg-white/10 hover:text-white active:bg-white/20;
+  min-width: 24px;
+  height: 24px;
+}
+.xt-btn-active {
+  @apply bg-white/15 text-white;
+}
+.xt-sep {
+  @apply mx-0.5 h-4 w-px bg-white/10 shrink-0;
+}
+.xt-color-btn {
+  @apply flex-col gap-0;
+  height: 28px;
+}
+.xt-color-bar {
+  height: 3px;
+  width: 14px;
+  border-radius: 1px;
+  margin-top: 1px;
+}
+.xt-select {
+  @apply rounded bg-white/5 px-1 py-0.5 text-xs text-gray-300 border border-white/10;
+  @apply hover:bg-white/10 focus:outline-none;
+  height: 24px;
+}
+.xt-zoom-label {
+  @apply text-xs text-gray-500 tabular-nums;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ── Formula bar ─────────────────────────────────────────────── */
+.xt-formula-bar {
+  @apply flex items-center border-b border-white/5 bg-surface;
+  height: 28px;
+  flex-shrink: 0;
+}
+.xt-cell-ref {
+  @apply text-xs text-gray-400 font-mono px-2 border-r border-white/10;
+  min-width: 48px;
+  text-align: center;
+  line-height: 28px;
+}
+.xt-formula-sep {
+  @apply w-px h-4 bg-white/10 mx-1 shrink-0;
+}
+.xt-formula-input {
+  @apply flex-1 bg-transparent text-xs text-gray-200 px-2 focus:outline-none;
+}
+
+/* ── Sheet tabs ──────────────────────────────────────────────── */
+.xt-sheet-tabs {
+  @apply flex border-t border-white/5 bg-surface overflow-x-auto;
+  flex-shrink: 0;
+}
+.xt-sheet-tab {
+  @apply px-3 py-1 text-xs text-gray-500 border-r border-white/5 hover:bg-white/5 hover:text-gray-300 transition-colors duration-100;
+  white-space: nowrap;
+}
+.xt-sheet-tab.active {
+  @apply bg-white/10 text-gray-200;
+}
+
+/* ── Color picker dropdown ───────────────────────────────────── */
+.xt-color-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 9999;
+  display: grid;
+  grid-template-columns: repeat(8, 18px);
+  gap: 2px;
+  padding: 6px;
+  background: #1e1e38;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.xt-color-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.xt-color-swatch:hover {
+  transform: scale(1.2);
+  border-color: rgba(255,255,255,0.4);
+}
+
+/* ── Find & Replace modal ────────────────────────────────────── */
+.xt-find-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 99999;
+  background: #1e1e38;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 20px;
+  width: 320px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+  color: #e2e8f0;
+}
+.xt-find-modal h3 {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+.xt-find-modal label {
+  display: block;
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+.xt-find-modal input {
+  display: block;
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #e2e8f0;
+  margin-bottom: 10px;
+  outline: none;
+  box-sizing: border-box;
+}
+.xt-find-modal-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.xt-find-modal-btns button {
+  flex: 1;
+  padding: 5px 0;
+  font-size: 11px;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.05);
+  color: #94a3b8;
+  cursor: pointer;
+}
+.xt-find-modal-btns button.primary {
+  background: #f59e0b;
+  color: #1a1a2e;
+  border-color: transparent;
+  font-weight: 600;
+}
+.xt-find-status {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 8px;
+  min-height: 16px;
+}
+
+/* ── Handsontable overrides ──────────────────────────────────── */
+.handsontable .htCore td,
+.handsontable .htCore th {
+  font-size: 12px;
+}

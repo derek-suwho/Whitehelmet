@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import * as XLSX from 'xlsx'
 
@@ -9,8 +9,10 @@ const containerRef = ref<HTMLElement | null>(null)
 // Watch for workbook changes to mount Jspreadsheet
 watch(
   () => spreadsheet.workbook,
-  (wb) => {
-    if (!wb || !containerRef.value) return
+  async (wb) => {
+    if (!wb) return
+    await nextTick()
+    if (!containerRef.value) return
     mountSpreadsheet(wb)
   },
 )
