@@ -96,34 +96,67 @@ async def consolidate(body: ConsolidateRequest):
     })
 
 
+COMMAND_SYSTEM_PROMPT = """\
+You are a spreadsheet command parser. Given a user message and the current \
+spreadsheet state, return ONLY a JSON object (no markdown, no extra text).
+
+Supported operations (return exactly one):
+{"op":"add_column","name":"<header>","position":<0-based index or null for end>}
+{"op":"remove_column","name":"<header>"}
+{"op":"rename_column","from":"<old>","to":"<new>"}
+{"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}
+{"op":"sort","column":"<header>","order":"asc|desc"}
+{"op":"filter","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}
+{"op":"show_all_rows"}
+{"op":"remove_empty_rows"}
+{"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}
+{"op":"find_duplicates","column":"<header>"}
+{"op":"add_row","count":<number>,"position":<0-based or null for end>}
+{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"color":"#hex","bgColor":"#hex","align":"left|center|right"}}
+{"op":"highlight_column","column":"<header>","bgColor":"#hex"}
+{"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}
+{"op":"clear_format","column":"<header or null>"}
+{"op":"export"}
+{"op":"save_record"}
+{"op":"show_dashboard"}
+{"op":null}
+
+Notes:
+- filter: hide rows where column does NOT match the condition.
+- show_all_rows: triggered by "show all", "clear filter", "unfilter".
+- aggregate: report sum/avg/count/min/max in chat, no grid change.
+- find_duplicates: report duplicate values in chat, no grid change.
+- export: download spreadsheet as xlsx.
+- save_record: save current grid to master records.
+- show_dashboard: navigate to master records dashboard.
+- format_cells: column=null means whole sheet; row=null means all data rows.
+- If NOT a spreadsheet command return {"op":null}.
+"""
+
+
 @router.post("/command", response_model=CommandResponse)
 async def command(body: CommandRequest):
-    """Proxy NL spreadsheet command parsing to OpenRouter."""
-    system_prompt = (
-        "You are a spreadsheet command parser. The user will describe a change "
-        "to make to their spreadsheet. The current column headers are: "
-        f"{json.dumps(body.column_headers)}.\n\n"
-        "Return a JSON object with one of these operations:\n"
-        '- {"op":"add_column","name":"...","position":null}\n'
-        '- {"op":"remove_column","name":"..."}\n'
-        '- {"op":"rename_column","old_name":"...","new_name":"..."}\n'
-        '- {"op":"apply_formula","column":"...","formula":"..."}\n'
-        '- {"op":"sort","column":"...","order":"asc"|"desc"}\n'
-        '- {"op":"filter","column":"...","condition":"..."}\n'
-        '- {"op":null} if not a spreadsheet command\n\n'
-        "Return ONLY valid JSON, no markdown."
-    )
+    """Parse NL spreadsheet command via OpenRouter."""
+    context_parts = []
+    if body.snapshot:
+        context_parts.append(body.snapshot)
+    else:
+        context_parts.append(f"Column headers: {json.dumps(body.headers)}")
+    context_parts.append(f"User command: {body.message}")
+
     data = await _openrouter_post({
         "model": body.model,
         "max_tokens": 512,
         "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": body.user_text},
+            {"role": "system", "content": COMMAND_SYSTEM_PROMPT},
+            {"role": "user", "content": "\n\n".join(context_parts)},
         ],
     })
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
     try:
-        parsed = json.loads(content)
+        parsed = json.loads(content.strip())
     except json.JSONDecodeError:
         parsed = {"op": None}
-    return CommandResponse(op=parsed.get("op"), raw=parsed)
+
+    op = parsed.pop("op", None)
+    return CommandResponse(op=op, params=parsed)

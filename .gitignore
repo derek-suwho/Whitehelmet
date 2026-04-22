@@ -2,9 +2,13 @@
 node_modules/
 temporary screenshots/
 .env
+.env.*
+backend/.env
+backend/.env.*
 *.md
 !README.md
 !PLAN.md
+!figma-components/*.md
 dist/
 .worktrees/
 __pycache__/

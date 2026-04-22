@@ -25,7 +25,7 @@ export function useConsolidation() {
 
     try {
       // Parse each xlsx file client-side
-      const payload: ConsolidationPayload = { files: [] }
+      const payload: ConsolidationPayload = { files_data: [] }
 
       for (const file of files) {
         const buffer = await file.arrayBuffer()
@@ -40,10 +40,10 @@ export function useConsolidation() {
         const headers = (json[0] as unknown[]).map(String)
         const rows = json.slice(1)
 
-        payload.files.push({ name: file.name, headers, rows })
+        payload.files_data.push({ name: file.name, headers, rows })
       }
 
-      if (payload.files.length === 0) {
+      if (payload.files_data.length === 0) {
         chat.addMessage('No valid spreadsheet data found in selected files.', 'system')
         return
       }
@@ -56,51 +56,18 @@ export function useConsolidation() {
 
       const { headers, rows } = resp.data
 
-      // Build a synthetic xlsx file from the consolidated result
+      // Build workbook from consolidated result
       const wsData = [headers, ...rows]
       const ws = XLSX.utils.aoa_to_sheet(wsData)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Consolidated')
+      const consolidatedWb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(consolidatedWb, ws, 'Consolidated')
 
-      const wbOut = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-      const blob = new Blob([wbOut], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-      const syntheticFile = new File([blob], 'consolidated.xlsx', { type: blob.type })
+      // Load into editor via store — SpreadsheetEditor watches workbook and mounts Handsontable
+      spreadsheet.loadWorkbook(consolidatedWb, 'consolidated.xlsx')
+      spreadsheet.setPendingSave({ headers, rows: rows as unknown[][] })
 
-      // Open in spreadsheet editor
-      // Read back as workbook for the store
-      const readBuffer = await syntheticFile.arrayBuffer()
-      const readWb = XLSX.read(readBuffer, { type: 'array' })
-
-      // Create Jspreadsheet data
-      const readSheet = readWb.Sheets[readWb.SheetNames[0]]
-      const readJson = XLSX.utils.sheet_to_json<unknown[]>(readSheet, { header: 1 })
-      const colHeaders = (readJson[0] as unknown[]).map(String)
-      const dataRows = readJson.slice(1).map((row) =>
-        colHeaders.map((_, i) => {
-          const val = (row as unknown[])[i]
-          return val !== undefined && val !== null ? String(val) : ''
-        }),
-      )
-
-      // Destroy existing instance if any
-      spreadsheet.clear()
-
-      // Create Jspreadsheet instance
-      const el = document.getElementById('spreadsheet-container')
-      if (!el) throw new Error('Spreadsheet container not found')
-
-      // @ts-expect-error jspreadsheet is loaded globally
-      const jss = jspreadsheet(el, {
-        data: dataRows.length > 0 ? dataRows : [colHeaders.map(() => '')],
-        columns: colHeaders.map((h) => ({ title: h, width: 150 })),
-        minDimensions: [colHeaders.length, 1],
-      })
-
-      spreadsheet.setInstance(jss, readWb, 'consolidated.xlsx')
       chat.addMessage(
-        `Consolidated ${payload.files.length} files: ${colHeaders.length} columns, ${dataRows.length} rows.`,
+        `Consolidated ${payload.files_data.length} files: ${headers.length} columns, ${rows.length} rows.`,
         'ai',
       )
     } catch (err) {

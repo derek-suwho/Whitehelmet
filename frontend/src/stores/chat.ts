@@ -12,8 +12,6 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function sendMessage(text: string) {
-    addMessage(text, 'user')
-
     const aiMsg: ChatMessage = { role: 'ai', content: '' }
     messages.value.push(aiMsg)
     isStreaming.value = true
@@ -31,7 +29,11 @@ export const useChatStore = defineStore('chat', () => {
         method: 'POST',
         headers,
         credentials: 'include',
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          messages: messages.value
+            .slice(0, -1) // exclude the empty AI placeholder
+            .map(m => ({ role: m.role === 'ai' ? 'assistant' : m.role, content: m.content })),
+        }),
       })
 
       if (!res.ok) {
@@ -62,11 +64,12 @@ export const useChatStore = defineStore('chat', () => {
             if (data === '[DONE]') continue
 
             try {
-              const parsed = JSON.parse(data) as { token?: string; error?: string }
+              const parsed = JSON.parse(data) as { token?: string; error?: string; choices?: { delta?: { content?: string } }[] }
+              const token = parsed.token ?? parsed.choices?.[0]?.delta?.content
               if (parsed.error) {
                 aiMsg.content += `\n[Error: ${parsed.error}]`
-              } else if (parsed.token) {
-                aiMsg.content += parsed.token
+              } else if (token) {
+                aiMsg.content += token
               }
             } catch {
               // Non-JSON SSE data — treat as raw token
@@ -81,8 +84,9 @@ export const useChatStore = defineStore('chat', () => {
         const data = buffer.slice(6)
         if (data !== '[DONE]') {
           try {
-            const parsed = JSON.parse(data) as { token?: string }
-            if (parsed.token) aiMsg.content += parsed.token
+            const parsed = JSON.parse(data) as { token?: string; choices?: { delta?: { content?: string } }[] }
+            const token = parsed.token ?? parsed.choices?.[0]?.delta?.content
+            if (token) aiMsg.content += token
           } catch {
             aiMsg.content += data
           }
