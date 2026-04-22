@@ -89,6 +89,14 @@ The following files are shared across groups. Changes require a PR with sign-off
 - `frontend/src/lib/supabase.ts`
 - `frontend/src/types/database.ts` (generated types — regenerate with `supabase gen types typescript`, do not hand-edit)
 
+The following MVP files are also shared and should be treated as read-only unless explicitly extending them:
+- `frontend/src/components/editor/SpreadsheetEditor.vue`
+- `frontend/src/composables/useSpreadsheetEditor.ts`
+- `frontend/src/stores/records.ts`
+- `frontend/src/stores/sources.ts`
+- `frontend/src/stores/spreadsheet.ts`
+- `frontend/src/views/DashboardView.vue`
+
 ### Committing
 - Commits must be scoped to your group's files only. Never stage files outside your ownership table.
 - Use conventional commit prefixes: `feat(g1):`, `fix(g2):`, `chore(g3):`, etc.
@@ -251,6 +259,34 @@ Each group is responsible for adding RLS policies for its own tables (see per-gr
 - `frontend/src/lib/supabase.ts` — single Supabase client instance, imported everywhere
 - `frontend/src/types/database.ts` — generated from `supabase gen types typescript --local`
 - `frontend/src/stores/auth.ts` — Supabase Auth session, `user`, `profile`, `isAdmin`, `orgType` computed refs
+
+### Existing reusable components (MVP — available to all groups)
+
+The MVP Vue frontend ships a fully-featured spreadsheet editor and records dashboard that groups should reuse rather than rebuild:
+
+**`frontend/src/components/editor/SpreadsheetEditor.vue`** — full-featured spreadsheet component backed by Handsontable + HyperFormula. Capabilities as of the current build:
+- Multi-sheet workbook support: renders sheet tabs, switches between sheets
+- Formatting preservation on import: bold, italic, underline, text/fill color, alignment, wrap text, number/date formats
+- Merged cells and column-width preservation from source `.xlsx`
+- Full toolbar: undo/redo, bold/italic/underline, color pickers, alignment, merge cells, wrap text, number format selector, insert/delete row/column, freeze first row, find & replace, zoom in/out/reset
+- Formula bar with current cell reference and editable value/formula input
+- HyperFormula engine wired for live formula evaluation (`=SUM`, `=IF`, etc.)
+- Multi-sheet export: all loaded sheets are written back into the exported `.xlsx`
+- Props: `modelValue` (workbook data), `readonly?`, `onSave?`; emits: `update:modelValue`, `save`
+
+**`frontend/src/composables/useSpreadsheetEditor.ts`** — state and logic composable consumed by `SpreadsheetEditor.vue`. Exposes toolbar state, formula bar state, zoom level, sheet management, and formatting helpers. Import from the component rather than using the composable directly unless building a custom editor shell.
+
+**`frontend/src/views/DashboardView.vue`** — records dashboard. As of the current build:
+- Table layout with sortable Name and Date columns
+- Search input filtering records by name
+- Open action: re-loads a saved record back into the spreadsheet editor
+- Delete action with confirmation
+
+**`frontend/src/stores/records.ts`** — Pinia store for saved consolidation records. Exposes `fetchRecord(id)` for re-opening records and `pendingSave` flag set after consolidation.
+
+**`frontend/src/stores/sources.ts`** — Pinia store for uploaded source files. Includes duplicate-file and duplicate-folder-name guards.
+
+These files are shared across the platform. Treat them as read-only unless your group explicitly needs to extend them — changes require a PR with sign-off from all affected groups (same rule as the shared files listed above).
 
 ---
 
@@ -833,8 +869,9 @@ create policy "consolidated_pif_all" on consolidated_sheets for all using (
 Three tabs:
 
 **Columns tab:**
-- Table of columns: name (editable), type (dropdown), description (editable), validation rules (expandable inline editor), required toggle.
-- Add/remove/reorder rows.
+- Embed `SpreadsheetEditor.vue` (from MVP shared components) as the primary template editing surface. The editor is now fully featured: multi-sheet support, full toolbar (bold/italic/underline, color, alignment, merge, wrap, number format, insert/delete row/col, freeze, find & replace, zoom), formula bar, and HyperFormula engine for live formula evaluation. Use it in non-readonly mode so PMs can directly edit the template layout inline.
+- Supplementary column metadata panel alongside the editor: type dropdown, description field, validation rules (required, min/max, options), required toggle — these map to `schema_json` and are not handled by the spreadsheet directly.
+- Add/remove/reorder rows via toolbar or the metadata panel.
 - "Build with AI" toggle: opens `AIChatPanel` in side panel. PM types description, `g2-generate-template-ai` streams back a schema, PM can accept or keep editing.
 
 **Formulas tab:**
@@ -879,7 +916,7 @@ Both modes show progress and a success toast on completion.
   - Opens `ConsolidationStatusModal` with progress indicator.
   - Calls `g2-consolidate` Edge Function.
   - On complete: shows download link for master sheet, and notes how many freeform vs template submissions were included.
-- After consolidation, shows `AIChatPanel` for AI fine-tuning (calls `g2-finetune-consolidated`). PM can use this to manually map freeform columns into the normalized structure.
+- After consolidation, shows `SpreadsheetEditor.vue` (readonly mode) for inline preview of the master sheet, alongside `AIChatPanel` for AI fine-tuning (calls `g2-finetune-consolidated`). PM can use chat to map freeform columns; the editor updates to reflect each fine-tune result. Use the MVP `records.ts` store's `pendingSave` pattern to prompt the PM to save the result after they are satisfied.
 - "Download Master Sheet" button: generates signed URL from `consolidated/` bucket.
 
 #### `templates.ts` (Pinia store)
