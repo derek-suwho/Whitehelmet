@@ -91,7 +91,9 @@ async def logout(
     return {"status": "logged_out"}
 
 
-@router.get("/me", response_model=UserResponse)
-async def me(user: User = Depends(get_current_user)):
-    """Return current authenticated user."""
-    return user
+@router.get("/me")
+async def me(request: Request, user: User = Depends(get_current_user)):
+    """Return current authenticated user with CSRF token."""
+    session_token = request.cookies.get("session_id", "")
+    csrf = generate_csrf_token(session_token)
+    return {"user": UserResponse.model_validate(user), "csrf_token": csrf}

@@ -11,6 +11,12 @@ const router = createRouter({
       meta: { requiresAuth: false },
     },
     {
+      path: '/signup',
+      name: 'signup',
+      component: () => import('@/views/SignupView.vue'),
+      meta: { requiresAuth: false },
+    },
+    {
       path: '/',
       name: 'workspace',
       component: () => import('@/views/WorkspaceView.vue'),
@@ -36,8 +42,9 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
 
-  if (to.name === 'login' && auth.user) {
-    return { name: 'workspace' }
+  // Redirect authenticated users away from login/signup to dashboard
+  if ((to.name === 'login' || to.name === 'signup') && auth.user) {
+    return { name: 'dashboard' }
   }
 })
 

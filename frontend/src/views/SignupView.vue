@@ -6,29 +6,44 @@ import { useAuthStore } from '@/stores/auth'
 const router = useRouter()
 const auth = useAuthStore()
 
+const displayName = ref('')
 const email = ref('')
 const password = ref('')
+const confirmPassword = ref('')
 const error = ref('')
 const loading = ref(false)
 
+function validate(): string | null {
+  if (!displayName.value.trim()) return 'Display name is required.'
+  if (!email.value.trim()) return 'Email is required.'
+  if (password.value.length < 8) return 'Password must be at least 8 characters.'
+  if (password.value !== confirmPassword.value) return 'Passwords do not match.'
+  return null
+}
+
 async function handleSubmit() {
   error.value = ''
-  if (!email.value.trim() || !password.value) {
-    error.value = 'Email and password are required.'
+  const validationError = validate()
+  if (validationError) {
+    error.value = validationError
     return
   }
 
   loading.value = true
   try {
+    await auth.register(email.value.trim(), password.value, displayName.value.trim())
+    // Auto-login after registration
     await auth.login(email.value.trim(), password.value)
     router.push({ name: 'dashboard' })
   } catch (err) {
     if (err instanceof Error) {
-      error.value = err.message.includes('401')
-        ? 'Invalid username or password.'
-        : err.message
+      if (err.message.includes('409')) {
+        error.value = 'An account with this email already exists.'
+      } else {
+        error.value = err.message
+      }
     } else {
-      error.value = 'Login failed. Please try again.'
+      error.value = 'Registration failed. Please try again.'
     }
   } finally {
     loading.value = false
@@ -50,7 +65,7 @@ async function handleSubmit() {
       <!-- Logo -->
       <div class="mb-8 text-center">
         <h1 class="font-display text-3xl tracking-tight text-brand-400">Whitehelmet</h1>
-        <p class="mt-2 text-sm text-gray-500">Construction data consolidation</p>
+        <p class="mt-2 text-sm text-gray-500">Create your account</p>
       </div>
 
       <!-- Card -->
@@ -67,16 +82,35 @@ async function handleSubmit() {
           {{ error }}
         </div>
 
+        <!-- Display Name -->
+        <div class="mb-4">
+          <label
+            for="signup-name"
+            class="mb-1.5 block text-sm font-medium text-gray-400"
+          >
+            Display Name
+          </label>
+          <input
+            id="signup-name"
+            v-model="displayName"
+            type="text"
+            autocomplete="name"
+            required
+            class="w-full rounded-lg border border-white/10 bg-surface px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 transition-colors duration-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/30"
+            placeholder="Enter your name"
+          />
+        </div>
+
         <!-- Email -->
         <div class="mb-4">
           <label
-            for="login-email"
+            for="signup-email"
             class="mb-1.5 block text-sm font-medium text-gray-400"
           >
             Email
           </label>
           <input
-            id="login-email"
+            id="signup-email"
             v-model="email"
             type="email"
             autocomplete="email"
@@ -87,21 +121,40 @@ async function handleSubmit() {
         </div>
 
         <!-- Password -->
-        <div class="mb-6">
+        <div class="mb-4">
           <label
-            for="login-password"
+            for="signup-password"
             class="mb-1.5 block text-sm font-medium text-gray-400"
           >
             Password
           </label>
           <input
-            id="login-password"
+            id="signup-password"
             v-model="password"
             type="password"
-            autocomplete="current-password"
+            autocomplete="new-password"
             required
             class="w-full rounded-lg border border-white/10 bg-surface px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 transition-colors duration-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/30"
-            placeholder="Enter your password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+
+        <!-- Confirm Password -->
+        <div class="mb-6">
+          <label
+            for="signup-confirm"
+            class="mb-1.5 block text-sm font-medium text-gray-400"
+          >
+            Confirm Password
+          </label>
+          <input
+            id="signup-confirm"
+            v-model="confirmPassword"
+            type="password"
+            autocomplete="new-password"
+            required
+            class="w-full rounded-lg border border-white/10 bg-surface px-3 py-2.5 text-sm text-gray-200 placeholder-gray-600 transition-colors duration-200 focus:border-brand-500/50 focus:outline-none focus:ring-1 focus:ring-brand-500/30"
+            placeholder="Re-enter your password"
           />
         </div>
 
@@ -126,19 +179,19 @@ async function handleSubmit() {
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
-            Signing in...
+            Creating account...
           </template>
-          <template v-else>Sign in</template>
+          <template v-else>Create Account</template>
         </button>
 
-        <!-- Signup link -->
+        <!-- Login link -->
         <p class="mt-4 text-center text-sm text-gray-500">
-          Don't have an account?
+          Already have an account?
           <router-link
-            :to="{ name: 'signup' }"
+            :to="{ name: 'login' }"
             class="text-brand-400 transition-colors hover:text-brand-300"
           >
-            Sign up
+            Sign in
           </router-link>
         </p>
       </form>

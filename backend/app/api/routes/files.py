@@ -1,9 +1,10 @@
-"""File upload routes — validated xlsx upload with server-side storage."""
+"""File routes — upload, list, download, delete (user-scoped)."""
 
 import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -12,11 +13,12 @@ from app.core.security import hash_file
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
 from app.models.user import User
+from app.schemas.files import FileResponse, FileListResponse
 
 router = APIRouter(
     prefix="/api/files",
     tags=["files"],
-    dependencies=[Depends(get_current_user), Depends(verify_csrf)],
+    dependencies=[Depends(get_current_user)],
 )
 
 ALLOWED_MIME_TYPES = {
@@ -26,7 +28,68 @@ ALLOWED_MIME_TYPES = {
 ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 
 
-@router.post("/upload", status_code=status.HTTP_201_CREATED)
+@router.get("", response_model=FileListResponse)
+async def list_files(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all files for the authenticated user."""
+    files = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.user_id == user.id)
+        .order_by(UploadedFile.created_at.desc())
+        .all()
+    )
+    return FileListResponse(
+        files=[FileResponse.model_validate(f) for f in files],
+        total=len(files),
+    )
+
+
+@router.get("/{file_id}", response_model=FileResponse)
+async def get_file(
+    file_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get file metadata (user-scoped)."""
+    f = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
+        .first()
+    )
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+    return f
+
+
+@router.get("/{file_id}/download")
+async def download_file(
+    file_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download file content (user-scoped)."""
+    f = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
+        .first()
+    )
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    stored = Path(f.stored_path)
+    if not stored.exists():
+        raise HTTPException(status_code=404, detail="File data missing from storage")
+
+    return FastAPIFileResponse(
+        path=str(stored),
+        filename=f.original_name,
+        media_type=f.mime_type or "application/octet-stream",
+    )
+
+
+@router.post("/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def upload_file(
     file: UploadFile = File(...),
     user: User = Depends(get_current_user),
@@ -81,9 +144,28 @@ async def upload_file(
     db.commit()
     db.refresh(uploaded)
 
-    return {
-        "id": uploaded.id,
-        "original_name": uploaded.original_name,
-        "size_bytes": uploaded.size_bytes,
-        "sha256": uploaded.sha256,
-    }
+    return FileResponse.model_validate(uploaded)
+
+
+@router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
+async def delete_file(
+    file_id: int,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a file (user-scoped). Removes both DB record and stored file."""
+    f = (
+        db.query(UploadedFile)
+        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
+        .first()
+    )
+    if not f:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Remove stored file
+    stored = Path(f.stored_path)
+    if stored.exists():
+        stored.unlink()
+
+    db.delete(f)
+    db.commit()
