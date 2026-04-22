@@ -19,3 +19,4 @@ backend/.coverage
 frontend/coverage/
 frontend/test-results/
 .claude/
+mind-map/
