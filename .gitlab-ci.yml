@@ -1,0 +1,198 @@
+stages:
+  - lint
+  - test
+  - security
+  - build
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.cache/npm"
+  DOCKER_BUILDKIT: "1"
+
+# ─── Gate 6: Linting ───────────────────────────────────
+
+lint:backend:
+  stage: lint
+  image: python:3.12-slim
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  before_script:
+    - pip install ruff
+  script:
+    - ruff check backend/ --output-format=github
+    - ruff format --check backend/
+  rules:
+    - changes: ["backend/**"]
+
+lint:frontend:
+  stage: lint
+  image: node:22-alpine
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [.cache/npm, frontend/node_modules]
+  before_script:
+    - cd frontend && npm ci
+  script:
+    - npx eslint . --ext .vue,.ts,.tsx
+    - npx prettier --check src/
+  rules:
+    - changes: ["frontend/**"]
+
+# ─── Gates 4 & 5: Tests + Coverage ────────────────────
+
+test:backend:
+  stage: test
+  image: python:3.12-slim
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths: [.cache/pip]
+  before_script:
+    - cd backend && pip install -r requirements.txt
+  script:
+    - pytest --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=80
+  coverage: '/^TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: backend/coverage.xml
+  rules:
+    - changes: ["backend/**"]
+
+test:frontend:
+  stage: test
+  image: node:22-alpine
+  cache:
+    key: npm-$CI_COMMIT_REF_SLUG
+    paths: [.cache/npm, frontend/node_modules]
+  before_script:
+    - cd frontend && npm ci
+  script:
+    - npx vitest run --coverage --coverage.reporter=text --coverage.reporter=cobertura
+    - "awk '/All files/ {print \"Coverage: \" $NF}' < /dev/stdin || true"
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: frontend/coverage/cobertura-coverage.xml
+  rules:
+    - changes: ["frontend/**"]
+
+# ─── Gates 1, 2, 3: Security Scans ────────────────────
+
+sast:backend:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install bandit
+  script:
+    - bandit -r backend/app/ -f json -o bandit-report.json --severity-level medium || true
+    - bandit -r backend/app/ --severity-level medium
+  artifacts:
+    paths: [bandit-report.json]
+    when: always
+  rules:
+    - changes: ["backend/**"]
+
+dependency:backend:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install pip-audit
+  script:
+    - pip-audit -r backend/requirements.txt --severity critical
+  rules:
+    - changes: ["backend/requirements.txt"]
+
+dependency:frontend:
+  stage: security
+  image: node:22-alpine
+  before_script:
+    - cd frontend && npm ci
+  script:
+    - npm audit --audit-level=high
+  allow_failure: true
+  rules:
+    - changes: ["frontend/package*.json"]
+
+secret_detection:
+  stage: security
+  image: python:3.12-slim
+  before_script:
+    - pip install detect-secrets
+  script:
+    - detect-secrets scan --all-files --exclude-files '\.env\.example$' --exclude-files 'node_modules/' > .secrets-report.json
+    - python -c "
+      import json, sys;
+      report = json.load(open('.secrets-report.json'));
+      results = report.get('results', {});
+      total = sum(len(v) for v in results.values());
+      print(f'Found {total} potential secrets');
+      sys.exit(1 if total > 0 else 0)
+      "
+  artifacts:
+    paths: [.secrets-report.json]
+    when: always
+
+# ─── Build Docker Images ──────────────────────────────
+
+build:backend:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - docker build -f deploy/docker/backend.Dockerfile -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/backend:latest
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/backend:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: ["backend/**", "deploy/docker/backend.Dockerfile"]
+
+build:frontend:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  script:
+    - docker build -f deploy/docker/frontend.Dockerfile -t $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA .
+    - docker tag $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE/frontend:latest
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/frontend:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+      changes: ["frontend/**", "deploy/docker/frontend.Dockerfile"]
+
+# ─── Deploy ───────────────────────────────────────────
+
+deploy:staging:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl apply -k deploy/k8s/overlays/staging/
+    - kubectl -n whitehelmet-staging rollout status deployment/backend --timeout=120s
+    - kubectl -n whitehelmet-staging rollout status deployment/frontend --timeout=120s
+  environment:
+    name: staging
+    url: https://staging.whitehelmet.example.com
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+deploy:production:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  script:
+    - kubectl apply -k deploy/k8s/overlays/production/
+    - kubectl -n whitehelmet-production rollout status deployment/backend --timeout=120s
+    - kubectl -n whitehelmet-production rollout status deployment/frontend --timeout=120s
+  environment:
+    name: production
+    url: https://whitehelmet.example.com
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

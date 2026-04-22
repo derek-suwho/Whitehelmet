@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  labels:
+    app: whitehelmet
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: whitehelmet
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: whitehelmet
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: REGISTRY/whitehelmet-frontend:latest
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    app: whitehelmet
+    component: frontend
+spec:
+  selector:
+    app: whitehelmet
+    component: frontend
+  ports:
+    - port: 80
+      targetPort: 80

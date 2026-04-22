@@ -1,0 +1,37 @@
+#!/bin/bash
+# Phase 0: Pre-commit hook — block secrets from being committed
+
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Patterns that should never appear in committed code
+PATTERNS=(
+    'sk-or-v1-'           # OpenRouter API keys
+    'sk-ant-'             # Anthropic API keys
+    'SUPABASE_SERVICE_ROLE_KEY=ey'
+    'SUPABASE_ANON_KEY=ey'
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'  # Supabase JWTs
+)
+
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR | grep -v '\.githooks/')
+
+if [ -z "$STAGED_FILES" ]; then
+    exit 0
+fi
+
+FOUND=0
+for pattern in "${PATTERNS[@]}"; do
+    MATCHES=$(echo "$STAGED_FILES" | xargs grep -l "$pattern" 2>/dev/null)
+    if [ -n "$MATCHES" ]; then
+        echo -e "${RED}BLOCKED: Secret pattern '$pattern' found in:${NC}"
+        echo "$MATCHES"
+        FOUND=1
+    fi
+done
+
+if [ $FOUND -ne 0 ]; then
+    echo -e "${RED}Commit rejected — rotate exposed keys and remove from staged files.${NC}"
+    exit 1
+fi
+
+exit 0

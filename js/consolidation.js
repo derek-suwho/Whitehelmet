@@ -72,10 +72,10 @@ export function initConsolidation() {
     consolidateBtn.disabled = true;
     chatInput.disabled = true;
     chatSendBtn.disabled = true;
-    chatBadge.textContent = 'Consolidating\u2026';
+    chatBadge.textContent = 'Consolidating…';
 
     // Show typing indicator
-    state.addMessage('Claude is consolidating\u2026', 'ai');
+    state.addMessage('Claude is consolidating…', 'ai');
 
     try {
       // Read all selected files into AoA format
@@ -88,12 +88,13 @@ export function initConsolidation() {
       var userContent = 'Consolidate the following Excel files:\n\n' + JSON.stringify(fileDataArr, null, 2);
 
       // Call backend proxy (non-streaming — structured JSON response required)
-      var response = await fetch('/api/chat', {
+      var response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'anthropic/claude-opus-4-5',
           max_tokens: 8192,
+          stream: false,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             { role: 'user', content: userContent }
@@ -124,7 +125,7 @@ export function initConsolidation() {
       XLSX.utils.book_append_sheet(wb2, ws2, 'Consolidated');
       var wbArray = XLSX.write(wb2, { bookType: 'xlsx', type: 'array' });
       var blob = new Blob([wbArray], { type: 'application/octet-stream' });
-      var label = 'Consolidated \u2014 ' + checkedFiles.length + ' source' + (checkedFiles.length !== 1 ? 's' : '');
+      var label = 'Consolidated — ' + checkedFiles.length + ' source' + (checkedFiles.length !== 1 ? 's' : '');
       var syntheticFile = new File([blob], label + '.xlsx', { type: 'application/octet-stream' });
 
       // Open merged result in Excel editor

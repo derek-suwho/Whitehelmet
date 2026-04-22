@@ -1,5 +1,17 @@
 .DS_Store
 node_modules/
 temporary screenshots/
-*.md
 .env
+*.md
+!README.md
+!PLAN.md
+dist/
+.worktrees/
+__pycache__/
+*.pyc
+*.pyo
+backend/.venv/
+backend/.coverage
+frontend/coverage/
+frontend/test-results/
+.claude/
