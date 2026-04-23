@@ -3,5 +3,6 @@ from app.models.record import Record
 from app.models.uploaded_file import UploadedFile
 from app.models.conversation import ConversationMessage
 from app.models.session import SessionModel
+from app.models.organization import Organization, OrgMembership  # noqa: F401
 
-__all__ = ["User", "Record", "UploadedFile", "ConversationMessage", "SessionModel"]
+__all__ = ["User", "Record", "UploadedFile", "ConversationMessage", "SessionModel", "Organization", "OrgMembership"]
