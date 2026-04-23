@@ -10,6 +10,7 @@ class Record(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String(500), nullable=False)
     source_count = Column(Integer, nullable=False, default=0)
     row_count = Column(Integer, nullable=False, default=0)

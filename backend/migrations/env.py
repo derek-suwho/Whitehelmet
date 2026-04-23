@@ -12,6 +12,7 @@ if config.config_file_name is not None:
 from app.core.config import get_settings
 from app.db.session import Base
 from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel
+from app.models.organization import Organization, OrgMembership  # noqa: F401
 
 target_metadata = Base.metadata
 
