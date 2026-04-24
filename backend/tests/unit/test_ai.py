@@ -112,8 +112,8 @@ def test_consolidate_returns_json(client):
 def test_command_missing_key_503(client):
     with patch("app.api.routes.ai.get_settings", return_value=_mock_settings()):
         resp = client.post("/api/ai/command", json={
-            "user_text": "add column Total",
-            "column_headers": ["A", "B"],
+            "message": "add column Total",
+            "headers": ["A", "B"],
             "model": "test",
         })
         assert resp.status_code == 503
@@ -128,8 +128,8 @@ def test_command_returns_parsed(client):
     with patch("app.api.routes.ai.get_settings", return_value=settings), \
          patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx):
         resp = client.post("/api/ai/command", json={
-            "user_text": "add column Total",
-            "column_headers": ["A", "B"],
+            "message": "add column Total",
+            "headers": ["A", "B"],
             "model": "test",
         })
         assert resp.status_code == 200
