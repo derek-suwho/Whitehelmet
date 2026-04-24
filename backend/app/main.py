@@ -21,7 +21,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Authorization"],
 )
 
 # Routes
@@ -40,6 +40,7 @@ async def startup():
     """
     from app.db.session import engine, Base
     from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel  # noqa: F401
+    from app.models.organization import Organization, OrgMembership  # noqa: F401
 
     if settings.environment == "dev":
         try:
