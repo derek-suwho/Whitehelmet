@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/composables/useApi'
 
 const props = defineProps<{
   mode: 'template-builder' | 'consolidation-finetune'
@@ -13,10 +13,7 @@ const emit = defineEmits<{
   'finetune-applied': []
 }>()
 
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
+interface Message { role: 'user' | 'assistant'; content: string }
 
 const messages = ref<Message[]>([])
 const input = ref('')
@@ -26,18 +23,13 @@ const error = ref('')
 async function send() {
   const text = input.value.trim()
   if (!text || loading.value) return
-
   messages.value.push({ role: 'user', content: text })
   input.value = ''
   loading.value = true
   error.value = ''
-
   try {
-    if (props.mode === 'template-builder') {
-      await sendTemplateBuilder(text)
-    } else {
-      await sendFinetune(text)
-    }
+    if (props.mode === 'template-builder') await sendTemplateBuilder(text)
+    else await sendFinetune(text)
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Something went wrong'
   } finally {
@@ -46,15 +38,10 @@ async function send() {
 }
 
 async function sendTemplateBuilder(prompt: string) {
-  const { data, error: fnError } = await supabase.functions.invoke('g2-generate-template-ai', {
-    body: { prompt },
-  })
-  if (fnError) throw fnError
-
-  const schema = data?.schema_json
-  if (schema) {
-    emit('schema-generated', schema)
-    const colCount = schema.columns?.length ?? 0
+  const data = await api.post<{ schema_json: object }>('/api/ai/template-generate', { prompt })
+  if (data?.schema_json) {
+    emit('schema-generated', data.schema_json)
+    const colCount = (data.schema_json as { columns: unknown[] }).columns?.length ?? 0
     messages.value.push({
       role: 'assistant',
       content: `Generated a template with ${colCount} column${colCount !== 1 ? 's' : ''}. Review and adjust in the editor.`,
@@ -64,16 +51,12 @@ async function sendTemplateBuilder(prompt: string) {
 
 async function sendFinetune(prompt: string) {
   if (!props.consolidatedSheetId) throw new Error('No consolidated sheet selected')
-  const { data, error: fnError } = await supabase.functions.invoke('g2-finetune-consolidated', {
-    body: { consolidated_sheet_id: props.consolidatedSheetId, prompt },
+  const data = await api.post<{ message: string }>('/api/ai/finetune', {
+    consolidated_sheet_id: props.consolidatedSheetId,
+    prompt,
   })
-  if (fnError) throw fnError
-
   emit('finetune-applied')
-  messages.value.push({
-    role: 'assistant',
-    content: data?.message ?? 'Changes applied to the master sheet.',
-  })
+  messages.value.push({ role: 'assistant', content: data?.message ?? 'Changes applied.' })
 }
 </script>
 
