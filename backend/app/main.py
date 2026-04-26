@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files
+from app.api.routes import health, auth, ai, records, files, formulas
 
 settings = get_settings()
 
@@ -30,6 +30,7 @@ app.include_router(auth.router)
 app.include_router(ai.router)
 app.include_router(records.router)
 app.include_router(files.router)
+app.include_router(formulas.router)
 
 
 @app.on_event("startup")
@@ -39,7 +40,7 @@ async def startup():
     Tolerant of missing DB so AI proxy routes work without MySQL running.
     """
     from app.db.session import engine, Base
-    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel  # noqa: F401
+    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel, Formula  # noqa: F401
 
     if settings.environment == "dev":
         try:

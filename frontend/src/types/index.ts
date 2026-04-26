@@ -24,12 +24,37 @@ export interface Source {
   children?: Source[]
 }
 
+export interface SavedFormula {
+  id: number
+  name: string
+  expression: string
+  description: string | null
+  nl_prompt: string | null
+  formula_type: string | null
+  created_at: string
+}
+
+export interface FormulaCreate {
+  name: string
+  expression: string
+  description?: string
+  nl_prompt?: string
+  formula_type?: string
+}
+
+export interface DetectedFormula {
+  column: string
+  expression: string
+}
+
 export type AiOperationType =
   | 'add_column'
   | 'remove_column'
   | 'rename_column'
   | 'sort'
   | 'apply_formula'
+  | 'apply_saved_formula'
+  | 'create_formula'
   | 'filter'
   | 'show_all_rows'
   | 'remove_empty_rows'

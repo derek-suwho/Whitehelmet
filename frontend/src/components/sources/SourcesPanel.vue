@@ -13,7 +13,7 @@ const { consolidate, isConsolidating } = useConsolidation()
 async function openFile(source: Source) {
   const file = source.file
   const buffer = await file.arrayBuffer()
-  const wb = XLSX.read(buffer, { type: 'array' })
+  const wb = XLSX.read(buffer, { type: 'array', cellFormula: true })
   spreadsheet.loadWorkbook(wb, file.name)
 }
 

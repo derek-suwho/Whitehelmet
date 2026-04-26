@@ -8,6 +8,7 @@ Depends(verify_csrf)]` on the router once login is implemented.
 import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 import httpx
 
 from app.core.config import get_settings
@@ -105,6 +106,8 @@ Supported operations (return exactly one):
 {"op":"remove_column","name":"<header>"}
 {"op":"rename_column","from":"<old>","to":"<new>"}
 {"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}
+{"op":"apply_saved_formula","formula_name":"<name from formula library>","column":"<header>"}
+{"op":"create_formula","nl_request":"<user description of the formula>","column":"<target column or null>"}
 {"op":"sort","column":"<header>","order":"asc|desc"}
 {"op":"filter","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}
 {"op":"show_all_rows"}
@@ -130,7 +133,23 @@ Notes:
 - save_record: save current grid to master records.
 - show_dashboard: navigate to master records dashboard.
 - format_cells: column=null means whole sheet; row=null means all data rows.
+- apply_saved_formula: use when user references a named formula from their library.
+- create_formula: use when user wants to create/generate a new formula via natural language.
 - If NOT a spreadsheet command return {"op":null}.
+"""
+
+FORMULA_SYSTEM_PROMPT = """\
+You are an Excel formula expert. Given a list of column headers and a user request, \
+return ONLY a JSON object with no markdown or extra text.
+
+Format: {"expression":"=<formula using {row} placeholder>","name":"<short descriptive name>","description":"<one sentence>","formula_type":"calculation|aggregation|lookup|transformation"}
+
+Rules:
+- Use {row} as a placeholder for the row number (e.g. =A{row}*B{row})
+- Reference columns by their letter position matching the order of headers provided (A=first, B=second, etc.)
+- The expression must be valid Microsoft Excel formula syntax
+- name should be 2-5 words, title case
+- If the request is unclear, make a reasonable best-guess formula
 """
 
 
@@ -160,3 +179,46 @@ async def command(body: CommandRequest):
 
     op = parsed.pop("op", None)
     return CommandResponse(op=op, params=parsed)
+
+
+class FormulaRequest(BaseModel):
+    nl_request: str
+    column_headers: list[str] = []
+    model: str = "anthropic/claude-opus-4-5"
+
+
+class FormulaAiResponse(BaseModel):
+    expression: str
+    name: str
+    description: str = ""
+    formula_type: str = "calculation"
+
+
+@router.post("/formula", response_model=FormulaAiResponse)
+async def generate_formula(body: FormulaRequest):
+    """Generate an Excel formula from a natural language request."""
+    header_context = (
+        f"Column headers (A={body.column_headers[0] if body.column_headers else '?'}): "
+        + ", ".join(f"{chr(65+i)}={h}" for i, h in enumerate(body.column_headers))
+        if body.column_headers
+        else "No headers provided."
+    )
+    data = await _openrouter_post({
+        "model": body.model,
+        "max_tokens": 256,
+        "messages": [
+            {"role": "system", "content": FORMULA_SYSTEM_PROMPT},
+            {"role": "user", "content": f"{header_context}\n\nRequest: {body.nl_request}"},
+        ],
+    })
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    try:
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="AI returned invalid formula JSON")
+    return FormulaAiResponse(
+        expression=parsed.get("expression", ""),
+        name=parsed.get("name", "Custom Formula"),
+        description=parsed.get("description", ""),
+        formula_type=parsed.get("formula_type", "calculation"),
+    )
