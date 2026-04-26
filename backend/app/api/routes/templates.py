@@ -1,6 +1,8 @@
 """Template routes — CRUD, versioning, status management."""
 import uuid, json
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
@@ -101,6 +103,20 @@ def save_version(template_id: str, body: TemplateVersionCreate,
     # Return schema_json as parsed object
     ver.schema_json = body.schema_json
     return ver
+
+@router.get("/consolidations/{sheet_id}/download")
+def download_consolidated(sheet_id: str, db: Session = Depends(get_db)):
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Consolidated sheet not found")
+    path = Path(sheet.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FastAPIFileResponse(
+        path=str(path),
+        filename=f"consolidated_{sheet_id}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 @router.get("/{template_id}/consolidations", response_model=list[ConsolidatedSheetResponse])
 def list_consolidations(template_id: str, db: Session = Depends(get_db)):
