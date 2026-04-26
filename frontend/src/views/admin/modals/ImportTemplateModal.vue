@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/composables/useApi'
 import { useTemplatesStore } from '@/stores/templates'
 import type { SchemaColumn } from '@/types/database'
 
@@ -18,32 +18,19 @@ const parsedColumns = ref<Array<{
   inferred_type: 'text' | 'number' | 'date' | 'percentage'
   sample_values: string[]
 }>>([])
-const uploadedFilePath = ref('')
 
 async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
-  if (!file.name.endsWith('.xlsx')) {
-    error.value = 'Only .xlsx files are supported.'
-    return
-  }
-
+  if (!file.name.endsWith('.xlsx')) { error.value = 'Only .xlsx files are supported.'; return }
   error.value = ''
   uploading.value = true
   templateName.value = file.name.replace('.xlsx', '')
-
   try {
-    const filePath = `uploads/${Date.now()}_${file.name}`
-    const { error: uploadError } = await supabase.storage.from('templates').upload(filePath, file)
-    if (uploadError) throw uploadError
-    uploadedFilePath.value = filePath
-
-    const { data, error: fnError } = await supabase.functions.invoke('g2-parse-template', {
-      body: { file_path: filePath },
-    })
-    if (fnError) throw fnError
-
-    parsedColumns.value = data.sheets?.[0]?.columns ?? []
+    const formData = new FormData()
+    formData.append('file', file)
+    const data = await api.postForm<{ columns: typeof parsedColumns.value }>('/api/ai/parse-template', formData)
+    parsedColumns.value = data.columns ?? []
     step.value = 2
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Upload failed'
@@ -53,11 +40,7 @@ async function onFileChange(e: Event) {
 }
 
 async function confirm() {
-  if (!templateName.value.trim()) {
-    error.value = 'Template name is required.'
-    return
-  }
-
+  if (!templateName.value.trim()) { error.value = 'Template name is required.'; return }
   uploading.value = true
   error.value = ''
   try {
@@ -81,11 +64,7 @@ async function confirm() {
 }
 
 function reset() {
-  step.value = 1
-  parsedColumns.value = []
-  templateName.value = ''
-  uploadedFilePath.value = ''
-  error.value = ''
+  step.value = 1; parsedColumns.value = []; templateName.value = ''; error.value = ''
 }
 </script>
 

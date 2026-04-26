@@ -76,4 +76,8 @@ export const api = {
     form.append('file', file)
     return request<T>(url, 'POST', form, true)
   },
+
+  postForm<T = unknown>(url: string, formData: FormData): Promise<T> {
+    return request<T>(url, 'POST', formData, true)
+  },
 }
