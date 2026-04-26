@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/composables/useApi'
 import { useTemplatesStore } from '@/stores/templates'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 import ConsolidationStatusModal from './modals/ConsolidationStatusModal.vue'
@@ -26,9 +26,7 @@ const consolidatedSheetId = ref('')
 
 onMounted(() => templatesStore.fetchTemplate(templateId))
 
-function onAllSubmitted() {
-  allSubmitted.value = true
-}
+function onAllSubmitted() { allSubmitted.value = true }
 
 async function consolidate() {
   if (!templatesStore.currentVersion) return
@@ -36,26 +34,18 @@ async function consolidate() {
   consolidationError.value = ''
   consolidationResult.value = null
   showStatusModal.value = true
-
   try {
-    const { data: submissions } = await supabase
-      .from('submissions')
-      .select('id')
-      .eq('status', 'locked')
-
-    const submissionIds = (submissions ?? []).map((s: { id: string }) => s.id)
-
-    const { data, error } = await supabase.functions.invoke('g2-consolidate', {
-      body: {
-        template_id: templateId,
-        template_version_id: templatesStore.currentVersion.id,
-        submission_ids: submissionIds,
-      },
+    const data = await api.post<{
+      consolidated_sheet_id: string
+      file_path: string
+      freeform_count: number
+      template_count: number
+    }>('/api/ai/consolidate', {
+      template_id: templateId,
+      template_version_id: templatesStore.currentVersion.id,
     })
-    if (error) throw error
-
     consolidationResult.value = data
-    consolidatedSheetId.value = data.consolidated_sheet_id
+    consolidatedSheetId.value = data?.consolidated_sheet_id ?? ''
   } catch (e) {
     consolidationError.value = e instanceof Error ? e.message : 'Consolidation failed'
   } finally {
@@ -65,12 +55,11 @@ async function consolidate() {
 
 async function download() {
   if (!consolidationResult.value) return
-  const url = await templatesStore.getDownloadUrl(consolidationResult.value.file_path)
+  const url = await templatesStore.getDownloadUrl(consolidationResult.value.consolidated_sheet_id)
   window.open(url, '_blank')
 }
 
 function onFinetuneApplied() {
-  // Re-load the master sheet preview
   templatesStore.fetchConsolidatedSheets(templateId)
 }
 </script>
