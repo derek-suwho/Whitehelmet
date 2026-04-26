@@ -4,8 +4,8 @@ from app.models.session import SessionModel
 
 
 def test_login_returns_501(client):
-    resp = client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    assert resp.status_code == 501
+    resp = client.post("/api/auth/login", json={"email": "u@example.com", "password": "p"})
+    assert resp.status_code == 401
 
 
 def test_logout_deletes_session(auth_client, db):
@@ -26,8 +26,8 @@ def test_me_returns_user(auth_client):
     resp = auth_client.get("/api/auth/me")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["email"] == "test@whitehelmet.com"
-    assert data["display_name"] == "Test User"
+    assert data["user"]["email"] == "test@whitehelmet.com"
+    assert data["user"]["display_name"] == "Test User"
 
 
 def test_me_unauthenticated(client):

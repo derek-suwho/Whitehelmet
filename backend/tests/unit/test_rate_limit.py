@@ -41,11 +41,11 @@ def test_reset_clears_lockout():
 
 
 def test_login_returns_429_after_lockout(client):
-    body = {"username": "u", "password": "p"}
-    # First MAX_ATTEMPTS get 501 (stub), next should get 429
+    body = {"email": "u@example.com", "password": "p"}
+    # First MAX_ATTEMPTS get 401 (invalid credentials), next should get 429
     for _ in range(MAX_ATTEMPTS):
         resp = client.post("/api/auth/login", json=body)
-        assert resp.status_code == 501
+        assert resp.status_code == 401
     resp = client.post("/api/auth/login", json=body)
     assert resp.status_code == 429
     assert "Retry-After" in resp.headers
