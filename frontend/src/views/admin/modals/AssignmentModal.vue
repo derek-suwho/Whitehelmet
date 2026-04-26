@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/composables/useApi'
 import { useAdminStore } from '@/stores/admin'
+import type { TemplateAssignment } from '@/types/database'
 
 const props = defineProps<{ open: boolean; templateVersionId: string }>()
 const emit = defineEmits<{ close: []; assigned: [] }>()
@@ -17,7 +18,6 @@ const error = ref('')
 const successUrl = ref('')
 
 onMounted(() => adminStore.fetchOrganizations())
-
 const devcoOrgs = () => adminStore.organizations.filter((o) => o.type === 'devco')
 
 async function assign() {
@@ -27,51 +27,25 @@ async function assign() {
     if (mode.value === 'template') {
       if (!selectedOrgIds.value.length) throw new Error('Select at least one DevCo.')
       if (!deadline.value) throw new Error('Deadline is required.')
-
-      const { data: { user } } = await supabase.auth.getUser()
-      for (const orgId of selectedOrgIds.value) {
-        const { data: assignment, error: insertError } = await supabase
-          .from('template_assignments')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .insert({
-            template_version_id: props.templateVersionId,
-            org_id: orgId,
-            assigned_by: user?.id,
-            deadline: new Date(deadline.value).toISOString(),
-            submission_type: 'template' as const,
-            status: 'pending' as const,
-          } as any)
-          .select()
-          .single()
-        if (insertError) throw insertError
-
-        const org = adminStore.organizations.find((o) => o.id === orgId)
-        await supabase.functions.invoke('g1-send-distribution-email', {
-          body: {
-            assignment_id: (assignment as { id: string }).id,
-            devco_email: '',
-            devco_name: org?.name ?? orgId,
-            template_name: '',
-            deadline: deadline.value,
-          },
-        })
-      }
+      await api.post<TemplateAssignment[]>('/api/assignments', {
+        template_version_id: props.templateVersionId,
+        org_ids: selectedOrgIds.value,
+        deadline: deadline.value,
+        submission_type: 'template',
+      })
       emit('assigned')
       emit('close')
     } else {
       if (!selectedOrgId.value) throw new Error('Select a DevCo.')
-      const org = adminStore.organizations.find((o) => o.id === selectedOrgId.value)
-      const { data, error: fnError } = await supabase.functions.invoke('g1-send-freeform-link', {
-        body: {
-          org_id: selectedOrgId.value,
-          devco_email: '',
-          devco_name: org?.name ?? selectedOrgId.value,
-          instructions: instructions.value || undefined,
-          deadline: deadline.value || undefined,
-        },
+      const assignments = await api.post<TemplateAssignment[]>('/api/assignments', {
+        org_id: selectedOrgId.value,
+        org_ids: [],
+        submission_type: 'freeform',
+        instructions: instructions.value || undefined,
+        deadline: deadline.value || undefined,
       })
-      if (fnError) throw fnError
-      successUrl.value = data?.upload_url ?? ''
+      const token = assignments[0]?.upload_token
+      successUrl.value = token ? `${window.location.origin}/upload/${token}` : ''
     }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
@@ -80,9 +54,7 @@ async function assign() {
   }
 }
 
-function copyUrl() {
-  navigator.clipboard.writeText(successUrl.value)
-}
+function copyUrl() { navigator.clipboard.writeText(successUrl.value) }
 </script>
 
 <template>
