@@ -6,7 +6,7 @@ Whitehelmet is a multi-tenant QHSE KPI reporting and consolidation platform. The
 The product must meet **enterprise/government standards**: multi-tenant data isolation, role-based access, structured submission workflows, audit trails, and locked/timestamped submissions.
 
 ## Current State (as of 2026-04)
-The MVP is a single-user spreadsheet consolidation tool with:
+Vue 3 + FastAPI production app with:
 - 3-panel layout: sources (left), spreadsheet editor (center), AI chat (right)
 - Upload .xlsx files → AI consolidates into master spreadsheet
 - NL spreadsheet commands (25+ operation types) via chat
@@ -43,22 +43,8 @@ Six phases of work to reach PIF-grade:
 - Export master sheet; QHSE Indexes integration (auto-push or manual review)
 
 ## Architecture
-- **Legacy MVP:** `index.html` + vanilla JS ES modules, no build step, `node serve.mjs` on port 3000
 - **Production:** Vue 3 + TypeScript (`frontend/`) + FastAPI (`backend/`) + MySQL + Docker Compose + K8s (Kustomize overlays)
 - **AI:** Anthropic API proxied via `/api/ai/chat`, `/api/ai/consolidate`, `/api/ai/command`
-
-## Key Files (Legacy MVP)
-- `js/ai-operations.js` — NL spreadsheet command handler (25+ ops)
-- `js/excel-editor.js` — Jspreadsheet CE wrapper
-- `js/consolidation.js` — multi-file AI merge
-- `js/master-records.js` — saved records dashboard
-- `js/state.js` — shared singleton state (do not break its interface)
-- `js/chat.js` — chat UI + streaming
-
-## Running Locally
-```bash
-node serve.mjs   # http://localhost:3000
-```
 
 ## Auth Integration (confirmed 2026-04-18)
 
