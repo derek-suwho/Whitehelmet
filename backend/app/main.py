@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files
+from app.api.routes import health, auth, ai, records, files, organizations
 
 settings = get_settings()
 
@@ -20,7 +20,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
@@ -30,6 +30,7 @@ app.include_router(auth.router)
 app.include_router(ai.router)
 app.include_router(records.router)
 app.include_router(files.router)
+app.include_router(organizations.router)
 
 
 @app.on_event("startup")
