@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files, organizations, admin
+from app.api.routes import health, auth, ai, records, files, organizations, admin, templates
 
 settings = get_settings()
 
@@ -32,6 +32,7 @@ app.include_router(records.router)
 app.include_router(files.router)
 app.include_router(organizations.router)
 app.include_router(admin.router)
+app.include_router(templates.router)
 
 
 @app.on_event("startup")
