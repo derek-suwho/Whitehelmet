@@ -19,6 +19,9 @@ from app.models.user import User
 from app.models.session import SessionModel
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
+from app.models.template_assignment import TemplateAssignment
+from app.models.submission import Submission
+from app.models.consolidated_sheet import ConsolidatedSheet
 from app.core.security import generate_session_token, session_expiry
 
 # In-memory SQLite for tests
