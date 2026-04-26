@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import type { Organization, Profile } from '@/types/database'
 
 export interface UserWithOrg extends Profile {
@@ -12,11 +12,7 @@ export const useAdminStore = defineStore('admin', () => {
   const users = ref<UserWithOrg[]>([])
 
   async function fetchOrganizations() {
-    const { data, error } = await supabase
-      .from('organizations')
-      .select('*')
-      .order('name')
-    if (error) throw error
+    const data = await api<Organization[]>('/admin/organizations')
     organizations.value = data
   }
 
@@ -25,24 +21,17 @@ export const useAdminStore = defineStore('admin', () => {
     type: 'pif' | 'devco',
     parentOrgId?: string,
   ): Promise<Organization> {
-    const { data, error } = await supabase
-      .from('organizations')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({ name, type, parent_org_id: parentOrgId ?? null } as any)
-      .select()
-      .single()
-    if (error) throw error
+    const data = await api<Organization>('/admin/organizations', {
+      method: 'POST',
+      body: JSON.stringify({ name, type, parent_org_id: parentOrgId ?? null }),
+    })
     organizations.value.push(data)
     return data
   }
 
   async function fetchUsers() {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*, organization:organizations(name, type)')
-      .order('display_name')
-    if (error) throw error
-    users.value = data as UserWithOrg[]
+    const data = await api<UserWithOrg[]>('/admin/users')
+    users.value = data
   }
 
   async function createUser(
@@ -51,11 +40,10 @@ export const useAdminStore = defineStore('admin', () => {
     orgId: string,
     role: 'pif_admin' | 'devco_admin' | 'devco_user',
   ): Promise<void> {
-    // Invite user via Supabase Edge Function (service role required for admin.inviteUserByEmail)
-    const { error } = await supabase.functions.invoke('g2-invite-user', {
-      body: { email, display_name: displayName, org_id: orgId, role },
+    await api('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ email, display_name: displayName, org_id: orgId, role }),
     })
-    if (error) throw error
     await fetchUsers()
   }
 
@@ -63,12 +51,10 @@ export const useAdminStore = defineStore('admin', () => {
     userId: string,
     role: 'pif_admin' | 'devco_admin' | 'devco_user',
   ): Promise<void> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('profiles')
-      .update({ role })
-      .eq('id', userId)
-    if (error) throw error
+    await api(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    })
     const u = users.value.find((u) => u.id === userId)
     if (u) u.role = role
   }

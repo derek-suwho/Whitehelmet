@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files
+from app.api.routes import health, auth, ai, records, files, admin, templates
 
 settings = get_settings()
 
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Authorization"],
 )
 
 # Routes
@@ -30,6 +30,8 @@ app.include_router(auth.router)
 app.include_router(ai.router)
 app.include_router(records.router)
 app.include_router(files.router)
+app.include_router(admin.router)
+app.include_router(templates.router)
 
 
 @app.on_event("startup")
@@ -40,6 +42,7 @@ async def startup():
     """
     from app.db.session import engine, Base
     from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel  # noqa: F401
+    from app.models.organization import Organization, OrgMembership  # noqa: F401
 
     if settings.environment == "dev":
         try:

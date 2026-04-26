@@ -22,6 +22,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: Session = Depends(get_db)):
     """Create a new local email/password account."""
+    if get_settings().auth_mode == "keycloak":
+        raise HTTPException(status_code=404, detail="Not available in SSO mode")
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
@@ -92,8 +94,21 @@ async def logout(
 
 
 @router.get("/me")
-async def me(request: Request, user: User = Depends(get_current_user)):
-    """Return current authenticated user with CSRF token."""
-    session_token = request.cookies.get("session_id", "")
-    csrf = generate_csrf_token(session_token)
-    return {"user": UserResponse.model_validate(user), "csrf_token": csrf}
+async def me(current_user=Depends(get_current_user)):
+    """Return current user info. Works in both auth modes."""
+    if isinstance(current_user, dict):
+        return {
+            "external_id": current_user.get("external_id"),
+            "email": current_user.get("email"),
+            "display_name": current_user.get("display_name"),
+            "system_role": current_user.get("system_role"),
+            "org_external_id": current_user.get("org_external_id"),
+        }
+    # Local mode — User ORM object
+    return {
+        "external_id": current_user.external_id,
+        "email": current_user.email,
+        "display_name": current_user.display_name,
+        "system_role": None,
+        "org_external_id": None,
+    }

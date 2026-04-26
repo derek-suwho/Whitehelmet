@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 
 const props = defineProps<{
   mode: 'template-builder' | 'consolidation-finetune'
@@ -46,15 +46,14 @@ async function send() {
 }
 
 async function sendTemplateBuilder(prompt: string) {
-  const { data, error: fnError } = await supabase.functions.invoke('g2-generate-template-ai', {
-    body: { prompt },
-  })
-  if (fnError) throw fnError
-
+  const data = await api<{ schema_json?: { columns?: unknown[] } }>(
+    `/templates/${props.templateId}/ai/generate`,
+    { method: 'POST', body: JSON.stringify({ prompt }) },
+  )
   const schema = data?.schema_json
   if (schema) {
     emit('schema-generated', schema)
-    const colCount = schema.columns?.length ?? 0
+    const colCount = (schema.columns?.length ?? 0)
     messages.value.push({
       role: 'assistant',
       content: `Generated a template with ${colCount} column${colCount !== 1 ? 's' : ''}. Review and adjust in the editor.`,
@@ -64,11 +63,10 @@ async function sendTemplateBuilder(prompt: string) {
 
 async function sendFinetune(prompt: string) {
   if (!props.consolidatedSheetId) throw new Error('No consolidated sheet selected')
-  const { data, error: fnError } = await supabase.functions.invoke('g2-finetune-consolidated', {
-    body: { consolidated_sheet_id: props.consolidatedSheetId, prompt },
-  })
-  if (fnError) throw fnError
-
+  const data = await api<{ message?: string }>(
+    `/templates/${props.templateId}/ai/finetune`,
+    { method: 'POST', body: JSON.stringify({ consolidated_sheet_id: props.consolidatedSheetId, prompt }) },
+  )
   emit('finetune-applied')
   messages.value.push({
     role: 'assistant',

@@ -3,9 +3,9 @@
 from app.models.session import SessionModel
 
 
-def test_login_returns_501(client):
-    resp = client.post("/api/auth/login", json={"username": "u", "password": "p"})
-    assert resp.status_code == 501
+def test_login_invalid_credentials_401(client):
+    resp = client.post("/api/auth/login", json={"email": "notfound@example.com", "password": "wrongpassword"})
+    assert resp.status_code == 401
 
 
 def test_logout_deletes_session(auth_client, db):
