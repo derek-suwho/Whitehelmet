@@ -13,9 +13,22 @@ class ChatRequest(BaseModel):
     stream: bool = True
 
 
+class FileSchema(BaseModel):
+    name: str
+    headers: list[str]
+    sample_rows: list[list]  # first few rows for AI schema detection only
+
+class ColumnMapping(BaseModel):
+    file: str
+    column_map: dict[str, str]  # source_col → unified_col
+
 class ConsolidateRequest(BaseModel):
-    files_data: list[dict]  # [{name, headers, rows}]
+    files_schema: list[FileSchema]
     model: str = "anthropic/claude-opus-4-5"
+
+class ConsolidateResponse(BaseModel):
+    unified_headers: list[str]
+    mappings: list[ColumnMapping]
 
 
 class CommandRequest(BaseModel):
