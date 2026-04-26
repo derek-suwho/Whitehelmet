@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { api } from '@/composables/useApi'
 
 export interface AuthUser {
@@ -13,6 +13,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const csrfToken = ref('')
   const checked = ref(false)
+
+  const isAdmin = computed(() => user.value?.role === 'pif_admin')
+  const isSubcontractor = computed(() => user.value?.role === 'subcontractor')
+  const orgId = computed(() => user.value?.org_id ?? null)
 
   async function checkSession() {
     try {
@@ -46,5 +50,5 @@ export const useAuthStore = defineStore('auth', () => {
     csrfToken.value = ''
   }
 
-  return { user, csrfToken, checked, checkSession, login, register, logout }
+  return { user, csrfToken, checked, isAdmin, isSubcontractor, orgId, checkSession, login, register, logout }
 })

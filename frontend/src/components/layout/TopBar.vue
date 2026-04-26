@@ -27,8 +27,31 @@ async function handleLogout() {
       Whitehelmet
     </router-link>
 
-    <!-- Right: Actions -->
-    <div class="flex items-center gap-3">
+    <!-- Nav links — role conditional -->
+    <nav class="flex items-center gap-1">
+      <template v-if="!auth.isSubcontractor">
+        <router-link
+          :to="{ name: 'workspace' }"
+          class="rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          :class="$route.name === 'workspace' ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/8 hover:text-white'"
+        >
+          Records
+        </router-link>
+      </template>
+      <template v-else>
+        <router-link
+          :to="{ name: 'submissions' }"
+          class="rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          :class="$route.name === 'submissions' ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/8 hover:text-white'"
+        >
+          My Submissions
+        </router-link>
+      </template>
+    </nav>
+
+    <!-- Right: bell + avatar + kebab -->
+    <div class="ml-auto flex items-center gap-2">
+      <!-- Bell -->
       <button
         type="button"
         class="rounded-md border border-brand-600/40 bg-brand-600/10 px-3 py-1.5 text-sm font-medium text-brand-300 transition-colors duration-200 hover:bg-brand-600/20 hover:text-brand-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:bg-brand-600/30"
