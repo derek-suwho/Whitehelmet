@@ -39,7 +39,11 @@ async def startup():
     Tolerant of missing DB so AI proxy routes work without MySQL running.
     """
     from app.db.session import engine, Base
-    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel  # noqa: F401
+    from app.models import (  # noqa: F401
+        User, Record, UploadedFile, ConversationMessage, SessionModel,
+        Organization, Template, TemplateVersion, TemplateAssignment,
+        Submission, ConsolidatedSheet,
+    )
 
     if settings.environment == "dev":
         try:
