@@ -3,6 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -93,22 +94,29 @@ async def logout(
     return {"status": "logged_out"}
 
 
-@router.get("/me")
-async def me(current_user=Depends(get_current_user)):
-    """Return current user info. Works in both auth modes."""
-    if isinstance(current_user, dict):
+def _user_payload(usr: User | dict[str, Any]) -> dict:
+    if isinstance(usr, dict):
         return {
-            "external_id": current_user.get("external_id"),
-            "email": current_user.get("email"),
-            "display_name": current_user.get("display_name"),
-            "system_role": current_user.get("system_role"),
-            "org_external_id": current_user.get("org_external_id"),
+            "id": int(usr["id"]) if usr.get("id") is not None else 0,
+            "external_id": str(usr.get("external_id", "")),
+            "email": str(usr.get("email", "")),
+            "display_name": str(usr.get("display_name", "")),
+            "role": usr.get("system_role"),
+            "org_id": usr.get("org_external_id"),
         }
-    # Local mode — User ORM object
     return {
-        "external_id": current_user.external_id,
-        "email": current_user.email,
-        "display_name": current_user.display_name,
-        "system_role": None,
-        "org_external_id": None,
+        "id": usr.id,
+        "external_id": usr.external_id,
+        "email": usr.email,
+        "display_name": usr.display_name,
+        "role": usr.role,
+        "org_id": usr.org_id,
     }
+
+
+@router.get("/me")
+async def me(request: Request, current_user=Depends(get_current_user)):
+    """Return current user and CSRF token (cookie session or SSO)."""
+    session_token = request.cookies.get("session_id", "")
+    csrf = generate_csrf_token(session_token)
+    return {"user": _user_payload(current_user), "csrf_token": csrf}

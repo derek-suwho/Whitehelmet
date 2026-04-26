@@ -98,7 +98,7 @@ router.beforeEach(async (to) => {
     return { name: 'dashboard' }
   }
 
-  if (to.meta.role === 'pif_admin' && auth.profile?.role !== 'pif_admin') {
+  if (to.meta.role === 'pif_admin' && auth.user?.role !== 'pif_admin') {
     return { name: 'workspace' }
   }
 })

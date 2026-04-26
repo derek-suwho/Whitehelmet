@@ -43,7 +43,7 @@ async function invite() {
   }
 }
 
-async function changeRole(userId: string, newRole: 'pif_admin' | 'devco_admin' | 'devco_user') {
+async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' | 'devco_user') {
   await adminStore.updateUserRole(userId, newRole)
 }
 </script>
@@ -76,13 +76,13 @@ async function changeRole(userId: string, newRole: 'pif_admin' | 'devco_admin' |
               {{ (user as any).organization?.name ?? '—' }}
             </td>
             <td class="px-5 py-3">
-              <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" :class="roleBadge(user.role)">
-                {{ user.role.replace('_', ' ') }}
+              <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" :class="roleBadge(user.role ?? '')">
+                {{ (user.role ?? '—').replaceAll('_', ' ') }}
               </span>
             </td>
             <td class="px-5 py-3">
               <select
-                :value="user.role"
+                :value="user.role ?? ''"
                 class="rounded border border-gray-200 text-xs px-2 py-1"
                 @change="changeRole(user.id, ($event.target as HTMLSelectElement).value as 'pif_admin' | 'devco_admin' | 'devco_user')"
               >
