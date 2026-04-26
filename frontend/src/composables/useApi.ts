@@ -63,6 +63,10 @@ export const api = {
     return request<T>(url, 'POST', body)
   },
 
+  patch<T = unknown>(url: string, body?: unknown): Promise<T> {
+    return request<T>(url, 'PATCH', body)
+  },
+
   delete<T = unknown>(url: string): Promise<T> {
     return request<T>(url, 'DELETE')
   },

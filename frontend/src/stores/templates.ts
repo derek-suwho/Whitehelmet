@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/composables/useApi'
 import type { Template, TemplateVersion, ConsolidatedSheet, SchemaJson } from '@/types/database'
 
 export const useTemplatesStore = defineStore('templates', () => {
@@ -11,133 +11,59 @@ export const useTemplatesStore = defineStore('templates', () => {
   const consolidatedSheets = ref<ConsolidatedSheet[]>([])
 
   async function fetchTemplates() {
-    const { data, error } = await supabase
-      .from('templates')
-      .select('*')
-      .order('updated_at', { ascending: false })
-    if (error) throw error
-    templates.value = data
+    templates.value = await api.get<Template[]>('/api/templates')
   }
 
   async function fetchTemplate(id: string) {
-    const { data, error } = await supabase
-      .from('templates')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (error) throw error
-    currentTemplate.value = data
-
-    const { data: versionData, error: versionError } = await supabase
-      .from('template_versions')
-      .select('*')
-      .eq('template_id', id)
-      .order('version_number', { ascending: false })
-    if (versionError) throw versionError
-    versions.value = versionData
-    currentVersion.value = versionData[0] ?? null
+    currentTemplate.value = await api.get<Template>(`/api/templates/${id}`)
+    versions.value = await api.get<TemplateVersion[]>(`/api/templates/${id}/versions`)
+    currentVersion.value = versions.value[0] ?? null
   }
 
   async function createTemplate(name: string, description: string): Promise<Template> {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from('templates')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({ name, description, created_by: user?.id, status: 'draft' } as any)
-      .select()
-      .single()
-    if (error) throw error
-    templates.value.unshift(data)
-    currentTemplate.value = data
-    return data
+    const tmpl = await api.post<Template>('/api/templates', { name, description })
+    templates.value.unshift(tmpl)
+    currentTemplate.value = tmpl
+    return tmpl
   }
 
   async function saveVersion(templateId: string, schemaJson: SchemaJson): Promise<TemplateVersion> {
-    const { data: { user } } = await supabase.auth.getUser()
-    const nextVersion = (versions.value[0]?.version_number ?? 0) + 1
-    const { data, error } = await supabase
-      .from('template_versions')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({
-        template_id: templateId,
-        version_number: nextVersion,
-        schema_json: schemaJson as unknown as import('@/types/database').Json,
-        created_by: user?.id,
-      } as any)
-      .select()
-      .single()
-    if (error) throw error
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from('templates')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-
-    versions.value.unshift(data)
-    currentVersion.value = data
-    return data
+    const ver = await api.post<TemplateVersion>(
+      `/api/templates/${templateId}/versions`,
+      { schema_json: schemaJson },
+    )
+    versions.value.unshift(ver)
+    currentVersion.value = ver
+    return ver
   }
 
   async function publishTemplate(templateId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('templates')
-      .update({ status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-    if (error) throw error
-    if (currentTemplate.value?.id === templateId) {
-      currentTemplate.value.status = 'active'
-    }
-    const t = templates.value.find((t) => t.id === templateId)
-    if (t) t.status = 'active'
+    const updated = await api.patch<Template>(`/api/templates/${templateId}/status`, { status: 'active' })
+    _syncTemplate(updated)
   }
 
   async function deprecateTemplate(templateId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('templates')
-      .update({ status: 'deprecated', updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-    if (error) throw error
-    const t = templates.value.find((t) => t.id === templateId)
-    if (t) t.status = 'deprecated'
-    if (currentTemplate.value?.id === templateId) {
-      currentTemplate.value.status = 'deprecated'
-    }
+    const updated = await api.patch<Template>(`/api/templates/${templateId}/status`, { status: 'deprecated' })
+    _syncTemplate(updated)
+  }
+
+  function _syncTemplate(updated: Template) {
+    const idx = templates.value.findIndex(t => t.id === updated.id)
+    if (idx !== -1) templates.value[idx] = updated
+    if (currentTemplate.value?.id === updated.id) currentTemplate.value = updated
   }
 
   async function fetchConsolidatedSheets(templateId: string) {
-    const { data, error } = await supabase
-      .from('consolidated_sheets')
-      .select('*')
-      .eq('template_id', templateId)
-      .order('generated_at', { ascending: false })
-    if (error) throw error
-    consolidatedSheets.value = data
+    consolidatedSheets.value = await api.get<ConsolidatedSheet[]>(`/api/templates/${templateId}/consolidations`)
   }
 
-  async function getDownloadUrl(filePath: string): Promise<string> {
-    const { data, error } = await supabase.storage
-      .from('consolidated')
-      .createSignedUrl(filePath, 3600)
-    if (error) throw error
-    return data.signedUrl
+  async function getDownloadUrl(sheetId: string): Promise<string> {
+    return `/api/templates/consolidations/${sheetId}/download`
   }
 
   return {
-    templates,
-    currentTemplate,
-    currentVersion,
-    versions,
-    consolidatedSheets,
-    fetchTemplates,
-    fetchTemplate,
-    createTemplate,
-    saveVersion,
-    publishTemplate,
-    deprecateTemplate,
-    fetchConsolidatedSheets,
-    getDownloadUrl,
+    templates, currentTemplate, currentVersion, versions, consolidatedSheets,
+    fetchTemplates, fetchTemplate, createTemplate, saveVersion,
+    publishTemplate, deprecateTemplate, fetchConsolidatedSheets, getDownloadUrl,
   }
 })
