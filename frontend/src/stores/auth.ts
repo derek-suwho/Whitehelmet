@@ -12,21 +12,12 @@ export const useAuthStore = defineStore('auth', () => {
   const checked = ref(false)
 
   const isAdmin = computed(() => profile.value?.role === 'pif_admin')
-  const orgType = computed(() => {
-    if (!profile.value?.org_id) return null
-    // org type is resolved via the organizations table; default to null until profile loads
-    return null as 'pif' | 'devco' | null
-  })
+  const orgType = computed(() => null as 'pif' | 'devco' | null)
   const orgId = computed(() => profile.value?.org_id ?? null)
 
   async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     profile.value = data
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dn = (profile.value as any)?.display_name as string | undefined
     if (user.value && dn) user.value = { ...user.value, display_name: dn }
   }
@@ -43,24 +34,18 @@ export const useAuthStore = defineStore('auth', () => {
       }
     } catch {
       user.value = null
-      profile.value = null
     } finally {
       checked.value = true
     }
-
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      user.value = session?.user ?? null
-      if (session?.user) {
-        await fetchProfile(session.user.id)
-      } else {
-        profile.value = null
-      }
-    })
   }
 
   async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    if (data.user) {
+      user.value = data.user
+      await fetchProfile(data.user.id)
+    }
   }
 
   async function register(email: string, password: string, displayName: string) {
