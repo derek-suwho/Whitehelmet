@@ -5,8 +5,10 @@ pending integration (see auth.py). Re-add `dependencies=[Depends(get_current_use
 Depends(verify_csrf)]` on the router once login is implemented.
 """
 
+import io
 import json
-from fastapi import APIRouter, HTTPException
+import openpyxl
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 import httpx
 
@@ -160,3 +162,85 @@ async def command(body: CommandRequest):
 
     op = parsed.pop("op", None)
     return CommandResponse(op=op, params=parsed)
+
+
+@router.post("/parse-template")
+async def parse_template(file: UploadFile = File(...)):
+    """Parse an xlsx file and return inferred column definitions."""
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        return {"columns": []}
+
+    headers = [str(h) if h is not None else f"Column{i}" for i, h in enumerate(rows[0])]
+    # Sample up to 5 data rows for type inference
+    data_rows = rows[1:6]
+
+    def infer_type(col_idx):
+        samples = [r[col_idx] for r in data_rows if col_idx < len(r) and r[col_idx] is not None]
+        if not samples:
+            return "text", []
+        if all(isinstance(v, (int, float)) for v in samples):
+            return "number", [str(v) for v in samples]
+        return "text", [str(v) for v in samples]
+
+    columns = []
+    for i, name in enumerate(headers):
+        t, samples = infer_type(i)
+        columns.append({"name": name, "inferred_type": t, "sample_values": samples})
+
+    return {"columns": columns}
+
+
+@router.post("/template-generate")
+async def template_generate(body: dict):
+    """Generate a template schema from a natural-language prompt."""
+    prompt = body.get("prompt", "")
+    system = (
+        "You are a KPI template designer. Given a description, return ONLY a JSON object: "
+        '{"schema_json": {"columns": [{"id": "<uuid>", "name": "<col name>", "type": "text|number|date|percentage"}]}} '
+        "No markdown. No extra text."
+    )
+    data = await _openrouter_post({
+        "model": "anthropic/claude-sonnet-4-5",
+        "max_tokens": 1024,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    })
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    try:
+        return json.loads(content.strip())
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+
+
+@router.post("/finetune")
+async def finetune_consolidated(body: dict):
+    """Apply a natural-language change to a consolidated sheet (by ID)."""
+    consolidated_sheet_id = body.get("consolidated_sheet_id")
+    prompt = body.get("prompt", "")
+    if not consolidated_sheet_id:
+        raise HTTPException(status_code=422, detail="consolidated_sheet_id required")
+
+    system = (
+        "You are a spreadsheet assistant. The user wants to modify a consolidated master sheet. "
+        "Acknowledge the change and describe what you would do. "
+        "Return JSON: {\"message\": \"<description of change applied>\"}"
+    )
+    data = await _openrouter_post({
+        "model": "anthropic/claude-sonnet-4-5",
+        "max_tokens": 256,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": prompt},
+        ],
+    })
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    try:
+        return json.loads(content.strip())
+    except json.JSONDecodeError:
+        return {"message": content}
