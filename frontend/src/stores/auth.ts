@@ -4,8 +4,10 @@ import type { User } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { Profile } from '@/types/database'
 
+type AuthUser = User & { display_name?: string }
+
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
+  const user = ref<AuthUser | null>(null)
   const profile = ref<Profile | null>(null)
   const checked = ref(false)
 
@@ -24,6 +26,9 @@ export const useAuthStore = defineStore('auth', () => {
       .eq('id', userId)
       .single()
     profile.value = data
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dn = (profile.value as any)?.display_name as string | undefined
+    if (user.value && dn) user.value = { ...user.value, display_name: dn }
   }
 
   async function checkSession() {
@@ -58,11 +63,23 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
   }
 
+  async function register(email: string, password: string, displayName: string) {
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
+    if (data.user) {
+      await supabase.from('profiles').insert({
+        id: data.user.id,
+        display_name: displayName,
+        role: 'devco_user',
+      } as any)
+    }
+  }
+
   async function logout() {
     await supabase.auth.signOut()
     user.value = null
     profile.value = null
   }
 
-  return { user, profile, checked, isAdmin, orgType, orgId, checkSession, login, logout }
+  return { user, profile, checked, isAdmin, orgType, orgId, checkSession, login, register, logout }
 })
