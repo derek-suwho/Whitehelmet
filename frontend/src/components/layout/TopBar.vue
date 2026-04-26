@@ -52,7 +52,13 @@ async function handleLogout() {
         </svg>
       </button>
 
-      <!-- Avatar -->
+      <span
+        v-if="auth.user"
+        class="hidden text-sm text-gray-400 sm:inline"
+      >
+        {{ auth.profile?.display_name ?? auth.user?.email }}
+      </span>
+
       <button
         type="button"
         class="flex h-8 w-8 items-center justify-center rounded-full bg-brand-600 text-xs font-semibold text-white ring-2 ring-white/20 transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-brand-400"

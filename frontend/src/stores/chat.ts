@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { useAuthStore } from '@/stores/auth'
 import type { ChatMessage } from '@/types'
 
 export const useChatStore = defineStore('chat', () => {
@@ -17,12 +16,8 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming.value = true
 
     try {
-      const auth = useAuthStore()
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-      }
-      if (auth.csrfToken) {
-        headers['X-CSRF-Token'] = auth.csrfToken
       }
 
       const res = await fetch('/api/ai/chat', {
