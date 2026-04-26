@@ -17,6 +17,8 @@ from app.main import app
 from app.core.config import Settings, get_settings
 from app.models.user import User
 from app.models.session import SessionModel
+from app.models.template import Template
+from app.models.template_version import TemplateVersion
 from app.core.security import generate_session_token, session_expiry
 
 # In-memory SQLite for tests
