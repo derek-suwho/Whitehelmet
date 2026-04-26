@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useAdminStore } from '@/stores/admin'
 
 const props = defineProps<{ open: boolean; templateVersionId: string }>()
@@ -28,49 +28,27 @@ async function assign() {
       if (!selectedOrgIds.value.length) throw new Error('Select at least one DevCo.')
       if (!deadline.value) throw new Error('Deadline is required.')
 
-      const { data: { user } } = await supabase.auth.getUser()
-      for (const orgId of selectedOrgIds.value) {
-        const { data: assignment, error: insertError } = await supabase
-          .from('template_assignments')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .insert({
-            template_version_id: props.templateVersionId,
-            org_id: orgId,
-            assigned_by: user?.id,
-            deadline: new Date(deadline.value).toISOString(),
-            submission_type: 'template' as const,
-            status: 'pending' as const,
-          } as any)
-          .select()
-          .single()
-        if (insertError) throw insertError
-
-        const org = adminStore.organizations.find((o) => o.id === orgId)
-        await supabase.functions.invoke('g1-send-distribution-email', {
-          body: {
-            assignment_id: (assignment as { id: string }).id,
-            devco_email: '',
-            devco_name: org?.name ?? orgId,
-            template_name: '',
-            deadline: deadline.value,
-          },
-        })
-      }
+      await api('/templates/assignments', {
+        method: 'POST',
+        body: JSON.stringify({
+          template_version_id: props.templateVersionId,
+          org_ids: selectedOrgIds.value,
+          deadline: new Date(deadline.value).toISOString(),
+          submission_type: 'template',
+        }),
+      })
       emit('assigned')
       emit('close')
     } else {
       if (!selectedOrgId.value) throw new Error('Select a DevCo.')
-      const org = adminStore.organizations.find((o) => o.id === selectedOrgId.value)
-      const { data, error: fnError } = await supabase.functions.invoke('g1-send-freeform-link', {
-        body: {
+      const data = await api<{ upload_url?: string }>('/templates/assignments/freeform', {
+        method: 'POST',
+        body: JSON.stringify({
           org_id: selectedOrgId.value,
-          devco_email: '',
-          devco_name: org?.name ?? selectedOrgId.value,
           instructions: instructions.value || undefined,
           deadline: deadline.value || undefined,
-        },
+        }),
       })
-      if (fnError) throw fnError
       successUrl.value = data?.upload_url ?? ''
     }
   } catch (e) {

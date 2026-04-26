@@ -15,8 +15,7 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.104.0",
-    "handsontable": "^17.0.1",
+"handsontable": "^17.0.1",
     "hyperformula": "^3.2.0",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",

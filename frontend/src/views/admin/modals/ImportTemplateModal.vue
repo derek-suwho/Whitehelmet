@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import { useTemplatesStore } from '@/stores/templates'
 import type { SchemaColumn } from '@/types/database'
 
@@ -18,7 +18,6 @@ const parsedColumns = ref<Array<{
   inferred_type: 'text' | 'number' | 'date' | 'percentage'
   sample_values: string[]
 }>>([])
-const uploadedFilePath = ref('')
 
 async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -33,17 +32,22 @@ async function onFileChange(e: Event) {
   templateName.value = file.name.replace('.xlsx', '')
 
   try {
-    const filePath = `uploads/${Date.now()}_${file.name}`
-    const { error: uploadError } = await supabase.storage.from('templates').upload(filePath, file)
-    if (uploadError) throw uploadError
-    uploadedFilePath.value = filePath
+    const formData = new FormData()
+    formData.append('file', file)
 
-    const { data, error: fnError } = await supabase.functions.invoke('g2-parse-template', {
-      body: { file_path: filePath },
+    const uploadRes = await fetch('/api/files/upload', {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
     })
-    if (fnError) throw fnError
+    if (!uploadRes.ok) throw new Error(await uploadRes.text())
+    const uploadData = await uploadRes.json() as { file_path: string }
 
-    parsedColumns.value = data.sheets?.[0]?.columns ?? []
+    const parseData = await api<{ sheets?: Array<{ columns: typeof parsedColumns.value }> }>(
+      '/templates/parse',
+      { method: 'POST', body: JSON.stringify({ file_path: uploadData.file_path }) },
+    )
+    parsedColumns.value = parseData.sheets?.[0]?.columns ?? []
     step.value = 2
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Upload failed'
@@ -84,7 +88,6 @@ function reset() {
   step.value = 1
   parsedColumns.value = []
   templateName.value = ''
-  uploadedFilePath.value = ''
   error.value = ''
 }
 </script>

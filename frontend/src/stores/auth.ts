@@ -1,40 +1,39 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { User } from '@supabase/supabase-js'
-import { supabase } from '@/lib/supabase'
-import type { Profile } from '@/types/database'
+import { api, setCsrfToken } from '@/lib/api'
+
+interface AuthUser {
+  id: string
+  email: string
+  display_name: string
+}
+
+interface AuthProfile {
+  role: 'pif_admin' | 'devco_admin' | 'devco_user' | null
+  org_id: string | null
+}
 
 export const useAuthStore = defineStore('auth', () => {
-  const user = ref<User | null>(null)
-  const profile = ref<Profile | null>(null)
+  const user = ref<AuthUser | null>(null)
+  const profile = ref<AuthProfile | null>(null)
   const checked = ref(false)
 
   const isAdmin = computed(() => profile.value?.role === 'pif_admin')
-  const orgType = computed(() => {
-    if (!profile.value?.org_id) return null
-    // org type is resolved via the organizations table; default to null until profile loads
-    return null as 'pif' | 'devco' | null
-  })
   const orgId = computed(() => profile.value?.org_id ?? null)
-
-  async function fetchProfile(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    profile.value = data
-  }
 
   async function checkSession() {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        user.value = session.user
-        await fetchProfile(session.user.id)
-      } else {
-        user.value = null
-        profile.value = null
+      const data = await api<{
+        external_id: string
+        email: string
+        display_name: string
+        system_role: string | null
+        org_external_id: string | null
+      }>('/auth/me')
+      user.value = { id: data.external_id, email: data.email, display_name: data.display_name }
+      profile.value = {
+        role: (data.system_role as AuthProfile['role']) ?? null,
+        org_id: data.org_external_id ?? null,
       }
     } catch {
       user.value = null
@@ -42,27 +41,29 @@ export const useAuthStore = defineStore('auth', () => {
     } finally {
       checked.value = true
     }
-
-    supabase.auth.onAuthStateChange(async (_event, session) => {
-      user.value = session?.user ?? null
-      if (session?.user) {
-        await fetchProfile(session.user.id)
-      } else {
-        profile.value = null
-      }
-    })
   }
 
   async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) throw error
+    const data = await api<{ user: { external_id: string; email: string; display_name: string }; csrf_token: string }>(
+      '/auth/login',
+      { method: 'POST', body: JSON.stringify({ email, password }) },
+    )
+    setCsrfToken(data.csrf_token)
+    user.value = { id: data.user.external_id, email: data.user.email, display_name: data.user.display_name }
+    profile.value = { role: null, org_id: null }
+    // Fetch full profile with role
+    await checkSession()
   }
 
   async function logout() {
-    await supabase.auth.signOut()
-    user.value = null
-    profile.value = null
+    try {
+      await api('/auth/logout', { method: 'POST' })
+    } finally {
+      setCsrfToken('')
+      user.value = null
+      profile.value = null
+    }
   }
 
-  return { user, profile, checked, isAdmin, orgType, orgId, checkSession, login, logout }
+  return { user, profile, checked, isAdmin, orgId, checkSession, login, logout }
 })

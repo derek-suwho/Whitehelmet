@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 import type { Template, TemplateVersion, ConsolidatedSheet, SchemaJson } from '@/types/database'
 
 export const useTemplatesStore = defineStore('templates', () => {
@@ -11,81 +11,43 @@ export const useTemplatesStore = defineStore('templates', () => {
   const consolidatedSheets = ref<ConsolidatedSheet[]>([])
 
   async function fetchTemplates() {
-    const { data, error } = await supabase
-      .from('templates')
-      .select('*')
-      .order('updated_at', { ascending: false })
-    if (error) throw error
+    const data: Template[] = await api('/templates')
     templates.value = data
   }
 
   async function fetchTemplate(id: string) {
-    const { data, error } = await supabase
-      .from('templates')
-      .select('*')
-      .eq('id', id)
-      .single()
-    if (error) throw error
+    const data = await api<Template>(`/templates/${id}`)
     currentTemplate.value = data
 
-    const { data: versionData, error: versionError } = await supabase
-      .from('template_versions')
-      .select('*')
-      .eq('template_id', id)
-      .order('version_number', { ascending: false })
-    if (versionError) throw versionError
+    const versionData = await api<TemplateVersion[]>(`/templates/${id}/versions`)
     versions.value = versionData
     currentVersion.value = versionData[0] ?? null
   }
 
   async function createTemplate(name: string, description: string): Promise<Template> {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data, error } = await supabase
-      .from('templates')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({ name, description, created_by: user?.id, status: 'draft' } as any)
-      .select()
-      .single()
-    if (error) throw error
+    const data = await api<Template>('/templates', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, status: 'draft' }),
+    })
     templates.value.unshift(data)
     currentTemplate.value = data
     return data
   }
 
   async function saveVersion(templateId: string, schemaJson: SchemaJson): Promise<TemplateVersion> {
-    const { data: { user } } = await supabase.auth.getUser()
     const nextVersion = (versions.value[0]?.version_number ?? 0) + 1
-    const { data, error } = await supabase
-      .from('template_versions')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({
-        template_id: templateId,
-        version_number: nextVersion,
-        schema_json: schemaJson as unknown as import('@/types/database').Json,
-        created_by: user?.id,
-      } as any)
-      .select()
-      .single()
-    if (error) throw error
-
+    const data: TemplateVersion = await api(`/templates/${templateId}/versions`, {
+      method: 'POST',
+      body: JSON.stringify({ version_number: nextVersion, schema_json: schemaJson }),
+    })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
-      .from('templates')
-      .update({ updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-
-    versions.value.unshift(data)
+    versions.value.unshift(data as any)
     currentVersion.value = data
     return data
   }
 
   async function publishTemplate(templateId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('templates')
-      .update({ status: 'active', updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-    if (error) throw error
+    await api(`/templates/${templateId}/publish`, { method: 'POST' })
     if (currentTemplate.value?.id === templateId) {
       currentTemplate.value.status = 'active'
     }
@@ -94,12 +56,7 @@ export const useTemplatesStore = defineStore('templates', () => {
   }
 
   async function deprecateTemplate(templateId: string) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (supabase as any)
-      .from('templates')
-      .update({ status: 'deprecated', updated_at: new Date().toISOString() })
-      .eq('id', templateId)
-    if (error) throw error
+    await api(`/templates/${templateId}/deprecate`, { method: 'POST' })
     const t = templates.value.find((t) => t.id === templateId)
     if (t) t.status = 'deprecated'
     if (currentTemplate.value?.id === templateId) {
@@ -108,21 +65,13 @@ export const useTemplatesStore = defineStore('templates', () => {
   }
 
   async function fetchConsolidatedSheets(templateId: string) {
-    const { data, error } = await supabase
-      .from('consolidated_sheets')
-      .select('*')
-      .eq('template_id', templateId)
-      .order('generated_at', { ascending: false })
-    if (error) throw error
+    const data = await api<ConsolidatedSheet[]>(`/templates/${templateId}/consolidations`)
     consolidatedSheets.value = data
   }
 
-  async function getDownloadUrl(filePath: string): Promise<string> {
-    const { data, error } = await supabase.storage
-      .from('consolidated')
-      .createSignedUrl(filePath, 3600)
-    if (error) throw error
-    return data.signedUrl
+  async function getDownloadUrl(consolidatedSheetId: string): Promise<string> {
+    const data = await api<{ url: string }>(`/templates/consolidations/${consolidatedSheetId}/download-url`)
+    return data.url
   }
 
   return {

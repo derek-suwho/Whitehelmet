@@ -56,7 +56,7 @@ async function handleLogout() {
         v-if="auth.user"
         class="hidden text-sm text-gray-400 sm:inline"
       >
-        {{ auth.profile?.display_name ?? auth.user?.email }}
+        {{ auth.user?.display_name ?? auth.user?.email }}
       </span>
 
       <button
