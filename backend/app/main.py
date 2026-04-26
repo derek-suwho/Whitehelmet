@@ -48,4 +48,4 @@ async def startup():
         try:
             Base.metadata.create_all(bind=engine)
         except Exception as e:
-            print(f"⚠️  DB unavailable on startup ({e.__class__.__name__}) — AI routes still work, DB-backed routes will 500")
+            print(f"[WARN] DB unavailable on startup ({e.__class__.__name__}) - AI routes still work, DB-backed routes will 500")
