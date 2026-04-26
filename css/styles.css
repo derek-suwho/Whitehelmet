@@ -26,7 +26,7 @@ body {
 }
 
 .app-topbar-logo {
-  font-family: Georgia, Cambria, serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 17px;
   font-weight: 700;
   letter-spacing: -0.03em;
@@ -117,7 +117,7 @@ body {
 }
 
 .panel-header-title {
-  font-family: Georgia, Cambria, serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -269,7 +269,7 @@ body {
 }
 
 .center-empty-heading {
-  font-family: Georgia, Cambria, serif;
+  font-family: 'Inter', system-ui, sans-serif;
   font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.03em;

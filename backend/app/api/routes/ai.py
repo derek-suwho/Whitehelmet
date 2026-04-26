@@ -32,7 +32,11 @@ async def _openrouter_post(payload: dict) -> dict:
             },
             json=payload,
         )
-        resp.raise_for_status()
+        if not resp.is_success:
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"OpenRouter error: {resp.text}"
+            )
         return resp.json()
 
 

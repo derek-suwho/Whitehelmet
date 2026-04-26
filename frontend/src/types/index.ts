@@ -58,6 +58,14 @@ export interface ConsolidationResponse {
   rows: unknown[][]
 }
 
+export interface UserFile {
+  id: number
+  original_name: string
+  size_bytes: number
+  sha256: string
+  created_at: string
+}
+
 export interface ApiResponse<T = unknown> {
   data: T
   message?: string
