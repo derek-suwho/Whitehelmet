@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import SourcesPanel   from '@/components/sources/SourcesPanel.vue'
+import SourcesPanel      from '@/components/sources/SourcesPanel.vue'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
-import ChatPanel      from '@/components/chat/ChatPanel.vue'
+import ChatPanel         from '@/components/chat/ChatPanel.vue'
+import FormulaLibraryPanel from '@/components/formulas/FormulaLibraryPanel.vue'
 
 // ── Resizable panels ────────────────────────────────────────────
 const sourcesWidth = ref(220)   // px
 const chatWidth    = ref(280)   // px
+const leftTab      = ref<'sources' | 'formulas'>('sources')
 
 let dragging: 'sources' | 'chat' | null = null
 let startX = 0
@@ -52,15 +54,30 @@ onBeforeUnmount(() => {
   <div class="flex flex-1 overflow-hidden bg-surface-light pt-14">
     <div class="flex h-full w-full">
 
-      <!-- Sources panel -->
-      <SourcesPanel :style="{ width: sourcesWidth + 'px' }" class="shrink-0" />
+      <!-- Left panel (Sources / Formulas tabs) -->
+      <div class="flex shrink-0 flex-col border-r border-border" :style="{ width: sourcesWidth + 'px' }">
+        <!-- Tab bar -->
+        <div class="flex border-b border-border bg-surface-card">
+          <button
+            class="flex-1 py-1.5 text-xs font-medium"
+            :class="leftTab === 'sources' ? 'border-b-2 border-brand-600 bg-white text-brand-600' : 'text-gray-500 hover:text-gray-700'"
+            @click="leftTab = 'sources'"
+          >Sources</button>
+          <button
+            class="flex-1 py-1.5 text-xs font-medium"
+            :class="leftTab === 'formulas' ? 'border-b-2 border-brand-600 bg-white text-brand-600' : 'text-gray-500 hover:text-gray-700'"
+            @click="leftTab = 'formulas'"
+          >Formulas</button>
+        </div>
+        <SourcesPanel v-show="leftTab === 'sources'" class="flex-1 overflow-hidden" />
+        <FormulaLibraryPanel v-show="leftTab === 'formulas'" class="flex-1 overflow-hidden" />
+      </div>
 
       <!-- Sources resize handle -->
       <div
         class="group relative z-10 w-1 shrink-0 cursor-col-resize bg-border hover:bg-brand-600/30 active:bg-brand-600/50"
         @mousedown="onMouseDown('sources', $event)"
       >
-        <!-- Visual pill -->
         <div class="absolute inset-y-0 -left-0.5 -right-0.5 group-hover:bg-brand-600/20" />
       </div>
 

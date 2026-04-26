@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files, organizations, admin, templates, assignments
+from app.api.routes import health, auth, ai, records, files, organizations, admin, templates, assignments, formulas
 
 settings = get_settings()
 
@@ -34,6 +34,7 @@ app.include_router(organizations.router)
 app.include_router(admin.router)
 app.include_router(templates.router)
 app.include_router(assignments.router)
+app.include_router(formulas.router)
 
 
 @app.on_event("startup")
@@ -46,7 +47,7 @@ async def startup():
     from app.models import (  # noqa: F401
         User, Record, UploadedFile, ConversationMessage, SessionModel,
         Organization, Template, TemplateVersion, TemplateAssignment,
-        Submission, ConsolidatedSheet,
+        Submission, ConsolidatedSheet, Formula,
     )
 
     if settings.environment == "dev":

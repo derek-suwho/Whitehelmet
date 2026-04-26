@@ -13,9 +13,10 @@ const spreadsheet = useSpreadsheetStore()
 const { consolidate, isConsolidating } = useConsolidation()
 
 async function openFile(source: Source) {
-  const buffer = await source.file.arrayBuffer()
-  const wb = XLSX.read(buffer, { type: 'array' })
-  spreadsheet.loadWorkbook(wb, source.file.name)
+  const file = source.file
+  const buffer = await file.arrayBuffer()
+  const wb = XLSX.read(buffer, { type: 'array', cellFormula: true })
+  spreadsheet.loadWorkbook(wb, file.name)
 }
 
 const isDragOver       = ref(false)
