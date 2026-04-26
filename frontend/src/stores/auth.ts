@@ -1,29 +1,37 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api } from '@/composables/useApi'
+import type { User } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
+import type { Profile } from '@/types/database'
 
-export interface AuthUser {
-  id: number
-  external_id: string
-  email: string
-  display_name: string
-  role?: string
-  org_id?: string
-}
+type AuthUser = User & { display_name?: string }
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
-  const csrfToken = ref('')
+  const profile = ref<Profile | null>(null)
   const checked = ref(false)
 
-  const isAdmin = computed(() => user.value?.role === 'pif_admin')
-  const orgId = computed(() => user.value?.org_id ?? null)
+  const isAdmin = computed(() => profile.value?.role === 'pif_admin')
+  const orgType = computed(() => null as 'pif' | 'devco' | null)
+  const orgId = computed(() => profile.value?.org_id ?? null)
+
+  async function fetchProfile(userId: string) {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    profile.value = data
+    const dn = (profile.value as any)?.display_name as string | undefined
+    if (user.value && dn) user.value = { ...user.value, display_name: dn }
+  }
 
   async function checkSession() {
     try {
-      const resp = await api.get<{ user: AuthUser; csrf_token: string }>('/api/auth/me')
-      user.value = resp.user
-      csrfToken.value = resp.csrf_token
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        user.value = session.user
+        await fetchProfile(session.user.id)
+      } else {
+        user.value = null
+        profile.value = null
+      }
     } catch {
       user.value = null
     } finally {
@@ -32,24 +40,31 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string) {
-    const resp = await api.post<{ user: AuthUser; csrf_token: string }>('/api/auth/login', { email, password })
-    user.value = resp.user
-    csrfToken.value = resp.csrf_token
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw error
+    if (data.user) {
+      user.value = data.user
+      await fetchProfile(data.user.id)
+    }
   }
 
   async function register(email: string, password: string, displayName: string) {
-    await api.post('/api/auth/register', {
-      email,
-      password,
-      display_name: displayName,
-    })
+    const { data, error } = await supabase.auth.signUp({ email, password })
+    if (error) throw error
+    if (data.user) {
+      await supabase.from('profiles').insert({
+        id: data.user.id,
+        display_name: displayName,
+        role: 'devco_user',
+      } as any)
+    }
   }
 
   async function logout() {
-    await api.post('/api/auth/logout')
+    await supabase.auth.signOut()
     user.value = null
-    csrfToken.value = ''
+    profile.value = null
   }
 
-  return { user, csrfToken, checked, isAdmin, orgId, checkSession, login, register, logout }
+  return { user, profile, checked, isAdmin, orgType, orgId, checkSession, login, register, logout }
 })

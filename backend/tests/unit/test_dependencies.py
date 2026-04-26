@@ -35,7 +35,10 @@ def test_csrf_missing_header_403(client, db, test_user):
 
     client.cookies.set("session_id", token)
     # POST without X-CSRF-Token → 403 on CSRF-protected routes
-    resp = client.post("/api/records", json={"name": "test", "source_count": 1, "row_count": 1, "col_count": 1})
+    resp = client.post(
+        "/api/records",
+        json={"name": "test", "source_count": 1, "row_count": 1, "col_count": 1},
+    )
     assert resp.status_code == 403
 
 
@@ -51,5 +54,8 @@ def test_csrf_mismatch_403(client, db, test_user):
 
     client.cookies.set("session_id", token)
     client.headers["X-CSRF-Token"] = "wrong-csrf-token"
-    resp = client.post("/api/records", json={"name": "test", "source_count": 1, "row_count": 1, "col_count": 1})
+    resp = client.post(
+        "/api/records",
+        json={"name": "test", "source_count": 1, "row_count": 1, "col_count": 1},
+    )
     assert resp.status_code == 403

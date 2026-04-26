@@ -89,24 +89,29 @@ def test_chat_non_streaming_returns_json(client):
 def test_consolidate_missing_key_503(client):
     with patch("app.api.routes.ai.get_settings", return_value=_mock_settings()):
         resp = client.post("/api/ai/consolidate", json={
-            "files_data": [{"name": "f", "headers": [], "rows": []}],
+            "files_schema": [{"name": "f", "headers": [], "sample_rows": []}],
             "model": "test",
         })
         assert resp.status_code == 503
 
 
 def test_consolidate_returns_json(client):
-    mock_ctx = _mock_openrouter_json("[[1,2]]")
+    mock_ctx = _mock_openrouter_json(
+        '{"unified_headers":["Source File","ColA"],'
+        '"mappings":[{"file":"f","column_map":{"A":"ColA"}}]}'
+    )
     settings = _mock_settings(openrouter_key="test-key")
 
     with patch("app.api.routes.ai.get_settings", return_value=settings), \
          patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx):
         resp = client.post("/api/ai/consolidate", json={
-            "files_data": [{"name": "f", "headers": [], "rows": []}],
+            "files_schema": [{"name": "f", "headers": ["A"], "sample_rows": [[1]]}],
             "model": "test",
         })
         assert resp.status_code == 200
-        assert "choices" in resp.json()
+        data = resp.json()
+        assert "unified_headers" in data
+        assert "mappings" in data
 
 
 def test_command_missing_key_503(client):

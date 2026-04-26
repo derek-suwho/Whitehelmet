@@ -21,10 +21,19 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
 
     # Auth
-    auth_service_url: str = ""
+    auth_service_url: str = ""      # Laravel authorization service base URL
     session_secret: str = ""
     csrf_secret: str = ""
     session_expiry_hours: int = 24
+
+    # Keycloak (required when auth_mode=keycloak)
+    auth_mode: str = "local"        # "local" | "keycloak"
+    keycloak_url: str = ""          # e.g. https://auth.client.com
+    keycloak_realm: str = ""        # e.g. pif
+    keycloak_client_id: str = "whitehelmet"
+
+    # OCI MySQL SSL (optional — leave empty to disable SSL)
+    db_ssl_ca: str = ""             # path to CA cert file, e.g. /etc/ssl/mysql-ca.pem
 
     # File upload
     max_upload_size_mb: int = 50

@@ -39,7 +39,7 @@ async function logout() {
         </RouterLink>
       </nav>
       <div class="px-4 py-3 border-t border-gray-200 text-xs text-gray-500">
-        <div class="font-medium text-gray-700 truncate">{{ auth.profile?.display_name }}</div>
+        <div class="font-medium text-gray-700 truncate">{{ auth.user?.display_name }}</div>
         <button class="mt-1 hover:text-red-500 transition-colors" @click="logout">Sign out</button>
       </div>
     </aside>

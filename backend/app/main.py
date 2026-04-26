@@ -21,7 +21,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Authorization"],
 )
 
 # Routes
@@ -53,4 +53,4 @@ async def startup():
         try:
             Base.metadata.create_all(bind=engine)
         except Exception as e:
-            print(f"⚠️  DB unavailable on startup ({e.__class__.__name__}) — AI routes still work, DB-backed routes will 500")
+            print(f"[WARN] DB unavailable on startup ({e.__class__.__name__}) - AI routes still work, DB-backed routes will 500")

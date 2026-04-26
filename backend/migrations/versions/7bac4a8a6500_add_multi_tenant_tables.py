@@ -1,7 +1,7 @@
 """add multi-tenant tables
 
 Revision ID: 7bac4a8a6500
-Revises: 93be113401bf
+Revises: a1b2c3d4e5f6
 Create Date: 2026-04-26 10:48:57.460621
 """
 from typing import Sequence, Union
@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = '7bac4a8a6500'
-down_revision: Union[str, None] = '93be113401bf'
+down_revision: Union[str, None] = 'a1b2c3d4e5f6'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

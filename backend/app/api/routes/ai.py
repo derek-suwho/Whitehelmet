@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.ai import ChatRequest, ConsolidateRequest, CommandRequest, CommandResponse
+from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, CommandRequest, CommandResponse
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -77,25 +77,48 @@ async def chat(body: ChatRequest):
     return StreamingResponse(sse(), media_type="text/event-stream")
 
 
-@router.post("/consolidate")
+@router.post("/consolidate", response_model=ConsolidateResponse)
 async def consolidate(body: ConsolidateRequest):
-    """Proxy consolidation to OpenRouter (non-streaming)."""
+    """Detect column schema across files and return a unified mapping.
+
+    The AI only sees headers + sample rows — the client applies the mapping
+    to all rows, keeping large data out of the token budget.
+    """
     system_prompt = (
-        "You will receive Excel spreadsheet data as JSON arrays. "
-        "Merge them into a single consolidated spreadsheet. "
-        "Return ONLY a JSON array of arrays (rows). No markdown. "
-        "After the JSON, on a new line write SUMMARY: followed by "
-        "a brief paragraph explaining your merge decisions."
+        "You are a spreadsheet schema unifier. "
+        "Given headers and sample rows from multiple Excel files, "
+        "return ONLY a valid JSON object — no markdown, no extra text:\n"
+        '{"unified_headers":["Source File","<col>",...],'
+        '"mappings":[{"file":"<name>","column_map":{"<src>":"<unified>"}}]}\n\n'
+        "Rules:\n"
+        "- Always include \"Source File\" as the first unified header.\n"
+        "- Merge columns that represent the same concept under one standard name "
+        "(e.g. \"Invoice Amt\", \"Invoice Amount\", \"Inv. Amount\" → \"Invoice Amount\").\n"
+        "- Include every column that appears in at least one file.\n"
+        "- column_map must cover every source column in that file."
     )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps(body.files_data)},
+        {"role": "user", "content": json.dumps([
+            {"name": f.name, "headers": f.headers, "sample_rows": f.sample_rows}
+            for f in body.files_schema
+        ])},
     ]
-    return await _openrouter_post({
+    data = await _openrouter_post({
         "model": body.model,
-        "max_tokens": 8192,
+        "max_tokens": 2048,
         "messages": messages,
     })
+    raw = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    # Strip markdown fences if present
+    raw = raw.strip()
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=502, detail=f"AI returned invalid JSON: {exc}") from exc
+    return ConsolidateResponse(**parsed)
 
 
 COMMAND_SYSTEM_PROMPT = """\

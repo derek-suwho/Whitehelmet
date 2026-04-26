@@ -41,8 +41,7 @@ def test_reset_clears_lockout():
 
 
 def test_login_returns_429_after_lockout(client):
-    body = {"email": "u@example.com", "password": "p"}
-    # First MAX_ATTEMPTS get 401 (invalid credentials), next should get 429
+    body = {"email": "notfound@example.com", "password": "wrongpassword"}
     for _ in range(MAX_ATTEMPTS):
         resp = client.post("/api/auth/login", json=body)
         assert resp.status_code == 401
