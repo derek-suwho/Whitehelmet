@@ -120,6 +120,11 @@ const server = http.createServer((req, res) => {
 
   if (urlPath === '/') urlPath = '/index.html';
 
+  // Serve index.html for directory paths
+  if (!path.extname(urlPath)) {
+    urlPath = urlPath.replace(/\/?$/, '/index.html');
+  }
+
   const filePath = path.join(__dirname, urlPath);
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';

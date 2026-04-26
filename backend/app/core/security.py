@@ -5,7 +5,19 @@ import hashlib
 import hmac
 from datetime import datetime, timedelta, timezone
 
+from passlib.context import CryptContext
+
 from app.core.config import get_settings
+
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    return _pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return _pwd_context.verify(plain, hashed)
 
 
 def generate_session_token() -> str:

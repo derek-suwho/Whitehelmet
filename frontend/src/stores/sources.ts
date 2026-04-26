@@ -13,8 +13,15 @@ export const useSourcesStore = defineStore('sources', () => {
 
   const checkedCount = computed(() => checkedIds.value.size)
 
+  function _topLevelNames(): Set<string> {
+    return new Set(sources.value.map((s) => s.name))
+  }
+
   function addFiles(files: FileList) {
+    const existing = _topLevelNames()
     for (const file of Array.from(files)) {
+      if (existing.has(file.name)) continue
+      existing.add(file.name)
       sources.value.push({
         id: uid(),
         name: file.name,
@@ -28,29 +35,53 @@ export const useSourcesStore = defineStore('sources', () => {
   function addFolder(files: FileList) {
     if (files.length === 0) return
 
-    // Extract folder name from webkitRelativePath
+    const xlsxFiles = Array.from(files).filter((f) =>
+      /\.(xlsx|xls)$/i.test(f.name),
+    )
+    if (xlsxFiles.length === 0) return
+
     const first = files[0]
     const parts = (first as any).webkitRelativePath?.split('/') ?? []
     const folderName = parts[0] || 'Folder'
 
-    const folderId = uid()
-    const children: Source[] = []
+    if (_topLevelNames().has(folderName)) return
 
-    for (const file of Array.from(files)) {
-      children.push({
-        id: uid(),
-        name: file.name,
-        size: file.size,
-        file,
-        type: 'file',
-      })
-    }
+    const folderId = uid()
+    const children: Source[] = xlsxFiles.map((file) => ({
+      id: uid(),
+      name: file.name,
+      size: file.size,
+      file,
+      type: 'file' as const,
+    }))
 
     sources.value.push({
       id: folderId,
       name: folderName,
       size: children.reduce((sum, c) => sum + c.size, 0),
-      file: files[0], // reference file for the folder entry
+      file: xlsxFiles[0],
+      type: 'folder',
+      children,
+    })
+  }
+
+  function addFolderFromDrop(folderName: string, files: File[]) {
+    if (files.length === 0) return
+    if (_topLevelNames().has(folderName)) return
+
+    const folderId = uid()
+    const children: Source[] = files.map((file) => ({
+      id: uid(),
+      name: file.name,
+      size: file.size,
+      file,
+      type: 'file' as const,
+    }))
+    sources.value.push({
+      id: folderId,
+      name: folderName,
+      size: children.reduce((sum, c) => sum + c.size, 0),
+      file: files[0],
       type: 'folder',
       children,
     })
@@ -136,6 +167,7 @@ export const useSourcesStore = defineStore('sources', () => {
     checkedCount,
     addFiles,
     addFolder,
+    addFolderFromDrop,
     removeSource,
     toggleCheck,
     getCheckedFiles,

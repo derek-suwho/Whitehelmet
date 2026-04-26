@@ -30,25 +30,40 @@ export type AiOperationType =
   | 'rename_column'
   | 'sort'
   | 'apply_formula'
+  | 'filter'
+  | 'show_all_rows'
+  | 'remove_empty_rows'
+  | 'aggregate'
+  | 'find_duplicates'
+  | 'add_row'
+  | 'format_cells'
+  | 'highlight_column'
+  | 'conditional_format'
+  | 'clear_format'
+  | 'export'
+  | 'save_record'
+  | 'show_dashboard'
 
-export interface AiOperation {
-  type: AiOperationType
+export interface CommandApiResponse {
+  op: AiOperationType | null
   params: Record<string, unknown>
 }
 
-export interface AiCommandResponse {
-  handled: boolean
-  operation?: AiOperation
-  message?: string
-}
-
 export interface ConsolidationPayload {
-  files: { name: string; headers: string[]; rows: unknown[][] }[]
+  files_data: { name: string; headers: string[]; rows: unknown[][] }[]
 }
 
 export interface ConsolidationResponse {
   headers: string[]
   rows: unknown[][]
+}
+
+export interface UserFile {
+  id: number
+  original_name: string
+  size_bytes: number
+  sha256: string
+  created_at: string
 }
 
 export interface ApiResponse<T = unknown> {

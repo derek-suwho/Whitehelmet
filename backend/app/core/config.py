@@ -11,19 +11,10 @@ class Settings(BaseSettings):
     app_name: str = "Whitehelmet API"
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    # Database
-    db_host: str = "localhost"
-    db_port: int = 3306
-    db_name: str = "whitehelmet"
-    db_user: str = "whitehelmet"
-    db_password: str = ""
-
-    @property
-    def database_url(self) -> str:
-        return (
-            f"mysql+pymysql://{self.db_user}:{self.db_password}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
-        )
+    # Database — accepts any SQLAlchemy URL
+    # Supabase:  postgresql+psycopg2://postgres:[password]@db.[ref].supabase.co:5432/postgres
+    # MySQL:     mysql+pymysql://[user]:[password]@[host]:3306/[dbname]
+    database_url: str = ""
 
     # AI APIs — server-side only, never exposed to frontend
     anthropic_api_key: str = ""
@@ -39,7 +30,7 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 50
     upload_dir: str = "/var/data/whitehelmet/uploads"
 
-    model_config = {"env_file": ".env", "case_sensitive": False}
+    model_config = {"env_file": ".env", "case_sensitive": False, "extra": "ignore"}
 
 
 @lru_cache
