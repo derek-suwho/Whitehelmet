@@ -8,32 +8,47 @@ import type { SavedFormula } from '@/types'
 const formulaStore = useFormulasStore()
 const spreadsheet = useSpreadsheetStore()
 
-const applyTarget = ref<{ formula: SavedFormula; column: string } | null>(null)
+const applyTarget = ref<SavedFormula | null>(null)
 const showApplyModal = ref(false)
-const columnInput = ref('')
+const availableColumns = ref<string[]>([])
+const selectedColumn = ref('')
 const pendingScrape = ref<{ column: string; expression: string }[]>([])
 
 onMounted(() => formulaStore.fetchFormulas())
 
 function openApplyModal(formula: SavedFormula) {
-  applyTarget.value = { formula, column: '' }
-  columnInput.value = ''
+  const jss = spreadsheet.instance
+  if (!jss) {
+    alert('Open a spreadsheet first.')
+    return
+  }
+  const data: unknown[][] = jss.getData?.() ?? []
+  availableColumns.value = data.length > 0
+    ? (data[0] as unknown[]).map((c) => String(c ?? '')).filter((h) => h.trim())
+    : []
+  if (!availableColumns.value.length) {
+    alert('No columns found in the current spreadsheet.')
+    return
+  }
+  selectedColumn.value = availableColumns.value[0]
+  applyTarget.value = formula
   showApplyModal.value = true
 }
 
 async function confirmApply() {
-  if (!applyTarget.value || !columnInput.value.trim()) return
+  if (!applyTarget.value || !selectedColumn.value) return
   const jss = spreadsheet.instance
   if (!jss) return
-  const formula = applyTarget.value.formula
-  const col = columnInput.value.trim()
-  const headers: string[] = jss.getConfig?.()?.columns?.map((c: any) => String(c.title ?? c.name ?? '')) ?? []
-  const idx = headers.findIndex((h) => h.toLowerCase() === col.toLowerCase())
-  if (idx === -1) { alert(`Column "${col}" not found.`); return }
-  const rowCount = (jss.getData?.() ?? []).length
-  for (let r = 0; r < rowCount; r++) {
-    jss.setValueFromCoords(idx, r, formula.expression.replace(/\{row\}/gi, String(r + 1)))
+  const data: unknown[][] = jss.getData?.() ?? []
+  const headers = data.length > 0 ? (data[0] as unknown[]).map((c) => String(c ?? '')) : []
+  const idx = headers.findIndex((h) => h === selectedColumn.value)
+  if (idx === -1) return
+  const rowCount = Math.max(0, (jss.countRows?.() ?? 1) - 1)
+  const changes: [number, number, string][] = []
+  for (let d = 0; d < rowCount; d++) {
+    changes.push([d + 1, idx, applyTarget.value.expression.replace(/\{row\}/gi, String(d + 2))])
   }
+  if (changes.length) jss.setDataAtCell(changes)
   showApplyModal.value = false
 }
 
@@ -107,14 +122,14 @@ async function saveScrapped(item: { column: string; expression: string }) {
     <!-- Apply modal -->
     <div v-if="showApplyModal" class="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-xl p-4 w-72">
-        <p class="font-semibold mb-2">Apply "{{ applyTarget?.formula.name }}"</p>
-        <p class="text-xs text-gray-500 mb-3">Enter the column name to apply the formula to:</p>
-        <input
-          v-model="columnInput"
+        <p class="font-semibold mb-2">Apply "{{ applyTarget?.name }}"</p>
+        <p class="text-xs text-gray-500 mb-3">Select the column to apply this formula to:</p>
+        <select
+          v-model="selectedColumn"
           class="w-full border border-gray-300 rounded px-2 py-1 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="e.g. Total Cost"
-          @keydown.enter="confirmApply"
-        />
+        >
+          <option v-for="col in availableColumns" :key="col" :value="col">{{ col }}</option>
+        </select>
         <div class="flex gap-2 justify-end">
           <button class="text-sm text-gray-600 hover:underline" @click="showApplyModal = false">Cancel</button>
           <button
