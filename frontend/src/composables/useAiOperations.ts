@@ -6,6 +6,7 @@ import { useSourcesStore } from '@/stores/sources'
 import { useRecordsStore } from '@/stores/records'
 import { useChatStore } from '@/stores/chat'
 import { useFormulasStore } from '@/stores/formulas'
+import { applyFmtExternal, clearFmtExternal, renderExternal } from '@/composables/useSpreadsheetEditor'
 import type { CommandApiResponse } from '@/types'
 
 // ── Module-level filter state ─────────────────────────────────────────────────
@@ -14,28 +15,23 @@ const hiddenRows = new Set<number>()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getColumnHeaders(jss: any): string[] {
-  const config = jss.getConfig?.() ?? jss.options ?? {}
-  const columns = config.columns ?? []
-  if (columns.length > 0) {
-    return columns.map((c: any) => String(c.title ?? c.name ?? ''))
-  }
-  const data = jss.getData?.() ?? []
-  if (data.length > 0) return (data[0] as unknown[]).map((c) => String(c ?? ''))
-  return []
+function getColumnHeaders(hot: any): string[] {
+  const data: unknown[][] = hot.getData?.() ?? []
+  if (!data.length) return []
+  return (data[0] as unknown[]).map((c) => String(c ?? ''))
 }
 
-function getDataRows(jss: any): unknown[][] {
-  return jss.getData?.() ?? []
+function getDataRows(hot: any): unknown[][] {
+  const data: unknown[][] = hot.getData?.() ?? []
+  return data.slice(1)
 }
 
-function getRowCount(jss: any): number {
-  return (jss.getData?.() ?? []).length
+function getRowCount(hot: any): number {
+  return Math.max(0, (hot.countRows?.() ?? 1) - 1)
 }
 
-function getColCount(jss: any): number {
-  const data = jss.getData?.() ?? []
-  return data.length > 0 ? (data[0] as unknown[]).length : 0
+function getColCount(hot: any): number {
+  return hot.countCols?.() ?? 0
 }
 
 function resolveColumnIndex(headers: string[], column: string | number): number {
