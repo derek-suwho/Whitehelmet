@@ -322,9 +322,7 @@ async function executeConsolidateToTemplate(
     const hText: string = hJson.choices[0].message.content
       .trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim()
     templateHeaders = JSON.parse(hText)
-    for (let i = 0; i < templateHeaders.length; i++) {
-      jss.setValueFromCoords(i, 0, templateHeaders[i])
-    }
+    jss.setDataAtCell(templateHeaders.map((h: string, i: number) => [0, i, h] as [number, number, string]))
   }
 
   const outputRows: unknown[][] = []
@@ -395,9 +393,7 @@ async function executeDynamicReport(
     return
   }
 
-  for (let i = 0; i < templateHeaders.length; i++) {
-    jss.setValueFromCoords(i, 0, templateHeaders[i])
-  }
+  jss.setDataAtCell(templateHeaders.map((h: string, i: number) => [0, i, h] as [number, number, string]))
 
   const sources = useSourcesStore()
   const files = sources.getCheckedFiles()
@@ -458,12 +454,15 @@ async function applyOperation(
     case 'add_column': {
       const pos = p.position != null ? Number(p.position) : getColCount(jss)
       const title = String(p.name ?? 'New Column')
-      jss.insertColumn(1, pos, true)
-      jss.setHeader(pos, title)
+      jss.alter('insert_col_start', pos, 1)
+      jss.setDataAtCell(0, pos, title)
       if (p.default_value) {
-        for (let r = 0; r < getRowCount(jss); r++) {
-          jss.setValueFromCoords(pos, r, p.default_value as string)
+        const rowCount = getRowCount(jss)
+        const changes: [number, number, string][] = []
+        for (let d = 0; d < rowCount; d++) {
+          changes.push([d + 1, pos, p.default_value as string])
         }
+        if (changes.length) jss.setDataAtCell(changes)
       }
       return `Added column "${title}".`
     }
@@ -471,14 +470,14 @@ async function applyOperation(
     case 'remove_column': {
       const idx = resolveCol(p.name)
       if (idx === -1) return `Column "${p.name}" not found.`
-      jss.deleteColumn(idx, 1)
+      jss.alter('remove_col', idx, 1)
       return `Removed column "${p.name}".`
     }
 
     case 'rename_column': {
       const idx = resolveCol(p.from)
       if (idx === -1) return `Column "${p.from}" not found.`
-      jss.setHeader(idx, String(p.to ?? ''))
+      jss.setDataAtCell(0, idx, String(p.to ?? ''))
       return `Renamed "${p.from}" → "${p.to}".`
     }
 
@@ -535,7 +534,9 @@ async function applyOperation(
       const idx = resolveCol(p.column)
       if (idx === -1) return `Column "${p.column}" not found.`
       const asc = String(p.order ?? 'asc') === 'asc'
-      jss.orderBy(idx, asc ? 0 : 1)
+      const sortPlugin = (jss as any).getPlugin('columnSorting')
+      if (!sortPlugin) return 'Sort unavailable.'
+      sortPlugin.sort({ column: idx, sortOrder: asc ? 'asc' : 'desc' })
       return `Sorted by "${p.column}" (${asc ? 'ascending' : 'descending'}).`
     }
 
@@ -545,47 +546,48 @@ async function applyOperation(
       const data = getDataRows(jss)
       const operator = String(p.operator ?? '=')
       const value = String(p.value ?? '')
-      const tbody = jss.el?.querySelector('table tbody') as HTMLElement | null
-      if (!tbody) return 'Filter unavailable: spreadsheet not mounted.'
-      const trs = tbody.querySelectorAll('tr')
-      let hidden = 0
-      for (let r = 0; r < data.length; r++) {
-        const cellVal = (data[r] as unknown[])[colIdx]
-        const keep = evaluateCondition(cellVal, operator, value)
-        if (!keep) {
-          if (trs[r]) (trs[r] as HTMLElement).style.display = 'none'
-          hiddenRows.add(r)
-          hidden++
+      const rowsToHide: number[] = []
+      for (let d = 0; d < data.length; d++) {
+        const cellVal = (data[d] as unknown[])[colIdx]
+        if (!evaluateCondition(cellVal, operator, value)) {
+          rowsToHide.push(d + 1)
+          hiddenRows.add(d + 1)
         }
       }
-      return `Filtered: hiding ${hidden} rows where "${p.column}" ${operator} ${value}.`
+      const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
+      if (hiddenPlugin && rowsToHide.length) {
+        hiddenPlugin.hideRows(rowsToHide)
+        jss.render()
+      }
+      return `Filtered: hiding ${rowsToHide.length} rows where "${p.column}" ${operator} ${value}.`
     }
 
     case 'show_all_rows': {
-      const tbody = jss.el?.querySelector('table tbody') as HTMLElement | null
-      tbody?.querySelectorAll('tr').forEach((tr) => {
-        ;(tr as HTMLElement).style.display = ''
-      })
+      const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
+      if (hiddenPlugin && hiddenRows.size) {
+        hiddenPlugin.showRows([...hiddenRows])
+        jss.render()
+      }
       hiddenRows.clear()
       return 'Showing all rows — filter cleared.'
     }
 
     case 'add_row': {
       const count = Number(p.count ?? 1)
-      const pos = p.position != null ? Number(p.position) : getRowCount(jss)
-      jss.insertRow(count, pos)
+      const pos = p.position != null ? Number(p.position) + 1 : jss.countRows() - 1
+      jss.alter('insert_row_below', pos, count)
       return `Inserted ${count} row(s).`
     }
 
     case 'remove_empty_rows': {
-      const data = getDataRows(jss)
+      const data: unknown[][] = jss.getData()
       let deleted = 0
-      for (let r = data.length - 1; r >= 0; r--) {
+      for (let r = data.length - 1; r >= 1; r--) {
         const isEmpty = (data[r] as unknown[]).every(
           (c) => c === '' || c === null || c === undefined,
         )
         if (isEmpty) {
-          jss.deleteRow(r, 1)
+          jss.alter('remove_row', r, 1)
           deleted++
         }
       }
@@ -631,13 +633,10 @@ async function applyOperation(
     }
 
     case 'format_cells': {
-      const props = (p.props ?? {}) as Record<string, unknown>
-      const style = buildStyle(props)
-      if (!style) return 'No formatting properties specified.'
+      const props = (p.props ?? {}) as Record<string, any>
       const colIdx = p.column != null ? resolveCol(p.column) : null
-      const targetRow = p.row != null ? Number(p.row) - 1 : null
-      const data = getDataRows(jss)
-      const styleMap: Record<string, string> = {}
+      const targetRow = p.row != null ? Number(p.row) : null
+      const data: unknown[][] = jss.getData()
       const rows = targetRow != null
         ? [targetRow]
         : Array.from({ length: data.length }, (_, i) => i)
@@ -646,23 +645,21 @@ async function applyOperation(
         : Array.from({ length: getColCount(jss) }, (_, i) => i)
       for (const r of rows) {
         for (const c of cols) {
-          styleMap[cellName(c, r)] = style
+          applyFmtExternal(r, c, props)
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Formatted ${p.column ? `"${p.column}"` : 'selection'}.`
     }
 
     case 'highlight_column': {
       const colIdx = resolveCol(p.column)
       if (colIdx === -1) return `Column "${p.column}" not found.`
-      const data = getDataRows(jss)
-      const style = `background-color: ${p.bgColor}`
-      const styleMap: Record<string, string> = {}
+      const data: unknown[][] = jss.getData()
       for (let r = 0; r < data.length; r++) {
-        styleMap[cellName(colIdx, r)] = style
+        applyFmtExternal(r, colIdx, { bgColor: String(p.bgColor) })
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Highlighted "${p.column}" with ${p.bgColor}.`
     }
 
@@ -670,61 +667,69 @@ async function applyOperation(
       const colIdx = resolveCol(p.column)
       if (colIdx === -1) return `Column "${p.column}" not found.`
       const data = getDataRows(jss)
-      const props = (p.props ?? {}) as Record<string, unknown>
-      const style = buildStyle(props)
+      const props = (p.props ?? {}) as Record<string, any>
       const operator = String(p.operator ?? '=')
       const value = String(p.value ?? '')
-      const styleMap: Record<string, string> = {}
       let matched = 0
-      for (let r = 0; r < data.length; r++) {
-        if (evaluateCondition((data[r] as unknown[])[colIdx], operator, value)) {
+      for (let d = 0; d < data.length; d++) {
+        if (evaluateCondition((data[d] as unknown[])[colIdx], operator, value)) {
           for (let c = 0; c < getColCount(jss); c++) {
-            styleMap[cellName(c, r)] = style
+            applyFmtExternal(d + 1, c, props)
           }
           matched++
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Conditional format applied to ${matched} row(s) where "${p.column}" ${operator} ${value}.`
     }
 
     case 'clear_format': {
       const colIdx = p.column != null ? resolveCol(p.column) : null
-      const data = getDataRows(jss)
-      const styleMap: Record<string, string> = {}
+      const data: unknown[][] = jss.getData()
       const cols = colIdx != null
         ? [colIdx]
         : Array.from({ length: getColCount(jss) }, (_, i) => i)
       for (let r = 0; r < data.length; r++) {
         for (const c of cols) {
-          styleMap[cellName(c, r)] = ''
+          clearFmtExternal(r, c)
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Cleared formatting from ${p.column ? `"${p.column}"` : 'entire sheet'}.`
     }
 
     case 'export': {
       const spreadsheet = useSpreadsheetStore()
-      const exportHeaders = getColumnHeaders(jss)
-      const data = getDataRows(jss)
-      const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet([exportHeaders, ...data])
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-      XLSX.writeFile(wb, `${spreadsheet.fileName ?? 'export'}.xlsx`)
+      const allData: unknown[][] = jss.getData()
+      const wb2 = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(allData as any[][])
+      Object.keys(ws)
+        .filter((k) => !k.startsWith('!'))
+        .forEach((addr) => {
+          const cell = ws[addr]
+          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
+            cell.f = cell.v.slice(1)
+            cell.t = 'n'
+            delete cell.v
+            delete cell.w
+          }
+        })
+      XLSX.utils.book_append_sheet(wb2, ws, 'Sheet1')
+      XLSX.writeFile(wb2, `${spreadsheet.fileName ?? 'export'}.xlsx`)
       return 'Downloading spreadsheet as .xlsx…'
     }
 
     case 'save_record': {
       const spreadsheet = useSpreadsheetStore()
       const records = useRecordsStore()
-      const saveHeaders = getColumnHeaders(jss)
-      const data = getDataRows(jss)
+      const allData: unknown[][] = jss.getData()
+      const saveHeaders = (allData[0] as unknown[]).map((c) => String(c ?? ''))
+      const data = allData.slice(1) as unknown[][]
       const date = new Date().toLocaleDateString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
       })
       const name = `${spreadsheet.fileName ?? 'Record'} — ${date}`
-      await records.createRecord({ name, headers: saveHeaders, rows: data as unknown[][] })
+      await records.createRecord({ name, headers: saveHeaders, rows: data })
       return `Saved "${name}" to master records.`
     }
 
