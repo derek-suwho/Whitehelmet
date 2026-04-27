@@ -55,13 +55,16 @@ export function resetFormatsTest() {
 }
 
 export function applyFmtExternal(row: number, col: number, props: Record<string, any>): void {
-  _setFmt(_currentSheetIdx, row, col, props)
+  const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+  const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+  _setFmt(_currentSheetIdx, physRow, physCol, props)
 }
 
 export function clearFmtExternal(row: number, col: number): void {
-  if (_allSheetFormats[_currentSheetIdx]) {
-    delete _allSheetFormats[_currentSheetIdx][`${row},${col}`]
-  }
+  if (!_allSheetFormats[_currentSheetIdx]) return
+  const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+  const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+  delete _allSheetFormats[_currentSheetIdx][`${physRow},${physCol}`]
 }
 
 export function renderExternal(): void {
@@ -119,7 +122,7 @@ Handsontable.renderers.registerRenderer(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .apply(null as any, [hot, TD, row, col, prop, value, cellProps])
 
-    const fmt = _getFmt(_currentSheetIdx, row, col)
+    const fmt = _getFmt(_currentSheetIdx, hot.toPhysicalRow(row), hot.toPhysicalColumn(col))
     // Header row defaults
     if (row === 0) {
       if (!fmt.bgColor) TD.style.backgroundColor = '#e9f0e9'
@@ -167,7 +170,9 @@ export function useSpreadsheetEditor() {
   }
 
   function _updateToolbarState(row: number, col: number): void {
-    const fmt = _getFmt(_currentSheetIdx, row, col)
+    const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+    const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+    const fmt = _getFmt(_currentSheetIdx, physRow, physCol)
     fmtState.value = {
       bold: !!fmt.bold,
       italic: !!fmt.italic,
@@ -194,15 +199,17 @@ export function useSpreadsheetEditor() {
     const c2 = Math.max(rng.from.col, rng.to.col)
     for (let r = r1; r <= r2; r++)
       for (let c = c1; c <= c2; c++)
-        _setFmt(_currentSheetIdx, r, c, props)
+        _setFmt(_currentSheetIdx, _currentInstance.toPhysicalRow(r), _currentInstance.toPhysicalColumn(c), props)
     _currentInstance.render()
     _updateToolbarState(rng.from.row, rng.from.col)
   }
 
   function _toggleFmt(key: string): void {
     const rng = _getRange()
-    if (!rng) return
-    const current = _getFmt(_currentSheetIdx, rng.from.row, rng.from.col)[key]
+    if (!rng || !_currentInstance) return
+    const physRow = _currentInstance.toPhysicalRow(rng.from.row)
+    const physCol = _currentInstance.toPhysicalColumn(rng.from.col)
+    const current = _getFmt(_currentSheetIdx, physRow, physCol)[key]
     _applyFmt({ [key]: !current })
   }
 
@@ -348,7 +355,7 @@ export function useSpreadsheetEditor() {
       width: '100%',
       height: '100%',
       licenseKey: 'non-commercial-and-evaluation',
-      formulas: { engine: HyperFormula },
+      formulas: { engine: HyperFormula, licenseKey: 'non-commercial-and-evaluation' },
       colWidths: _allSheetColWidths[0] ?? 100,
       manualColumnResize: true,
       manualRowResize: true,

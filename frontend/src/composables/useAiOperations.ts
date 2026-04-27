@@ -393,7 +393,7 @@ async function executeDynamicReport(
     return
   }
 
-  jss.setDataAtCell(templateHeaders.map((h: string, i: number) => [0, i, h] as [number, number, string]))
+  jss.loadData([templateHeaders] as any)
 
   const sources = useSourcesStore()
   const files = sources.getCheckedFiles()
@@ -406,6 +406,11 @@ async function executeDynamicReport(
   const templateColsWithHints = plan.columns.map(
     (c) => c.name + (c.source_field ? ` [hint: "${c.source_field}"]` : ''),
   )
+  // mapColumns keys are hint-suffixed; build lookup so data rows can find results by plain name
+  const hintedKey: Record<string, string> = {}
+  for (let ci = 0; ci < plan.columns.length; ci++) {
+    hintedKey[plan.columns[ci].name] = templateColsWithHints[ci]
+  }
   const outputRows: unknown[][] = []
   const n = files.length
 
@@ -421,7 +426,7 @@ async function executeDynamicReport(
       const isEmpty = (row as unknown[]).every((c) => c === '' || c === null || c === undefined)
       if (isEmpty) continue
       const mapped = templateHeaders.map((col) => {
-        const srcCol = mapping[col]
+        const srcCol = mapping[hintedKey[col] ?? col]
         if (!srcCol) return ''
         const idx = srcHeaders.indexOf(srcCol)
         return idx >= 0 ? (row as unknown[])[idx] ?? '' : ''
@@ -550,8 +555,9 @@ async function applyOperation(
       for (let d = 0; d < data.length; d++) {
         const cellVal = (data[d] as unknown[])[colIdx]
         if (!evaluateCondition(cellVal, operator, value)) {
-          rowsToHide.push(d + 1)
-          hiddenRows.add(d + 1)
+          const physicalRow = jss.toPhysicalRow(d + 1)
+          rowsToHide.push(physicalRow)
+          hiddenRows.add(physicalRow)
         }
       }
       const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
@@ -564,9 +570,12 @@ async function applyOperation(
 
     case 'show_all_rows': {
       const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
-      if (hiddenPlugin && hiddenRows.size) {
-        hiddenPlugin.showRows([...hiddenRows])
-        jss.render()
+      if (hiddenPlugin) {
+        const currentlyHidden: number[] = hiddenPlugin.getHiddenRows()
+        if (currentlyHidden.length) {
+          hiddenPlugin.showRows(currentlyHidden)
+          jss.render()
+        }
       }
       hiddenRows.clear()
       return 'Showing all rows — filter cleared.'
