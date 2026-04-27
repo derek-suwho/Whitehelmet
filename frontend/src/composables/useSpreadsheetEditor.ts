@@ -54,6 +54,20 @@ export function resetFormatsTest() {
   _allSheetFormats = []
 }
 
+export function applyFmtExternal(row: number, col: number, props: Record<string, any>): void {
+  _setFmt(_currentSheetIdx, row, col, props)
+}
+
+export function clearFmtExternal(row: number, col: number): void {
+  if (_allSheetFormats[_currentSheetIdx]) {
+    delete _allSheetFormats[_currentSheetIdx][`${row},${col}`]
+  }
+}
+
+export function renderExternal(): void {
+  _currentInstance?.render()
+}
+
 // ── Private helpers ──────────────────────────────────────────────
 function _argbToCss(argb: string): string | null {
   if (!argb) return null
