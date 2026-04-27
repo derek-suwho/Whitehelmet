@@ -487,10 +487,11 @@ async function applyOperation(
       if (idx === -1) return `Column "${p.column}" not found.`
       const formula = String(p.formula ?? '')
       const rowCount = getRowCount(jss)
-      for (let r = 0; r < rowCount; r++) {
-        const resolved = formula.replace(/\{row\}/gi, String(r + 1))
-        jss.setValueFromCoords(idx, r, resolved)
+      const changes: [number, number, string][] = []
+      for (let d = 0; d < rowCount; d++) {
+        changes.push([d + 1, idx, formula.replace(/\{row\}/gi, String(d + 2))])
       }
+      if (changes.length) jss.setDataAtCell(changes)
       return `Applied formula to "${p.column}" (${rowCount} rows).`
     }
 
@@ -501,10 +502,11 @@ async function applyOperation(
       const idx = resolveCol(p.column)
       if (idx === -1) return `Column "${p.column}" not found.`
       const rowCount = getRowCount(jss)
-      for (let r = 0; r < rowCount; r++) {
-        const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
-        jss.setValueFromCoords(idx, r, resolved)
+      const changes: [number, number, string][] = []
+      for (let d = 0; d < rowCount; d++) {
+        changes.push([d + 1, idx, saved.expression.replace(/\{row\}/gi, String(d + 2))])
       }
+      if (changes.length) jss.setDataAtCell(changes)
       return `Applied "${saved.name}" to "${p.column}" (${rowCount} rows).`
     }
 
@@ -518,10 +520,11 @@ async function applyOperation(
         const idx = resolveCol(p.column)
         if (idx !== -1) {
           const rowCount = getRowCount(jss)
-          for (let r = 0; r < rowCount; r++) {
-            const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
-            jss.setValueFromCoords(idx, r, resolved)
+          const changes: [number, number, string][] = []
+          for (let d = 0; d < rowCount; d++) {
+            changes.push([d + 1, idx, saved.expression.replace(/\{row\}/gi, String(d + 2))])
           }
+          if (changes.length) jss.setDataAtCell(changes)
           return `Created and applied "${saved.name}" (${saved.expression}) to "${p.column}".`
         }
       }
