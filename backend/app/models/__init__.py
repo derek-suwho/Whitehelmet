@@ -8,8 +8,11 @@ from app.models.template import Template
 from app.models.template_version import TemplateVersion
 from app.models.template_assignment import TemplateAssignment
 from app.models.submission import Submission
+from app.models.consolidated_sheet import ConsolidatedSheet
+from app.models.formula import Formula
 
 __all__ = [
     "User", "Record", "UploadedFile", "ConversationMessage", "SessionModel",
-    "Organization", "Template", "TemplateVersion", "TemplateAssignment", "Submission",
+    "Organization", "Template", "TemplateVersion", "TemplateAssignment",
+    "Submission", "ConsolidatedSheet", "Formula",
 ]

@@ -12,8 +12,6 @@ Production stack (split repo layout):
 - **Auth** — session-cookie based, CSRF-protected, backed by Whitehelmet external auth service (stubbed)
 - **Tests** — pytest + coverage (backend), Vitest + Playwright (frontend)
 
-A legacy single-file MVP (`index.html`, `js/`, `css/`, `serve.mjs`) still lives in the repo root for reference and quick prototyping.
-
 ## Layout
 
 ```
@@ -54,7 +52,6 @@ deploy/
     base/             namespace, deployments, ingress, hpa, pvc, configmap, secret
     overlays/         dev, staging, production, bribrot
 
-index.html, js/, css/, serve.mjs   legacy single-file MVP (not the production app)
 ```
 
 ## Backend API
@@ -154,20 +151,3 @@ npm run type-check
 npm run lint
 ```
 
-## Legacy MVP
-
-The original single-file vanilla-JS app still builds and runs from the repo root:
-
-```bash
-node serve.mjs   # http://localhost:3000
-```
-
-Entry is `index.html`, modules in `js/`, styles in `css/`. Kept around for reference; new work should land in `backend/` and `frontend/`.
-
-## Screenshots
-
-```bash
-node screenshot.mjs http://localhost:5173
-```
-
-Saves to `temporary screenshots/screenshot-N.png`. Puppeteer Chrome path is hardcoded for macOS ARM in `screenshot.mjs` — adjust `executablePath` for other platforms.

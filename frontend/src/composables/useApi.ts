@@ -1,5 +1,3 @@
-import { useAuthStore } from '@/stores/auth'
-
 const BASE_URL = '' // same-origin; Vite proxy handles /api → backend
 
 interface RequestOptions {
@@ -15,13 +13,7 @@ async function request<T = unknown>(
   body?: unknown,
   isUpload = false,
 ): Promise<T> {
-  const auth = useAuthStore()
-
   const headers: Record<string, string> = {}
-
-  if (auth.csrfToken) {
-    headers['X-CSRF-Token'] = auth.csrfToken
-  }
 
   const opts: RequestOptions = {
     method,
@@ -71,6 +63,10 @@ export const api = {
     return request<T>(url, 'POST', body)
   },
 
+  patch<T = unknown>(url: string, body?: unknown): Promise<T> {
+    return request<T>(url, 'PATCH', body)
+  },
+
   delete<T = unknown>(url: string): Promise<T> {
     return request<T>(url, 'DELETE')
   },
@@ -79,5 +75,9 @@ export const api = {
     const form = new FormData()
     form.append('file', file)
     return request<T>(url, 'POST', form, true)
+  },
+
+  postForm<T = unknown>(url: string, formData: FormData): Promise<T> {
+    return request<T>(url, 'POST', formData, true)
   },
 }

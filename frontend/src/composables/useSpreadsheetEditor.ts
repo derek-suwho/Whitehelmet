@@ -35,6 +35,7 @@ export const fmtState = ref({
 })
 export const lastTextColor = ref('#111111')
 export const lastFillColor = ref('#ffff00')
+export const detectedFormulas = ref<{ column: string; expression: string }[]>([])
 
 // ── Test-exported helpers ────────────────────────────────────────
 export function argbToCssTest(argb: string): string | null {
@@ -208,6 +209,7 @@ export function useSpreadsheetEditor() {
     _sheetNames = wb.SheetNames.slice()
     _zoomLevel = 1.0
     zoomLevel.value = 1.0
+    detectedFormulas.value = []
 
     _sheetNames.forEach((sheetName, sheetIdx) => {
       const ws = wb.Sheets[sheetName]
@@ -222,7 +224,7 @@ export function useSpreadsheetEditor() {
       const maxCols = Math.max(range.e.c + 1, 10)
       const maxRows = range.e.r + 1
 
-      // Data rows (prefer cell.w display value)
+      // Data rows — prefer formula strings, then display value, then raw value
       const processed: any[][] = []
       for (let R = 0; R < maxRows; R++) {
         const row: any[] = []
@@ -230,8 +232,9 @@ export function useSpreadsheetEditor() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C })
           const cell = ws[addr]
           if (!cell) { row.push(''); continue }
-          const val =
-            cell.w !== undefined && cell.w !== ''
+          const val = cell.f
+            ? `=${cell.f}`
+            : cell.w !== undefined && cell.w !== ''
               ? cell.w
               : cell.v !== undefined && cell.v !== null
                 ? cell.v
@@ -242,6 +245,24 @@ export function useSpreadsheetEditor() {
       }
       while (processed.length < 50) processed.push(new Array(maxCols).fill(''))
       _sheetsData.push(processed)
+
+      // Collect formulas found in this sheet (first sheet only, skip header row)
+      if (sheetIdx === 0 && processed.length > 0) {
+        const headers = processed[0]
+        const found: { column: string; expression: string }[] = []
+        const seen = new Set<string>()
+        for (let DC = 0; DC < maxCols; DC++) {
+          for (let DR = 1; DR < processed.length; DR++) {
+            const v = String(processed[DR][DC] ?? '')
+            if (v.startsWith('=') && !seen.has(v)) {
+              seen.add(v)
+              found.push({ column: String(headers[DC] ?? `Col ${DC + 1}`), expression: v })
+              break
+            }
+          }
+        }
+        if (found.length) detectedFormulas.value = found
+      }
 
       // Cell styles
       const fmts: Record<string, Record<string, any>> = {}
@@ -590,6 +611,18 @@ export function useSpreadsheetEditor() {
     const wb2 = XLSX.utils.book_new()
     for (let i = 0; i < _sheetsData.length; i++) {
       const ws = XLSX.utils.aoa_to_sheet(_sheetsData[i])
+      // Convert formula strings to XLSX formula cell objects so Excel evaluates them
+      Object.keys(ws)
+        .filter((k) => !k.startsWith('!'))
+        .forEach((addr) => {
+          const cell = ws[addr]
+          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
+            cell.f = cell.v.slice(1)
+            cell.t = 'n'
+            delete cell.v
+            delete cell.w
+          }
+        })
       XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)
     }
     const arr = XLSX.write(wb2, { bookType: 'xlsx', type: 'array' })

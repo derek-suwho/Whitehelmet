@@ -12,36 +12,36 @@ These summaries describe what each group builds in terms of the product flow doc
 
 ---
 
-### Group 1 — "The Submission Pipeline"
-*Product Flow: Parts 4 and 5*
+### Group 1 — "The Template and Submission Pipeline"
+*Product Flow: Steps 3, 4, and 5*
 
-Group 1 owns everything that happens between a PM wanting to collect data and that data landing back on the PM's desk — whether or not a template is involved.
+Group 1 owns everything from building the master subcontractor template through to distributing it and tracking all submissions on the PM's dashboard.
 
-In Part 4 of the product flow, the PM clicks a button and each DevCo receives an email with the KPI template attached and a secure, one-time link to submit their completed version. DevCos don't need a login — they download the Excel file, fill it out locally the same way they always have, then upload it through that link. The system receives the file, locks it immediately so it can't be changed after submission, and timestamps it for the audit trail.
+In Step 3 (Master Subcontractor Template Creation), Group 1 handles how KPI templates are built. The PM can upload a pre-defined Excel file and the system parses and converts it into a Salama-managed form, or use the AI chatbot to define fields, structure, and validation rules through natural language. Either path produces a versioned template with structured fields, validation rules, and full audit traceability — ready for distribution. This is the structured flow; Group 1 also supports the unstructured flow where no standardized template exists and the DevCo submits whatever Excel format they already use internally.
 
-Group 1 also supports a **freeform upload flow** for situations where the PM does not have a template ready or wants to collect whatever Excel report a DevCo already produces internally. In this case, the PM generates a plain upload link for a DevCo (no template attached), sends it via email, and the DevCo uploads any `.xlsx` file they choose. The submission is tracked and locked exactly the same way as a template-based submission. The PM can then use Group 2's consolidation AI chatbot to manually map and merge freeform submissions into a master sheet.
+In Step 4 (Distribution), the PM sends each DevCo an email containing either the master template and a secure upload link (structured flow) or just a plain upload link with no template attached (unstructured/freeform flow). DevCos don't need a platform login — they download the Excel file (if applicable), fill it out, and upload it through the link. The system receives the file, locks it immediately on submission, and timestamps it for the audit trail.
 
-In Part 5, the PM's dashboard updates in real time as DevCos submit, showing both template-based and freeform submissions in a unified tracking view. The PM can monitor progress, send reminders, and see at a glance which companies have submitted and which are still pending.
+In Step 5 (Submission Tracking), the PM's dashboard updates in real time as DevCos submit, showing both template-based and freeform submissions in a unified tracking view. The PM can monitor progress, send reminders, and see at a glance which companies have submitted and which are still pending.
 
 From the PM's perspective, Group 1 turns what used to be an email chain into a managed, trackable workflow — regardless of whether a structured template exists. From the DevCo's perspective, nothing about how they work with Excel changes — they just get a link.
 
 ---
 
-### Group 2 — "The Template Engine and Consolidation"
-*Product Flow: Parts 3 and 6*
+### Group 2 — "The PM Dashboard and Consolidation"
+*Product Flow: Steps 2 and 6*
 
-Group 2 owns the two most complex stages of the reporting lifecycle: how templates are created and how submitted data becomes a master sheet.
+Group 2 owns the PM's entry point into the platform and the final stage where all collected data is turned into a master sheet.
 
-In Part 3, the PM has two ways to build a KPI template. They can upload an existing Excel file and the system parses it into a structured, versioned Salama-managed form. Or they can open an AI chatbot, describe what they need in plain language ("I need columns for contractor name, monthly incident count, near misses, and total hours worked"), and the system generates the template for them. Either way, the result is a versioned template with structured fields, validation rules, and full history — ready to be distributed to DevCos by Group 1.
+In Step 2 (PM Dashboard Access), the PM logs into the Salama dashboard to access the Reporting Engine. From the dashboard they are presented with two primary entry points for master template management: uploading an existing master datasheet template, or creating a new one using the AI chatbot assistant. Both pathways result in a Salama-managed master template ready for distribution by Group 1.
 
-In Part 6, once all DevCos have submitted, the PM triggers consolidation. Group 2's engine downloads every locked submission, normalizes the data against the template structure, runs all the PIF-defined formulas (provided by Group 3), and produces a single master KPI spreadsheet covering all DevCos. Freeform submissions are included as raw sheets flagged for manual review. The PM can then use the AI chatbot again to fine-tune the output — reformatting columns, handling edge cases, applying ad-hoc adjustments — before downloading the final file.
+In Step 6 (Automatic Consolidation & AI Fine-Tuning), once all DevCos have submitted, the PM triggers consolidation. Group 2's engine ingests all submitted templates, applies configured calculation logic, normalizes results, and produces a consolidated master sheet covering all DevCos. Freeform submissions are included as raw sheets flagged for manual review. The PM can then use the AI chatbot again to fine-tune the output — handling edge cases, reformatting outputs, applying ad-hoc adjustments through natural language — before downloading the final file. All consolidation logic remains configurable and fully controlled by the PM.
 
 Group 2 is the backbone of the platform. It defines the data structures every other group depends on, manages the PIF admin experience end-to-end, and produces the consolidated output that is the entire point of the system.
 
 ---
 
 ### Group 3 — "The Formula and Skills Library"
-*Product Flow: Part 7*
+*Product Flow: Step 7*
 
 Group 3 owns the reusable intelligence layer that makes the platform more than a file-collection tool.
 
@@ -290,11 +290,11 @@ These files are shared across the platform. Treat them as read-only unless your 
 
 ---
 
-## Group 1: Subcontractor/DevCo Submission
+## Group 1: Template Creation, Distribution & Submission
 
-**Product flow coverage:** Parts 4 (Template Distribution) and 5 (Submission Tracking)
+**Product flow coverage:** Steps 3 (Master Template Creation), 4 (Distribution), and 5 (Submission Tracking)
 
-**One-line goal:** PM sends templates or freeform upload links to DevCos via email; DevCos upload completed Excel files; PM monitors all submission status in real time.
+**One-line goal:** PM builds and versions KPI templates (via upload or AI chatbot), sends them to DevCos via email, DevCos upload completed Excel files, and PM monitors all submission status in real time.
 
 ---
 
@@ -614,11 +614,11 @@ Group 2 listens to this event to enable the "Consolidate" button in `Consolidati
 
 ---
 
-## Group 2: Master Template Creation + Consolidation
+## Group 2: PM Dashboard Access & Consolidation
 
-**Product flow coverage:** Parts 3 (Master Template Creation) and 6 (Automatic Consolidation & AI Fine-Tuning)
+**Product flow coverage:** Steps 2 (PM Dashboard Access) and 6 (Automatic Consolidation & AI Fine-Tuning)
 
-**One-line goal:** PIF admin creates and versions KPI templates (via upload or AI chatbot), assigns them to DevCos, and consolidates all submissions (including freeform) into a downloadable master KPI sheet.
+**One-line goal:** PIF admin accesses the Reporting Engine from the Salama dashboard and consolidates all DevCo submissions (including freeform) into a downloadable master KPI sheet.
 
 ---
 
@@ -968,7 +968,7 @@ This is the single source of truth for template structure. Group 1 reads it to r
 
 ## Group 3: Saved Formulas & Skills Library
 
-**Product flow coverage:** Part 7 (Saved Formulas & Skills Library)
+**Product flow coverage:** Step 7 (Saved Formulas & Skills Library)
 
 **One-line goal:** Build a reusable formula library where PMs create formulas from natural language, apply them to specific cells/columns/ranges in templates or consolidated sheets, and ensure all formulas persist as real Excel formula strings in exported files.
 
@@ -1257,25 +1257,26 @@ Any change to a shared interface must be announced to all consuming groups befor
 |---|---|
 | Multi-tenant foundation (orgs, roles, RLS) | Shared Foundation |
 | Supabase Auth + profiles with roles | Shared Foundation |
-| Template upload path (Excel → schema_json) | Group 2 |
-| AI-assisted template creation (chatbot) | Group 2 |
-| Template version control | Group 2 |
-| Template assignment to DevCos | Group 2 |
-| Email distribution with secure upload link (template) | Group 1 |
-| Freeform upload link — no template, DevCo brings own file | Group 1 |
-| Secure public upload page (handles both template + freeform modes) | Group 1 |
-| PM freeform upload manager (generate + track freeform links) | Group 1 |
-| DevCo portal (assigned templates + submission history) | Group 1 |
-| Submission locking + timestamping + audit | Group 1 |
-| Real-time submission tracking dashboard | Group 1 |
-| Reminder emails for pending submissions | Group 1 |
-| Automatic consolidation engine (template + freeform submissions) | Group 2 |
-| AI fine-tuning of consolidated output | Group 2 |
-| Downloadable master KPI sheet | Group 2 |
-| Formula library CRUD | Group 3 |
-| Natural language formula creation | Group 3 |
-| Formula application to columns/cells/ranges | Group 3 |
-| Formula execution against submission data | Group 3 |
-| Formula persistence in exported .xlsx | Group 3 |
+| PM dashboard access + Reporting Engine entry point (Step 2) | Group 2 |
+| Template upload path (Excel → schema_json) (Step 3) | Group 1 |
+| AI-assisted template creation (chatbot) (Step 3) | Group 1 |
+| Template version control (Step 3) | Group 1 |
+| Template assignment to DevCos (Step 3) | Group 1 |
+| Email distribution with secure upload link — structured flow (Step 4) | Group 1 |
+| Freeform upload link — no template, DevCo brings own file (Step 4) | Group 1 |
+| Secure public upload page (handles both template + freeform modes) (Step 4) | Group 1 |
+| PM freeform upload manager (generate + track freeform links) (Step 4) | Group 1 |
+| DevCo portal (assigned templates + submission history) (Step 4) | Group 1 |
+| Submission locking + timestamping + audit (Step 5) | Group 1 |
+| Real-time submission tracking dashboard (Step 5) | Group 1 |
+| Reminder emails for pending submissions (Step 5) | Group 1 |
+| Automatic consolidation engine (template + freeform submissions) (Step 6) | Group 2 |
+| AI fine-tuning of consolidated output (Step 6) | Group 2 |
+| Downloadable master KPI sheet (Step 6) | Group 2 |
+| Formula library CRUD (Step 7) | Group 3 |
+| Natural language formula creation (Step 7) | Group 3 |
+| Formula application to columns/cells/ranges (Step 7) | Group 3 |
+| Formula execution against submission data (Step 7) | Group 3 |
+| Formula persistence in exported .xlsx (Step 7) | Group 3 |
 | Admin: org management | Group 2 |
 | Admin: user management | Group 2 |

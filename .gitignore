@@ -9,6 +9,7 @@ backend/.env.*
 !README.md
 !PLAN.md
 !figma-components/*.md
+!docs/superpowers/plans/*.md
 dist/
 .worktrees/
 __pycache__/
@@ -19,3 +20,4 @@ backend/.coverage
 frontend/coverage/
 frontend/test-results/
 .claude/
+mind-map/

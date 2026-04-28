@@ -5,6 +5,7 @@ import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useSourcesStore } from '@/stores/sources'
 import { useRecordsStore } from '@/stores/records'
 import { useChatStore } from '@/stores/chat'
+import { useFormulasStore } from '@/stores/formulas'
 import type { CommandApiResponse } from '@/types'
 
 // ── Module-level filter state ─────────────────────────────────────────────────
@@ -247,6 +248,7 @@ const SUGGEST_RE = /suggest.*(template|column)|what column|recommend.*column/i
 const CONSOLIDATE_RE = /fill.*(template|from source)|populate.*template|consolidate.*into.*template|map.*source.*template|fill it/i
 const DYNAMIC_RE = /create.*report|build.*report|make.*report|generate.*report|create.*tracker|analyze.*source|give.*analysis/i
 const NEW_TEMPLATE_RE = /new\s+template|create\s+(a\s+)?template|blank\s+sheet|start\s+(a\s+)?fresh/i
+const FORMULA_CREATE_RE = /create.*(formula|calculation)|make.*(formula|calculation)|formula\s+for|generate.*formula|build.*formula/i
 
 // ── Multi-step ops ────────────────────────────────────────────────────────────
 
@@ -496,6 +498,40 @@ async function applyOperation(
       return `Applied formula to "${p.column}" (${rowCount} rows).`
     }
 
+    case 'apply_saved_formula': {
+      const formulaStore = useFormulasStore()
+      const saved = formulaStore.findByName(String(p.formula_name ?? ''))
+      if (!saved) return `Formula "${p.formula_name}" not found in library.`
+      const idx = resolveCol(p.column)
+      if (idx === -1) return `Column "${p.column}" not found.`
+      const rowCount = getRowCount(jss)
+      for (let r = 0; r < rowCount; r++) {
+        const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
+        jss.setValueFromCoords(idx, r, resolved)
+      }
+      return `Applied "${saved.name}" to "${p.column}" (${rowCount} rows).`
+    }
+
+    case 'create_formula': {
+      const formulaStore = useFormulasStore()
+      const saved = await formulaStore.createFromNL(
+        String(p.nl_request ?? ''),
+        getColumnHeaders(jss),
+      )
+      if (p.column) {
+        const idx = resolveCol(p.column)
+        if (idx !== -1) {
+          const rowCount = getRowCount(jss)
+          for (let r = 0; r < rowCount; r++) {
+            const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
+            jss.setValueFromCoords(idx, r, resolved)
+          }
+          return `Created and applied "${saved.name}" (${saved.expression}) to "${p.column}".`
+        }
+      }
+      return `Created formula "${saved.name}": ${saved.expression} — saved to library.`
+    }
+
     case 'sort': {
       const idx = resolveCol(p.column)
       if (idx === -1) return `Column "${p.column}" not found.`
@@ -734,15 +770,36 @@ export function useAiOperations() {
       await executeDynamicReport(jss, chat, text)
       return true
     }
+    if (FORMULA_CREATE_RE.test(text)) {
+      chat.addMessage('Creating formula…', 'ai')
+      try {
+        const formulaStore = useFormulasStore()
+        const saved = await formulaStore.createFromNL(text, getColumnHeaders(jss))
+        const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+        if (lastAi) lastAi.content = `Created formula "${saved.name}": \`${saved.expression}\` — saved to library.`
+      } catch (err) {
+        const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+        const msg = err instanceof Error ? err.message : String(err)
+        if (lastAi) lastAi.content = `Error creating formula: ${msg}`
+      }
+      return true
+    }
 
     // ── Generic command via /api/ai/command ──
     const snapshot = buildSnapshot(jss)
     const currentHeaders = getColumnHeaders(jss)
 
+    // Append saved formula library to snapshot so AI can reference named formulas
+    const formulaStore = useFormulasStore()
+    const formulaContext = formulaStore.formulas.length
+      ? '\n\nSaved formula library:\n' +
+        formulaStore.formulas.map((f) => `- "${f.name}": ${f.expression}`).join('\n')
+      : ''
+
     const resp = await api.post<CommandApiResponse>('/api/ai/command', {
       message: text,
       headers: currentHeaders,
-      snapshot,
+      snapshot: snapshot + formulaContext,
     })
 
     if (!resp.op) return false

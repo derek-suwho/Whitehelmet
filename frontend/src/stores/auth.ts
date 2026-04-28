@@ -7,6 +7,8 @@ export interface AuthUser {
   external_id: string
   email: string
   display_name: string
+  role?: string
+  org_id?: string
 }
 
 export const useAuthStore = defineStore('auth', () => {

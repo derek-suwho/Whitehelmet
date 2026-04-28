@@ -3,6 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -22,6 +23,8 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: Session = Depends(get_db)):
     """Create a new local email/password account."""
+    if get_settings().auth_mode == "keycloak":
+        raise HTTPException(status_code=404, detail="Not available in SSO mode")
     if db.query(User).filter(User.email == body.email).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
@@ -91,9 +94,29 @@ async def logout(
     return {"status": "logged_out"}
 
 
+def _user_payload(usr: User | dict[str, Any]) -> dict:
+    if isinstance(usr, dict):
+        return {
+            "id": int(usr["id"]) if usr.get("id") is not None else 0,
+            "external_id": str(usr.get("external_id", "")),
+            "email": str(usr.get("email", "")),
+            "display_name": str(usr.get("display_name", "")),
+            "role": usr.get("system_role"),
+            "org_id": usr.get("org_external_id"),
+        }
+    return {
+        "id": usr.id,
+        "external_id": usr.external_id,
+        "email": usr.email,
+        "display_name": usr.display_name,
+        "role": usr.role,
+        "org_id": usr.org_id,
+    }
+
+
 @router.get("/me")
-async def me(request: Request, user: User = Depends(get_current_user)):
-    """Return current authenticated user with CSRF token."""
+async def me(request: Request, current_user=Depends(get_current_user)):
+    """Return current user and CSRF token (cookie session or SSO)."""
     session_token = request.cookies.get("session_id", "")
     csrf = generate_csrf_token(session_token)
-    return {"user": UserResponse.model_validate(user), "csrf_token": csrf}
+    return {"user": _user_payload(current_user), "csrf_token": csrf}

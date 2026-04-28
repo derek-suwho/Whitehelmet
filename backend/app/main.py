@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files, organizations, admin, templates, assignments, subcontractor
+from app.api.routes import health, auth, ai, records, files, organizations, admin, templates, assignments, subcontractor, formulas
 
 settings = get_settings()
 
@@ -20,8 +20,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Content-Type", "X-CSRF-Token"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "X-CSRF-Token", "Authorization"],
 )
 
 # Routes
@@ -35,6 +35,7 @@ app.include_router(admin.router)
 app.include_router(templates.router)
 app.include_router(assignments.router)
 app.include_router(subcontractor.router)
+app.include_router(formulas.router)
 
 
 @app.on_event("startup")
@@ -44,10 +45,14 @@ async def startup():
     Tolerant of missing DB so AI proxy routes work without MySQL running.
     """
     from app.db.session import engine, Base
-    from app.models import User, Record, UploadedFile, ConversationMessage, SessionModel, Organization, Template, TemplateVersion, TemplateAssignment, Submission  # noqa: F401
+    from app.models import (  # noqa: F401
+        User, Record, UploadedFile, ConversationMessage, SessionModel,
+        Organization, Template, TemplateVersion, TemplateAssignment,
+        Submission, ConsolidatedSheet, Formula,
+    )
 
     if settings.environment == "dev":
         try:
             Base.metadata.create_all(bind=engine)
         except Exception as e:
-            print(f"⚠️  DB unavailable on startup ({e.__class__.__name__}) — AI routes still work, DB-backed routes will 500")
+            print(f"[WARN] DB unavailable on startup ({e.__class__.__name__}) - AI routes still work, DB-backed routes will 500")
