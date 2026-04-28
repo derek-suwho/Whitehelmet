@@ -8,8 +8,11 @@ RUN npm run build
 
 # Stage 2: Serve
 FROM nginx:1.27-alpine
-COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf
+# gettext provides envsubst
+RUN apk add --no-cache gettext
+COPY deploy/docker/nginx.conf /etc/nginx/conf.d/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s CMD wget -qO- http://localhost/health || exit 1
-CMD ["nginx", "-g", "daemon off;"]
+# At start: substitute env vars into nginx config, then run nginx
+CMD ["/bin/sh", "-c", "envsubst '${BACKEND_URL}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
