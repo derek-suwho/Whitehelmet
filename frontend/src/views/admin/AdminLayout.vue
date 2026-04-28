@@ -7,7 +7,7 @@ const router = useRouter()
 
 const navLinks = [
   { label: 'Templates', to: '/admin/templates', icon: '📋' },
-  { label: 'Organizations', to: '/admin/organizations', icon: '🏢' },
+  { label: 'Projects', to: '/admin/projects', icon: '📁' },
   { label: 'Users', to: '/admin/users', icon: '👥' },
   { label: 'Formula Library', to: '/admin/formulas', icon: '∑' },
   { label: 'Freeform Uploads', to: '/admin/freeform-uploads', icon: '📁' },

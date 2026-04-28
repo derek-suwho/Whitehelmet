@@ -10,6 +10,10 @@ import ConsolidationStatusModal from './modals/ConsolidationStatusModal.vue'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import SubmissionTracker from '@/components/admin/SubmissionTracker.vue'
 
+const route = useRoute()
+const templatesStore = useTemplatesStore()
+const spreadsheetStore = useSpreadsheetStore()
+
 interface OrgStatus {
   org_id: string
   org_name: string
@@ -28,10 +32,6 @@ interface ProgressData {
   all_submitted: boolean
   orgs: OrgStatus[]
 }
-
-const route = useRoute()
-const templatesStore = useTemplatesStore()
-const spreadsheetStore = useSpreadsheetStore()
 
 const templateId = route.params.templateId as string
 const allSubmitted = ref(false)
@@ -58,9 +58,7 @@ async function fetchProgress() {
     progressData.value = await api.get<ProgressData>(
       `/api/admin/templates/${templateId}/consolidation-progress`,
     )
-    if (progressData.value?.all_submitted) {
-      allSubmitted.value = true
-    }
+    if (progressData.value?.all_submitted) allSubmitted.value = true
   } catch { /* non-fatal — PM can still consolidate manually */ }
 }
 
@@ -148,7 +146,7 @@ async function onFinetuneApplied() {
       :progress="progressData"
       @all-submitted="onAllSubmitted"
     />
-    <div v-else class="h-16 animate-pulse rounded-xl border border-border bg-white" />
+    <div v-else class="h-20 animate-pulse rounded-xl border border-gray-200 bg-white" />
 
     <!-- Post-consolidation: preview + AI fine-tune -->
     <div v-if="consolidationResult" class="flex gap-4 h-[500px]">

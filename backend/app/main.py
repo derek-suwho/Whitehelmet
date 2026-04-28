@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files, organizations, admin, templates, assignments, subcontractor, formulas
+from app.api.routes import health, auth, ai, records, files, projects, admin, templates, assignments, subcontractor, formulas
 
 settings = get_settings()
 
@@ -30,7 +30,7 @@ app.include_router(auth.router)
 app.include_router(ai.router)
 app.include_router(records.router)
 app.include_router(files.router)
-app.include_router(organizations.router)
+app.include_router(projects.router)
 app.include_router(admin.router)
 app.include_router(templates.router)
 app.include_router(assignments.router)
@@ -47,12 +47,34 @@ async def startup():
     from app.db.session import engine, Base
     from app.models import (  # noqa: F401
         User, Record, UploadedFile, ConversationMessage, SessionModel,
-        Organization, Template, TemplateVersion, TemplateAssignment,
+        Project, ProjectMember, Template, TemplateVersion, TemplateAssignment,
         Submission, ConsolidatedSheet, Formula,
     )
 
     if settings.environment == "dev":
         try:
             Base.metadata.create_all(bind=engine)
+            _seed_admin(engine)
         except Exception as e:
             print(f"[WARN] DB unavailable on startup ({e.__class__.__name__}) - AI routes still work, DB-backed routes will 500")
+
+
+def _seed_admin(engine):
+    """Create default admin user on first run if no users exist."""
+    from sqlalchemy.orm import Session
+    from app.models.user import User
+    from app.core.security import hash_password
+    import uuid
+
+    with Session(engine) as db:
+        if db.query(User).count() == 0:
+            admin = User(
+                external_id=str(uuid.uuid4()),
+                email="admin@whitehelmet.dev",
+                display_name="Admin",
+                password_hash=hash_password("Admin1234!"),
+                role="pif_admin",
+            )
+            db.add(admin)
+            db.commit()
+            print("[SEED] Created default admin: admin@whitehelmet.dev / Admin1234!")

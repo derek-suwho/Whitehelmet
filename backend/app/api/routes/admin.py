@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, verify_csrf
 from app.core.rbac import require_pif_admin
 from app.db.session import get_db
-from app.models.organization import Organization
+from app.models.project import Project
 from app.models.submission import Submission
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_version import TemplateVersion
@@ -75,7 +75,7 @@ def get_consolidation_progress(
     submitted_count = 0
 
     for a in assignments:
-        org = db.query(Organization).filter(Organization.id == a.org_id).first()
+        project = db.query(Project).filter(Project.id == a.org_id).first()
         sub = (
             db.query(Submission)
             .filter(Submission.assignment_id == a.id)
@@ -89,7 +89,7 @@ def get_consolidation_progress(
         org_rows.append(
             OrgSubmissionStatus(
                 org_id=a.org_id,
-                org_name=org.name if org else a.org_id,
+                org_name=project.name if project else a.org_id,
                 assignment_id=a.id,
                 assignment_status=a.status,
                 submission_id=sub.id if sub else None,

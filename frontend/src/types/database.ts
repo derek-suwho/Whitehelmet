@@ -1,11 +1,29 @@
 // Plain TypeScript types — no Supabase dependency
 
-export interface Organization {
+export interface Project {
   id: string
   name: string
-  type: 'pif' | 'devco'
-  parent_org_id: string | null
+  description: string | null
+  status: 'active' | 'archived'
   created_at: string
+}
+
+export interface ProjectMember {
+  membership_id: string
+  user_id: number
+  display_name: string
+  email: string
+  role: string | null
+  added_at: string
+}
+
+export interface ProjectTemplateAssignment {
+  assignment_id: string
+  template_version_id: string | null
+  template_name: string | null
+  status: string
+  deadline: string | null
+  assigned_at: string
 }
 
 export interface Profile {

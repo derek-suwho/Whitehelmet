@@ -16,7 +16,6 @@ from app.core.dependencies import get_current_user, verify_csrf
 from app.core.rbac import require_subcontractor
 from app.core.security import hash_file
 from app.db.session import get_db
-from app.models.organization import Organization
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment

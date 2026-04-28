@@ -34,7 +34,7 @@ const router = createRouter({
       path: '/submissions',
       name: 'submissions',
       component: () => import('@/views/SubcontractorView.vue'),
-      meta: { requiresAuth: true, role: 'subcontractor' },
+      meta: { requiresAuth: true },
     },
     // ===== END GROUP 1 ROUTES =====
 
@@ -70,14 +70,24 @@ const router = createRouter({
           component: () => import('@/views/admin/ConsolidationDashboardView.vue'),
         },
         {
-          path: 'organizations',
-          name: 'admin-organizations',
-          component: () => import('@/views/admin/OrganizationListView.vue'),
+          path: 'projects',
+          name: 'admin-projects',
+          component: () => import('@/views/admin/ProjectListView.vue'),
+        },
+        {
+          path: 'projects/:projectId',
+          name: 'admin-project-detail',
+          component: () => import('@/views/admin/ProjectDetailView.vue'),
         },
         {
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/UserManagementView.vue'),
+        },
+        {
+          path: 'freeform-uploads',
+          name: 'admin-freeform-uploads',
+          component: () => import('@/views/admin/FreeformUploadsView.vue'),
         },
       ],
     },
@@ -99,24 +109,13 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
 
-  // Redirect authenticated users away from login/signup
+  // Redirect authenticated users away from login/signup to dashboard
   if ((to.name === 'login' || to.name === 'signup') && auth.user) {
-    return auth.isSubcontractor ? { name: 'submissions' } : { name: 'dashboard' }
+    return { name: 'dashboard' }
   }
 
-  // Admin routes: pif_admin only
-  if (to.meta.role === 'pif_admin' && !auth.isAdmin) {
-    return auth.isSubcontractor ? { name: 'submissions' } : { name: 'workspace' }
-  }
-
-  // Subcontractor-only route: block everyone else
-  if (to.meta.role === 'subcontractor' && !auth.isSubcontractor) {
-    return auth.isAdmin ? { name: 'admin-templates' } : { name: 'workspace' }
-  }
-
-  // Lock subcontractors into their portal — block all other authenticated routes
-  if (auth.isSubcontractor && to.meta.requiresAuth && to.name !== 'submissions') {
-    return { name: 'submissions' }
+  if (to.meta.role === 'pif_admin' && auth.user?.role !== 'pif_admin') {
+    return { name: 'workspace' }
   }
 })
 

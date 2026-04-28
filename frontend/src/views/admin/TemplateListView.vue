@@ -100,6 +100,10 @@ function onImportCreated(templateId: string) {
             :to="`/admin/templates/${template.id}`"
             class="text-gray-500 hover:underline"
           >History</RouterLink>
+          <RouterLink
+            :to="`/admin/consolidations/${template.id}`"
+            class="text-green-600 hover:underline font-medium"
+          >Track Submissions</RouterLink>
           <button
             v-if="template.status !== 'deprecated'"
             class="text-gray-400 hover:text-gray-600"
