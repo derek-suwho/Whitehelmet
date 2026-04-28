@@ -105,9 +105,9 @@ Supported operations (return exactly one):
 {"op":"add_column","name":"<header>","position":<0-based index or null for end>}
 {"op":"remove_column","name":"<header>"}
 {"op":"rename_column","from":"<old>","to":"<new>"}
-{"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}
-{"op":"apply_saved_formula","formula_name":"<name from formula library>","column":"<header>"}
-{"op":"create_formula","nl_request":"<user description of the formula>","column":"<target column or null>"}
+{"op":"apply_formula","column":"<header>","formula":"=<formula with {row} placeholder, e.g. =A{row}*B{row}>"}
+{"op":"apply_saved_formula","formula_name":"<exact name from formula library>","column":"<exact column header>"}
+{"op":"create_formula","nl_request":"<user description of formula>","column":"<target column header or null>"}
 {"op":"sort","column":"<header>","order":"asc|desc"}
 {"op":"filter","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}
 {"op":"show_all_rows"}
@@ -124,18 +124,23 @@ Supported operations (return exactly one):
 {"op":"show_dashboard"}
 {"op":null}
 
-Notes:
+Formula rules (CRITICAL — read carefully):
+- apply_formula: ALWAYS use {row} as the row placeholder. Column letters map to their position: A=first column, B=second, etc. Example for 3 columns [Name, Qty, Price]: to multiply Qty*Price into a 4th column use formula =B{row}*C{row}
+- {row} is replaced with the actual Excel row number at runtime (row 2 for first data row, row 3 for second, etc.)
+- NEVER use absolute references like =A1*B1 — always use {row} so each row gets its own formula
+- apply_saved_formula: use when the user mentions a formula by name that appears in the saved formula library. Match the formula_name exactly to a name in the library.
+- create_formula: use when user wants to generate and save a NEW formula via natural language description.
+
+Other notes:
 - filter: hide rows where column does NOT match the condition.
 - show_all_rows: triggered by "show all", "clear filter", "unfilter".
-- aggregate: report sum/avg/count/min/max in chat, no grid change.
-- find_duplicates: report duplicate values in chat, no grid change.
-- export: download spreadsheet as xlsx.
+- aggregate: report result in chat only, no grid change.
+- find_duplicates: report in chat only, no grid change.
+- export: download spreadsheet as .xlsx with formulas intact.
 - save_record: save current grid to master records.
 - show_dashboard: navigate to master records dashboard.
 - format_cells: column=null means whole sheet; row=null means all data rows.
-- apply_saved_formula: use when user references a named formula from their library.
-- create_formula: use when user wants to create/generate a new formula via natural language.
-- If NOT a spreadsheet command return {"op":null}.
+- If NOT a spreadsheet/formula command return {"op":null}.
 """
 
 FORMULA_SYSTEM_PROMPT = """\

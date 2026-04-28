@@ -709,18 +709,21 @@ async function applyOperation(
 
     case 'export': {
       const spreadsheet = useSpreadsheetStore()
-      const allData: unknown[][] = jss.getData()
+      // getSourceData preserves formula strings; getData returns computed values
+      const sourceData: unknown[][] = (jss as any).getSourceData
+        ? (jss as any).getSourceData().map((r: any[]) => r.slice())
+        : jss.getData()
       const wb2 = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet(allData as any[][])
+      const ws = XLSX.utils.aoa_to_sheet(sourceData as any[][])
       Object.keys(ws)
         .filter((k) => !k.startsWith('!'))
         .forEach((addr) => {
           const cell = ws[addr]
           if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
             cell.f = cell.v.slice(1)
-            cell.t = 'n'
             delete cell.v
             delete cell.w
+            delete cell.t
           }
         })
       XLSX.utils.book_append_sheet(wb2, ws, 'Sheet1')
@@ -769,7 +772,25 @@ export function useAiOperations() {
       return true
     }
 
-    if (!jss) return false
+    if (!jss) {
+      // Let formula creation work even without an open spreadsheet
+      if (FORMULA_CREATE_RE.test(text)) {
+        chat.addMessage('Creating formula…', 'ai')
+        try {
+          const formulaStore = useFormulasStore()
+          const saved = await formulaStore.createFromNL(text, [])
+          const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+          if (lastAi) lastAi.content = `Created formula "${saved.name}": \`${saved.expression}\` — saved to library. Open a spreadsheet and use the Formulas panel to apply it.`
+        } catch (err) {
+          const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+          const msg = err instanceof Error ? err.message : String(err)
+          if (lastAi) lastAi.content = `Error creating formula: ${msg}`
+        }
+        return true
+      }
+      chat.addMessage('Open a spreadsheet file first — then I can apply commands to it.', 'ai')
+      return true
+    }
 
     if (SUGGEST_RE.test(text)) {
       await executeSuggestTemplate(jss, chat)
@@ -802,18 +823,24 @@ export function useAiOperations() {
     const snapshot = buildSnapshot(jss)
     const currentHeaders = getColumnHeaders(jss)
 
-    // Append saved formula library to snapshot so AI can reference named formulas
     const formulaStore = useFormulasStore()
     const formulaContext = formulaStore.formulas.length
       ? '\n\nSaved formula library:\n' +
-        formulaStore.formulas.map((f) => `- "${f.name}": ${f.expression}`).join('\n')
+        formulaStore.formulas.map((f) => `- "${f.name}": ${f.expression} (${f.formula_type ?? 'formula'})`).join('\n')
       : ''
 
-    const resp = await api.post<CommandApiResponse>('/api/ai/command', {
-      message: text,
-      headers: currentHeaders,
-      snapshot: snapshot + formulaContext,
-    })
+    let resp: CommandApiResponse
+    try {
+      resp = await api.post<CommandApiResponse>('/api/ai/command', {
+        message: text,
+        headers: currentHeaders,
+        snapshot: snapshot + formulaContext,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      chat.addMessage(`Command failed: ${msg}. Check that the backend is running and the API key is configured.`, 'ai')
+      return true
+    }
 
     if (!resp.op) return false
 

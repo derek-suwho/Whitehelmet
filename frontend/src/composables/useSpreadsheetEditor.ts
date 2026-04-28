@@ -36,6 +36,29 @@ export const fmtState = ref({
 export const lastTextColor = ref('#111111')
 export const lastFillColor = ref('#ffff00')
 export const detectedFormulas = ref<{ column: string; expression: string }[]>([])
+export const selectedCol = ref(0)
+
+// ── Formula panel helpers (used by FormulaLibraryPanel) ─────────
+export function getColumnHeadersExternal(): { idx: number; letter: string; name: string }[] {
+  if (!_currentInstance) return []
+  const data = _currentInstance.getData() as unknown[][]
+  if (!data.length) return []
+  const headers = (data[0] as unknown[]).map((c) => String(c ?? ''))
+  return headers
+    .map((name, idx) => ({ idx, letter: _colLetter(idx), name }))
+    .filter((h) => h.name.trim())
+}
+
+export function applyFormulaToColumn(expression: string, colIdx: number): number {
+  if (!_currentInstance) return 0
+  const rowCount = Math.max(0, (_currentInstance.countRows?.() ?? 1) - 1)
+  const changes: [number, number, string][] = []
+  for (let d = 0; d < rowCount; d++) {
+    changes.push([d + 1, colIdx, expression.replace(/\{row\}/gi, String(d + 2))])
+  }
+  if (changes.length) _currentInstance.setDataAtCell(changes)
+  return rowCount
+}
 
 // ── Test-exported helpers ────────────────────────────────────────
 export function argbToCssTest(argb: string): string | null {
@@ -372,6 +395,7 @@ export function useSpreadsheetEditor() {
       afterSelectionEnd(row: number, col: number) {
         _updateFormulaBar(row, col)
         _updateToolbarState(row, col)
+        selectedCol.value = col
       },
       afterChange(changes: any) {
         if (!changes) return
@@ -639,9 +663,9 @@ export function useSpreadsheetEditor() {
           const cell = ws[addr]
           if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
             cell.f = cell.v.slice(1)
-            cell.t = 'n'
             delete cell.v
             delete cell.w
+            delete cell.t
           }
         })
       XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)
