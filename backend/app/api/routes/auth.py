@@ -3,7 +3,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from typing import Any
+from typing import Any, Union
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -94,7 +94,7 @@ async def logout(
     return {"status": "logged_out"}
 
 
-def _user_payload(usr: User | dict[str, Any]) -> dict:
+def _user_payload(usr: Union[User, dict[str, Any]]) -> dict:
     if isinstance(usr, dict):
         return {
             "id": int(usr["id"]) if usr.get("id") is not None else 0,
