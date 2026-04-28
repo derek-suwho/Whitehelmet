@@ -24,13 +24,14 @@ describe('auth store', () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ data: mockUser }),
+      json: () => Promise.resolve({ user: mockUser, csrf_token: 'csrf1' }),
     } as Response)
 
     const auth = useAuthStore()
     await auth.checkSession()
 
     expect(auth.user).toEqual(mockUser)
+    expect(auth.csrfToken).toBe('csrf1')
     expect(auth.checked).toBe(true)
   })
 
@@ -49,7 +50,7 @@ describe('auth store', () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ data: { user: mockUser, csrf_token: 'tok123' } }),
+      json: () => Promise.resolve({ user: mockUser, csrf_token: 'tok123' }),
     } as Response)
 
     const auth = useAuthStore()
@@ -77,7 +78,7 @@ describe('auth store', () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ data: { user: mockUser, csrf_token: 'tok' } }),
+      json: () => Promise.resolve({ user: mockUser, csrf_token: 'tok' }),
     } as Response)
 
     const auth = useAuthStore()

@@ -4,9 +4,74 @@ import { api } from '@/composables/useApi'
 import { useSourcesStore } from '@/stores/sources'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useChatStore } from '@/stores/chat'
-import type { ConsolidationPayload, ConsolidationResponse, ApiResponse } from '@/types'
+
+const SAMPLE_ROWS = 3
+const KEY_VALUE_FIELD_NAMES = new Set(['field', 'key', 'label', 'parameter', 'metric', 'name', 'attribute'])
+
+interface ParsedFile {
+  name: string
+  headers: string[]
+  allRows: unknown[][]
+}
+
+interface ColumnMapping {
+  file: string
+  column_map: Record<string, string>
+}
+
+interface SchemaResponse {
+  unified_headers: string[]
+  mappings: ColumnMapping[]
+}
 
 const isConsolidating = ref(false)
+
+/**
+ * Detect key-value format: exactly 2 columns where the first is a label/field column.
+ * E.g. ["Field", "Value"] — common in form-style reports.
+ */
+function isKeyValueFormat(files: ParsedFile[]): boolean {
+  return files.every(
+    (f) =>
+      f.headers.length === 2 &&
+      KEY_VALUE_FIELD_NAMES.has(f.headers[0].toLowerCase().trim()),
+  )
+}
+
+/**
+ * Pivot key-value files into wide format.
+ * Each file becomes one row; each unique field name becomes a column.
+ * Preserves field order from first occurrence across files.
+ */
+function pivotKeyValue(files: ParsedFile[]): { headers: string[]; rows: unknown[][] } {
+  // Collect all unique field names in encounter order
+  const fieldOrder: string[] = []
+  const fieldSet = new Set<string>()
+  for (const f of files) {
+    for (const row of f.allRows) {
+      const field = String((row as unknown[])[0] ?? '').trim()
+      if (field && !fieldSet.has(field)) {
+        fieldSet.add(field)
+        fieldOrder.push(field)
+      }
+    }
+  }
+
+  const headers = ['Source File', ...fieldOrder]
+
+  const rows = files.map((f) => {
+    // Build field→value map for this file
+    const kvMap: Record<string, unknown> = {}
+    for (const row of f.allRows) {
+      const cells = row as unknown[]
+      const field = String(cells[0] ?? '').trim()
+      if (field) kvMap[field] = cells[1] ?? ''
+    }
+    return [f.name, ...fieldOrder.map((col) => kvMap[col] ?? '')]
+  })
+
+  return { headers, rows }
+}
 
 export function useConsolidation() {
   async function consolidate() {
@@ -24,50 +89,78 @@ export function useConsolidation() {
     chat.addMessage(`Consolidating ${files.length} file(s)...`, 'system')
 
     try {
-      // Parse each xlsx file client-side
-      const payload: ConsolidationPayload = { files_data: [] }
-
+      // Parse all files client-side
+      const parsed: ParsedFile[] = []
       for (const file of files) {
         const buffer = await file.arrayBuffer()
         const wb = XLSX.read(buffer, { type: 'array' })
         const sheetName = wb.SheetNames[0]
         if (!sheetName) continue
-
         const sheet = wb.Sheets[sheetName]
-        const json = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
-        if (json.length === 0) continue
-
-        const headers = (json[0] as unknown[]).map(String)
-        const rows = json.slice(1)
-
-        payload.files_data.push({ name: file.name, headers, rows })
+        const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 })
+        if (aoa.length === 0) continue
+        const headers = (aoa[0] as unknown[]).map(String)
+        const allRows = aoa.slice(1)
+        parsed.push({ name: file.name, headers, allRows })
       }
 
-      if (payload.files_data.length === 0) {
+      if (parsed.length === 0) {
         chat.addMessage('No valid spreadsheet data found in selected files.', 'system')
         return
       }
 
-      // Send to backend AI consolidation endpoint
-      const resp = await api.post<ApiResponse<ConsolidationResponse>>(
-        '/api/ai/consolidate',
-        payload,
-      )
+      let unified_headers: string[]
+      let mergedRows: unknown[][]
 
-      const { headers, rows } = resp.data
+      if (isKeyValueFormat(parsed)) {
+        // Key-value files (e.g. Field/Value form reports): pivot into wide table — no AI needed
+        const pivoted = pivotKeyValue(parsed)
+        unified_headers = pivoted.headers
+        mergedRows = pivoted.rows
+      } else {
+        // Tabular files: AI detects column mapping, client applies it
+        const { unified_headers: uh, mappings } = await api.post<SchemaResponse>(
+          '/api/ai/consolidate',
+          {
+            files_schema: parsed.map((f) => ({
+              name: f.name,
+              headers: f.headers,
+              sample_rows: f.allRows.slice(0, SAMPLE_ROWS),
+            })),
+          },
+        )
+        unified_headers = uh
 
-      // Build workbook from consolidated result
-      const wsData = [headers, ...rows]
-      const ws = XLSX.utils.aoa_to_sheet(wsData)
+        mergedRows = []
+        for (const f of parsed) {
+          const mapping = mappings.find((m) => m.file === f.name)
+          if (!mapping) continue
+
+          const unifiedToIdx: Record<string, number> = {}
+          for (const [src, unified] of Object.entries(mapping.column_map)) {
+            const idx = f.headers.indexOf(src)
+            if (idx >= 0) unifiedToIdx[unified] = idx
+          }
+
+          for (const row of f.allRows) {
+            const cells = unified_headers.map((uh, i) => {
+              if (i === 0) return f.name
+              const srcIdx = unifiedToIdx[uh]
+              return srcIdx !== undefined ? (row as unknown[])[srcIdx] ?? '' : ''
+            })
+            mergedRows.push(cells)
+          }
+        }
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet([unified_headers, ...mergedRows])
       const consolidatedWb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(consolidatedWb, ws, 'Consolidated')
-
-      // Load into editor via store — SpreadsheetEditor watches workbook and mounts Handsontable
       spreadsheet.loadWorkbook(consolidatedWb, 'consolidated.xlsx')
-      spreadsheet.setPendingSave({ headers, rows: rows as unknown[][] })
+      spreadsheet.setPendingSave({ headers: unified_headers, rows: mergedRows })
 
       chat.addMessage(
-        `Consolidated ${payload.files_data.length} files: ${headers.length} columns, ${rows.length} rows.`,
+        `Consolidated ${parsed.length} files — ${unified_headers.length} columns, ${mergedRows.length} rows.`,
         'ai',
       )
     } catch (err) {

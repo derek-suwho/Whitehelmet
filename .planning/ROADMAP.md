@@ -6,7 +6,7 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
 
 ## Phases
 
-- [ ] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback
+- [x] **Phase 1: Command Routing, Intent Parsing, and Column Operations** - Wire the handler, parse intent via Claude, and implement add/remove/rename/formula column commands with chat feedback (completed 2026-04-08)
 - [ ] **Phase 2: Row and Data Operations** - Add sort, filter, remove-empty-rows, and aggregate commands on top of Phase 1 infrastructure
 
 ## Phase Details
@@ -21,11 +21,11 @@ Two phases deliver natural language spreadsheet editing on top of the existing W
   3. User can remove an existing column by name, and it disappears from the spreadsheet
   4. User can rename a column header, and the header text updates in place
   5. After every command, a confirmation or error message appears in the chat panel; a "thinking..." indicator is shown while Claude processes
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Command handler registration, intent parsing via Claude API, thinking indicator
-- [ ] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
+- [x] 01-02-PLAN.md — Four column operations (add, remove, rename, formula) with confirmation and error messages
 
 ### Phase 2: Row and Data Operations
 **Goal**: Users can type natural language row and aggregate commands to reorder, clean, and summarize spreadsheet data
@@ -36,7 +36,10 @@ Plans:
   2. User can type a filter condition and non-matching rows are hidden or removed
   3. User can type "remove empty rows" and blank rows are deleted from the spreadsheet
   4. User can type "sum/average/count [column]" and the result appears as a message in chat
-**Plans**: TBD
+**Plans:** 1 plan
+
+Plans:
+- [ ] 02-01-PLAN.md — Sort, filter, remove empty rows, and aggregate operations with browser verification
 
 ## Progress
 
@@ -45,5 +48,35 @@ Phases execute in numeric order: 1 -> 2
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Command Routing, Intent Parsing, and Column Operations | 1/2 | In Progress|  |
-| 2. Row and Data Operations | 0/TBD | Not started | - |
+| 1. Command Routing, Intent Parsing, and Column Operations | 2/2 | Complete   | 2026-04-08 |
+| 2. Row and Data Operations | 0/1 | Not started | - |
+
+### Phase 3: Fix Broken Foundations
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 2
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] TBD (run /gsd:plan-phase 3 to break down) (completed 2026-04-09)
+
+### Phase 4: Data Awareness
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 3
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] TBD (run /gsd:plan-phase 4 to break down) (completed 2026-04-09)
+
+### Phase 5: Master Records
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 5 to break down)
