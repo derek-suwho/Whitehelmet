@@ -137,34 +137,130 @@ Rules:
 """
 
 
+def _expand_merged(ws) -> list[list]:
+    """Return all rows with merged-cell values propagated from their top-left cell."""
+    merged_vals: dict[tuple[int, int], object] = {}
+    for rng in ws.merged_cells.ranges:
+        top_val = ws.cell(rng.min_row, rng.min_col).value
+        for r in range(rng.min_row, rng.max_row + 1):
+            for c in range(rng.min_col, rng.max_col + 1):
+                merged_vals[(r, c)] = top_val
+    rows = []
+    for row in ws.iter_rows():
+        rows.append([merged_vals.get((cell.row, cell.column), cell.value) for cell in row])
+    return rows
+
+
+def _find_header_row(rows: list[list]) -> tuple[int, list]:
+    """
+    Return (row_index, header_values) for the first row that looks like column headers:
+    - At least 3 non-null values
+    - At least 50% are strings
+    - Not a key-value metadata pair (exactly 2 non-null cells)
+    Scans up to row 30; falls back to row 0 if nothing matches.
+    """
+    for idx, row in enumerate(rows[:30]):
+        non_null = [v for v in row if v is not None]
+        if len(non_null) < 3:
+            continue
+        string_count = sum(1 for v in non_null if isinstance(v, str))
+        if string_count / len(non_null) < 0.5:
+            continue
+        return idx, row
+    return 0, rows[0] if rows else []
+
+
+def _infer_type(samples: list[str]) -> str:
+    if not samples:
+        return "text"
+    pct = num = 0
+    for s in samples:
+        s = s.strip()
+        if s.endswith("%"):
+            pct += 1
+        try:
+            float(s.replace(",", "").rstrip("%"))
+            num += 1
+        except ValueError:
+            pass
+    if pct == len(samples):
+        return "percentage"
+    if num == len(samples):
+        return "number"
+    # Rough date check
+    date_hits = sum(
+        1 for s in samples
+        if any(sep in s for sep in ("/", "-", ".")) and any(c.isdigit() for c in s)
+    )
+    if date_hits >= len(samples) * 0.7:
+        return "date"
+    return "text"
+
+
+_SKIP_SHEET_KEYWORDS = ("dropdown", "instruction", "readme", "legend", "lookup", "ref", "notes")
+
+
 @router.post("/parse-template")
 async def parse_template(file: UploadFile = File(...)):
-    """Parse an xlsx file and return inferred column definitions."""
+    """
+    Parse an xlsx upload and return inferred column definitions.
+
+    Handles: multiple sheets, non-row-1 headers, merged cells, metadata preamble rows.
+    Algorithm:
+      1. Skip sheets whose names match non-data keywords (dropdown, instructions, etc.)
+      2. For each remaining sheet expand merged cells, then find the header row
+         (first row with >= 3 non-null values where >= 50% are strings)
+      3. Pick the sheet with the most non-empty header cells
+      4. Infer types from the 5 data rows immediately below the header
+    """
     content = await file.read()
-    wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return {"columns": []}
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
 
-    headers = [str(h) if h is not None else f"Column{i}" for i, h in enumerate(rows[0])]
-    # Sample up to 5 data rows for type inference
-    data_rows = rows[1:6]
+    candidates = []
+    for sheet_name in wb.sheetnames:
+        if any(kw in sheet_name.lower() for kw in _SKIP_SHEET_KEYWORDS):
+            continue
+        ws = wb[sheet_name]
+        if ws.max_row is None or ws.max_row < 2:
+            continue
 
-    def infer_type(col_idx):
-        samples = [r[col_idx] for r in data_rows if col_idx < len(r) and r[col_idx] is not None]
-        if not samples:
-            return "text", []
-        if all(isinstance(v, (int, float)) for v in samples):
-            return "number", [str(v) for v in samples]
-        return "text", [str(v) for v in samples]
+        rows = _expand_merged(ws)
+        header_idx, header_row = _find_header_row(rows)
+
+        useful_headers = [v for v in header_row if v is not None and str(v).strip()]
+        if len(useful_headers) < 2:
+            continue
+
+        data_rows = rows[header_idx + 1: header_idx + 6]
+        candidates.append({
+            "sheet": sheet_name,
+            "header_idx": header_idx,
+            "header_row": header_row,
+            "data_rows": data_rows,
+            "useful_count": len(useful_headers),
+        })
+
+    if not candidates:
+        return {"columns": [], "sheet": None}
+
+    best = max(candidates, key=lambda c: c["useful_count"])
 
     columns = []
-    for i, name in enumerate(headers):
-        t, samples = infer_type(i)
-        columns.append({"name": name, "inferred_type": t, "sample_values": samples})
+    for col_i, name in enumerate(best["header_row"]):
+        name_str = str(name).strip() if name is not None else ""
+        if not name_str:
+            continue
+        samples = [
+            str(row[col_i]) for row in best["data_rows"]
+            if col_i < len(row) and row[col_i] is not None
+        ]
+        columns.append({
+            "name": name_str,
+            "inferred_type": _infer_type(samples),
+            "sample_values": samples[:3],
+        })
 
-    return {"columns": columns}
+    return {"columns": columns, "sheet": best["sheet"]}
 
 
 @router.post("/template-generate")

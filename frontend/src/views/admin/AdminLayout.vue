@@ -6,11 +6,11 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const navLinks = [
-  { label: 'Templates', to: '/admin/templates', icon: '📋' },
-  { label: 'Projects', to: '/admin/projects', icon: '📁' },
-  { label: 'Users', to: '/admin/users', icon: '👥' },
-  { label: 'Formula Library', to: '/admin/formulas', icon: '∑' },
-  { label: 'Freeform Uploads', to: '/admin/freeform-uploads', icon: '📁' },
+  { label: 'Templates', to: '/admin/templates' },
+  { label: 'Projects', to: '/admin/projects' },
+  { label: 'Users', to: '/admin/users' },
+  { label: 'Formula Library', to: '/admin/formulas' },
+  { label: 'Freeform Uploads', to: '/admin/freeform-uploads' },
 ]
 
 async function logout() {
@@ -34,7 +34,6 @@ async function logout() {
           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
           active-class="bg-blue-50 text-blue-700 font-medium"
         >
-          <span class="text-base">{{ link.icon }}</span>
           {{ link.label }}
         </RouterLink>
       </nav>

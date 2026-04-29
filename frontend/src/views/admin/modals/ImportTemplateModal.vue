@@ -85,7 +85,7 @@ function reset() {
             <label
               class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-10 cursor-pointer hover:border-blue-400 transition-colors"
             >
-              <span class="text-3xl mb-2">📂</span>
+              <svg class="w-10 h-10 mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
               <span class="text-sm text-gray-600">Click to upload or drag & drop</span>
               <span class="text-xs text-gray-400 mt-1">.xlsx files only</span>
               <input type="file" accept=".xlsx" class="hidden" @change="onFileChange" />

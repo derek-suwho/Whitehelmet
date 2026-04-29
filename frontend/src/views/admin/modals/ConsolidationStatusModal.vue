@@ -19,13 +19,15 @@ const emit = defineEmits<{ close: []; download: [] }>()
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 text-center">
         <template v-if="loading">
-          <div class="text-4xl mb-3 animate-spin">⏳</div>
+          <div class="w-10 h-10 mb-3 mx-auto border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
           <div class="font-medium text-gray-700">Consolidating submissions…</div>
           <div class="text-sm text-gray-400 mt-1">This may take a moment</div>
         </template>
 
         <template v-else-if="result">
-          <div class="text-4xl mb-3">✅</div>
+          <div class="w-10 h-10 mb-3 mx-auto rounded-full bg-green-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          </div>
           <div class="font-medium text-gray-800">Consolidation complete</div>
           <div class="text-sm text-gray-500 mt-2">
             {{ result.template_count }} template + {{ result.freeform_count }} freeform submissions
@@ -50,7 +52,9 @@ const emit = defineEmits<{ close: []; download: [] }>()
         </template>
 
         <template v-else-if="error">
-          <div class="text-4xl mb-3">❌</div>
+          <div class="w-10 h-10 mb-3 mx-auto rounded-full bg-red-100 flex items-center justify-center">
+            <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+          </div>
           <div class="font-medium text-red-700">Consolidation failed</div>
           <div class="text-sm text-gray-500 mt-1">{{ error }}</div>
           <button
