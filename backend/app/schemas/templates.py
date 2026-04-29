@@ -25,14 +25,14 @@ class TemplateResponse(BaseModel):
 
 
 class TemplateVersionCreate(BaseModel):
-    schema_json: Any
+    schema_data: Any
 
 
 class TemplateVersionResponse(BaseModel):
     id: str
     template_id: str
     version_number: int
-    schema_json: Any
+    schema_data: Any
     created_by: Optional[str]
     created_at: datetime
 

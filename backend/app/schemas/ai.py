@@ -41,3 +41,15 @@ class AgentRequest(BaseModel):
     headers: list[str]
     data: list[list] = []
     model: str = "anthropic/claude-sonnet-4-6"
+
+
+class CommandRequest(BaseModel):
+    message: str
+    headers: list[str]
+    snapshot: Optional[str] = None
+    model: str = "anthropic/claude-opus-4-5"
+
+
+class CommandResponse(BaseModel):
+    op: Optional[str]
+    params: dict = {}

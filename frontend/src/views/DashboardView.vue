@@ -208,7 +208,7 @@ async function handleLogout() {
           <template v-else>Upload Files</template>
           <input
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.xlsm"
             multiple
             class="hidden"
             :disabled="uploading"

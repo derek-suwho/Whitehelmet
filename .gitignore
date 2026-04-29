@@ -21,3 +21,6 @@ frontend/coverage/
 frontend/test-results/
 .claude/
 mind-map/
+
+# Local dev SQLite DB
+backend/whitehelmet_dev.db

@@ -1,8 +1,7 @@
-"""AI proxy routes — all traffic via OpenRouter.
+"""AI proxy routes — supports both Anthropic direct API and OpenRouter.
 
-Auth is intentionally stripped while Whitehelmet's external auth service is
-pending integration (see auth.py). Re-add `dependencies=[Depends(get_current_user),
-Depends(verify_csrf)]` on the router once login is implemented.
+Uses ANTHROPIC_API_KEY for direct Anthropic calls when set; falls back to
+OPENROUTER_API_KEY + OpenRouter otherwise. Set either key in .env.
 """
 
 import io
@@ -20,12 +19,72 @@ from app.db.session import get_db
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
 from app.models.user import User
-from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest
+from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest, CommandRequest, CommandResponse
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
+
+# OpenRouter model → Anthropic model ID mapping
+_OR_TO_ANTHROPIC = {
+    "anthropic/claude-opus-4-5": "claude-opus-4-5",
+    "anthropic/claude-sonnet-4-5": "claude-sonnet-4-5-20251001",
+    "anthropic/claude-haiku-4-5": "claude-haiku-4-5-20251001",
+}
+
+
+def _openrouter_to_anthropic_model(model: str) -> str:
+    return _OR_TO_ANTHROPIC.get(model, "claude-sonnet-4-5-20251001")
+
+
+def _messages_to_anthropic(messages: list[dict]) -> tuple:
+    """Split messages list into system prompt + user/assistant turns."""
+    system = None
+    turns = []
+    for m in messages:
+        if m["role"] == "system":
+            system = m["content"]
+        else:
+            turns.append({"role": m["role"], "content": m["content"]})
+    return system, turns
+
+
+async def _anthropic_post(payload: dict) -> dict:
+    """Call Anthropic API directly, returning OpenRouter-compatible response shape."""
+    settings = get_settings()
+    model = _openrouter_to_anthropic_model(payload.get("model", ""))
+    system, turns = _messages_to_anthropic(payload.get("messages", []))
+
+    body: dict = {
+        "model": model,
+        "max_tokens": payload.get("max_tokens", 1024),
+        "messages": turns,
+    }
+    if system:
+        body["system"] = system
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            ANTHROPIC_URL,
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": ANTHROPIC_VERSION,
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+        if not resp.is_success:
+            raise HTTPException(status_code=resp.status_code, detail=f"Anthropic error: {resp.text}")
+        data = resp.json()
+
+    # Normalise to OpenRouter/OpenAI response shape so callers don't care which backend was used
+    content = data.get("content", [{}])[0].get("text", "")
+    return {
+        "choices": [{"message": {"role": "assistant", "content": content}}]
+    }
 
 
 async def _openrouter_post(payload: dict) -> dict:
@@ -50,12 +109,25 @@ async def _openrouter_post(payload: dict) -> dict:
         return resp.json()
 
 
+async def _ai_post(payload: dict) -> dict:
+    """Route to Anthropic direct API or OpenRouter based on available keys."""
+    settings = get_settings()
+    if settings.anthropic_api_key:
+        return await _anthropic_post(payload)
+    if settings.openrouter_api_key:
+        return await _openrouter_post(payload)
+    raise HTTPException(
+        status_code=503,
+        detail="No AI API key configured. Set ANTHROPIC_API_KEY or OPENROUTER_API_KEY in backend/.env",
+    )
+
+
 @router.post("/chat")
 async def chat(body: ChatRequest):
-    """Proxy chat to OpenRouter. SSE stream when body.stream=True, else JSON."""
+    """Proxy chat to Anthropic or OpenRouter. SSE stream when body.stream=True."""
     settings = get_settings()
-    if not settings.openrouter_api_key:
-        raise HTTPException(status_code=503, detail="OpenRouter API key not configured")
+    if not settings.anthropic_api_key and not settings.openrouter_api_key:
+        raise HTTPException(status_code=503, detail="No AI API key configured")
 
     payload = {
         "model": body.model,
@@ -65,9 +137,54 @@ async def chat(body: ChatRequest):
     }
 
     if not body.stream:
-        return await _openrouter_post(payload)
+        return await _ai_post(payload)
 
-    async def sse():
+    # Streaming: prefer Anthropic SSE, fall back to OpenRouter SSE
+    if settings.anthropic_api_key:
+        model = _openrouter_to_anthropic_model(body.model)
+        system, turns = _messages_to_anthropic(body.messages)
+        anthropic_body: dict = {
+            "model": model,
+            "max_tokens": body.max_tokens,
+            "messages": turns,
+            "stream": True,
+        }
+        if system:
+            anthropic_body["system"] = system
+
+        async def anthropic_sse():
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    ANTHROPIC_URL,
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": ANTHROPIC_VERSION,
+                        "Content-Type": "application/json",
+                    },
+                    json=anthropic_body,
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            raw = line[6:]
+                            try:
+                                evt = json.loads(raw)
+                            except Exception:
+                                continue
+                            # Translate Anthropic delta events → OpenAI SSE format
+                            if evt.get("type") == "content_block_delta":
+                                delta_text = evt.get("delta", {}).get("text", "")
+                                chunk = json.dumps({
+                                    "choices": [{"delta": {"content": delta_text}}]
+                                })
+                                yield f"data: {chunk}\n\n"
+                            elif evt.get("type") == "message_stop":
+                                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(anthropic_sse(), media_type="text/event-stream")
+
+    # OpenRouter streaming fallback
+    async def openrouter_sse():
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
@@ -82,7 +199,7 @@ async def chat(body: ChatRequest):
                     if line.startswith("data: "):
                         yield f"{line}\n\n"
 
-    return StreamingResponse(sse(), media_type="text/event-stream")
+    return StreamingResponse(openrouter_sse(), media_type="text/event-stream")
 
 
 @router.post("/consolidate", response_model=ConsolidateResponse)
@@ -112,7 +229,7 @@ async def consolidate(body: ConsolidateRequest):
             for f in body.files_schema
         ])},
     ]
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": body.model,
         "max_tokens": 2048,
         "messages": messages,
@@ -128,6 +245,52 @@ async def consolidate(body: ConsolidateRequest):
         raise HTTPException(status_code=502, detail=f"AI returned invalid JSON: {exc}") from exc
     return ConsolidateResponse(**parsed)
 
+
+COMMAND_SYSTEM_PROMPT = """\
+You are a spreadsheet command parser. Given a user message and the current \
+spreadsheet state, return ONLY a JSON object (no markdown, no extra text).
+
+Supported operations (return exactly one):
+{"op":"add_column","name":"<header>","position":<0-based index or null for end>}
+{"op":"remove_column","name":"<header>"}
+{"op":"rename_column","from":"<old>","to":"<new>"}
+{"op":"apply_formula","column":"<header>","formula":"=<formula with {row} placeholder, e.g. =A{row}*B{row}>"}
+{"op":"apply_saved_formula","formula_name":"<exact name from formula library>","column":"<exact column header>"}
+{"op":"create_formula","nl_request":"<user description of formula>","column":"<target column header or null>"}
+{"op":"sort","column":"<header>","order":"asc|desc"}
+{"op":"filter","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}
+{"op":"show_all_rows"}
+{"op":"remove_empty_rows"}
+{"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}
+{"op":"find_duplicates","column":"<header>"}
+{"op":"add_row","count":<number>,"position":<0-based or null for end>}
+{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"color":"#hex","bgColor":"#hex","align":"left|center|right"}}
+{"op":"highlight_column","column":"<header>","bgColor":"#hex"}
+{"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}
+{"op":"clear_format","column":"<header or null>"}
+{"op":"export"}
+{"op":"save_record"}
+{"op":"show_dashboard"}
+{"op":null}
+
+Formula rules (CRITICAL — read carefully):
+- apply_formula: ALWAYS use {row} as the row placeholder. Column letters map to their position: A=first column, B=second, etc.
+- {row} is replaced with the actual Excel row number at runtime (row 2 for first data row, row 3 for second, etc.)
+- NEVER use absolute references like =A1*B1 — always use {row} so each row gets its own formula
+- apply_saved_formula: use when the user mentions a formula by name that appears in the saved formula library.
+- create_formula: use when user wants to generate and save a NEW formula via natural language description.
+
+Other notes:
+- filter: hide rows where column does NOT match the condition.
+- show_all_rows: triggered by "show all", "clear filter", "unfilter".
+- aggregate: report result in chat only, no grid change.
+- find_duplicates: report in chat only, no grid change.
+- export: download spreadsheet as .xlsx with formulas intact.
+- save_record: save current grid to master records.
+- show_dashboard: navigate to master records dashboard.
+- format_cells: column=null means whole sheet; row=null means all data rows.
+- If NOT a spreadsheet/formula command return {"op":null}.
+"""
 
 FORMULA_SYSTEM_PROMPT = """\
 You are an Excel formula expert. Given a list of column headers and a user request, \
@@ -156,6 +319,33 @@ def _expand_merged(ws) -> list[list]:
     for row in ws.iter_rows():
         rows.append([merged_vals.get((cell.row, cell.column), cell.value) for cell in row])
     return rows
+
+@router.post("/command", response_model=CommandResponse)
+async def command(body: CommandRequest):
+    """Parse NL spreadsheet command via Anthropic or OpenRouter."""
+    context_parts = []
+    if body.snapshot:
+        context_parts.append(body.snapshot)
+    else:
+        context_parts.append(f"Column headers: {json.dumps(body.headers)}")
+    context_parts.append(f"User command: {body.message}")
+
+    data = await _ai_post({
+        "model": body.model,
+        "max_tokens": 512,
+        "messages": [
+            {"role": "system", "content": COMMAND_SYSTEM_PROMPT},
+            {"role": "user", "content": "\n\n".join(context_parts)},
+        ],
+    })
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    try:
+        parsed = json.loads(content.strip())
+    except json.JSONDecodeError:
+        parsed = {"op": None}
+
+    op = parsed.pop("op", None)
+    return CommandResponse(op=op, params=parsed)
 
 
 def _find_header_row(rows: list[list]) -> tuple[int, list]:
@@ -395,7 +585,7 @@ async def template_generate(body: dict):
         api_messages.append({"role": m["role"], "content": m["content"]})
     api_messages.append({"role": "user", "content": prompt})
 
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
         "max_tokens": 1024,
         "messages": api_messages,
@@ -422,7 +612,7 @@ async def finetune_consolidated(body: dict):
         "Acknowledge the change and describe what you would do. "
         "Return JSON: {\"message\": \"<description of change applied>\"}"
     )
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
         "max_tokens": 256,
         "messages": [
@@ -459,7 +649,7 @@ async def generate_formula(body: FormulaRequest):
         if body.column_headers
         else "No headers provided."
     )
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": body.model,
         "max_tokens": 256,
         "messages": [

@@ -14,10 +14,13 @@ describe('useAiOperations', () => {
     vi.restoreAllMocks()
   })
 
-  it('handleCommand returns false when no spreadsheet instance', async () => {
+  it('handleCommand returns true with message when no spreadsheet instance', async () => {
     const { handleCommand } = useAiOperations()
     const result = await handleCommand('add column')
-    expect(result).toBe(false)
+    // Returns true (handled) so the caller doesn't fall through to general chat
+    expect(result).toBe(true)
+    const chat = useChatStore()
+    expect(chat.messages.some((m) => m.content.includes('Open a spreadsheet'))).toBe(true)
   })
 
   it('handleCommand returns false when no headers', async () => {

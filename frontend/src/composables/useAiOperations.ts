@@ -6,6 +6,7 @@ import { useSourcesStore } from '@/stores/sources'
 import { useRecordsStore } from '@/stores/records'
 import { useChatStore } from '@/stores/chat'
 import { useFormulasStore } from '@/stores/formulas'
+import { applyFmtExternal, clearFmtExternal, renderExternal } from '@/composables/useSpreadsheetEditor'
 import type { CommandApiResponse } from '@/types'
 
 // ── Module-level filter state ─────────────────────────────────────────────────
@@ -14,28 +15,23 @@ const hiddenRows = new Set<number>()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getColumnHeaders(jss: any): string[] {
-  const config = jss.getConfig?.() ?? jss.options ?? {}
-  const columns = config.columns ?? []
-  if (columns.length > 0) {
-    return columns.map((c: any) => String(c.title ?? c.name ?? ''))
-  }
-  const data = jss.getData?.() ?? []
-  if (data.length > 0) return (data[0] as unknown[]).map((c) => String(c ?? ''))
-  return []
+function getColumnHeaders(hot: any): string[] {
+  const data: unknown[][] = hot.getData?.() ?? []
+  if (!data.length) return []
+  return (data[0] as unknown[]).map((c) => String(c ?? ''))
 }
 
-function getDataRows(jss: any): unknown[][] {
-  return jss.getData?.() ?? []
+function getDataRows(hot: any): unknown[][] {
+  const data: unknown[][] = hot.getData?.() ?? []
+  return data.slice(1)
 }
 
-function getRowCount(jss: any): number {
-  return (jss.getData?.() ?? []).length
+function getRowCount(hot: any): number {
+  return Math.max(0, (hot.countRows?.() ?? 1) - 1)
 }
 
-function getColCount(jss: any): number {
-  const data = jss.getData?.() ?? []
-  return data.length > 0 ? (data[0] as unknown[]).length : 0
+function getColCount(hot: any): number {
+  return hot.countCols?.() ?? 0
 }
 
 function resolveColumnIndex(headers: string[], column: string | number): number {
@@ -326,9 +322,7 @@ async function executeConsolidateToTemplate(
     const hText: string = hJson.choices[0].message.content
       .trim().replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim()
     templateHeaders = JSON.parse(hText)
-    for (let i = 0; i < templateHeaders.length; i++) {
-      jss.setValueFromCoords(i, 0, templateHeaders[i])
-    }
+    jss.setDataAtCell(templateHeaders.map((h: string, i: number) => [0, i, h] as [number, number, string]))
   }
 
   const outputRows: unknown[][] = []
@@ -399,9 +393,7 @@ async function executeDynamicReport(
     return
   }
 
-  for (let i = 0; i < templateHeaders.length; i++) {
-    jss.setValueFromCoords(i, 0, templateHeaders[i])
-  }
+  jss.loadData([templateHeaders] as any)
 
   const sources = useSourcesStore()
   const files = sources.getCheckedFiles()
@@ -414,6 +406,11 @@ async function executeDynamicReport(
   const templateColsWithHints = plan.columns.map(
     (c) => c.name + (c.source_field ? ` [hint: "${c.source_field}"]` : ''),
   )
+  // mapColumns keys are hint-suffixed; build lookup so data rows can find results by plain name
+  const hintedKey: Record<string, string> = {}
+  for (let ci = 0; ci < plan.columns.length; ci++) {
+    hintedKey[plan.columns[ci].name] = templateColsWithHints[ci]
+  }
   const outputRows: unknown[][] = []
   const n = files.length
 
@@ -429,7 +426,7 @@ async function executeDynamicReport(
       const isEmpty = (row as unknown[]).every((c) => c === '' || c === null || c === undefined)
       if (isEmpty) continue
       const mapped = templateHeaders.map((col) => {
-        const srcCol = mapping[col]
+        const srcCol = mapping[hintedKey[col] ?? col]
         if (!srcCol) return ''
         const idx = srcHeaders.indexOf(srcCol)
         return idx >= 0 ? (row as unknown[])[idx] ?? '' : ''
@@ -462,12 +459,15 @@ async function applyOperation(
     case 'add_column': {
       const pos = p.position != null ? Number(p.position) : getColCount(jss)
       const title = String(p.name ?? 'New Column')
-      jss.insertColumn(1, pos, true)
-      jss.setHeader(pos, title)
+      jss.alter('insert_col_start', pos, 1)
+      jss.setDataAtCell(0, pos, title)
       if (p.default_value) {
-        for (let r = 0; r < getRowCount(jss); r++) {
-          jss.setValueFromCoords(pos, r, p.default_value as string)
+        const rowCount = getRowCount(jss)
+        const changes: [number, number, string][] = []
+        for (let d = 0; d < rowCount; d++) {
+          changes.push([d + 1, pos, p.default_value as string])
         }
+        if (changes.length) jss.setDataAtCell(changes)
       }
       return `Added column "${title}".`
     }
@@ -475,14 +475,14 @@ async function applyOperation(
     case 'remove_column': {
       const idx = resolveCol(p.name)
       if (idx === -1) return `Column "${p.name}" not found.`
-      jss.deleteColumn(idx, 1)
+      jss.alter('remove_col', idx, 1)
       return `Removed column "${p.name}".`
     }
 
     case 'rename_column': {
       const idx = resolveCol(p.from)
       if (idx === -1) return `Column "${p.from}" not found.`
-      jss.setHeader(idx, String(p.to ?? ''))
+      jss.setDataAtCell(0, idx, String(p.to ?? ''))
       return `Renamed "${p.from}" → "${p.to}".`
     }
 
@@ -491,10 +491,11 @@ async function applyOperation(
       if (idx === -1) return `Column "${p.column}" not found.`
       const formula = String(p.formula ?? '')
       const rowCount = getRowCount(jss)
-      for (let r = 0; r < rowCount; r++) {
-        const resolved = formula.replace(/\{row\}/gi, String(r + 1))
-        jss.setValueFromCoords(idx, r, resolved)
+      const changes: [number, number, string][] = []
+      for (let d = 0; d < rowCount; d++) {
+        changes.push([d + 1, idx, formula.replace(/\{row\}/gi, String(d + 2))])
       }
+      if (changes.length) jss.setDataAtCell(changes)
       return `Applied formula to "${p.column}" (${rowCount} rows).`
     }
 
@@ -505,10 +506,11 @@ async function applyOperation(
       const idx = resolveCol(p.column)
       if (idx === -1) return `Column "${p.column}" not found.`
       const rowCount = getRowCount(jss)
-      for (let r = 0; r < rowCount; r++) {
-        const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
-        jss.setValueFromCoords(idx, r, resolved)
+      const changes: [number, number, string][] = []
+      for (let d = 0; d < rowCount; d++) {
+        changes.push([d + 1, idx, saved.expression.replace(/\{row\}/gi, String(d + 2))])
       }
+      if (changes.length) jss.setDataAtCell(changes)
       return `Applied "${saved.name}" to "${p.column}" (${rowCount} rows).`
     }
 
@@ -522,10 +524,11 @@ async function applyOperation(
         const idx = resolveCol(p.column)
         if (idx !== -1) {
           const rowCount = getRowCount(jss)
-          for (let r = 0; r < rowCount; r++) {
-            const resolved = saved.expression.replace(/\{row\}/gi, String(r + 1))
-            jss.setValueFromCoords(idx, r, resolved)
+          const changes: [number, number, string][] = []
+          for (let d = 0; d < rowCount; d++) {
+            changes.push([d + 1, idx, saved.expression.replace(/\{row\}/gi, String(d + 2))])
           }
+          if (changes.length) jss.setDataAtCell(changes)
           return `Created and applied "${saved.name}" (${saved.expression}) to "${p.column}".`
         }
       }
@@ -536,7 +539,9 @@ async function applyOperation(
       const idx = resolveCol(p.column)
       if (idx === -1) return `Column "${p.column}" not found.`
       const asc = String(p.order ?? 'asc') === 'asc'
-      jss.orderBy(idx, asc ? 0 : 1)
+      const sortPlugin = (jss as any).getPlugin('columnSorting')
+      if (!sortPlugin) return 'Sort unavailable.'
+      sortPlugin.sort({ column: idx, sortOrder: asc ? 'asc' : 'desc' })
       return `Sorted by "${p.column}" (${asc ? 'ascending' : 'descending'}).`
     }
 
@@ -546,47 +551,52 @@ async function applyOperation(
       const data = getDataRows(jss)
       const operator = String(p.operator ?? '=')
       const value = String(p.value ?? '')
-      const tbody = jss.el?.querySelector('table tbody') as HTMLElement | null
-      if (!tbody) return 'Filter unavailable: spreadsheet not mounted.'
-      const trs = tbody.querySelectorAll('tr')
-      let hidden = 0
-      for (let r = 0; r < data.length; r++) {
-        const cellVal = (data[r] as unknown[])[colIdx]
-        const keep = evaluateCondition(cellVal, operator, value)
-        if (!keep) {
-          if (trs[r]) (trs[r] as HTMLElement).style.display = 'none'
-          hiddenRows.add(r)
-          hidden++
+      const rowsToHide: number[] = []
+      for (let d = 0; d < data.length; d++) {
+        const cellVal = (data[d] as unknown[])[colIdx]
+        if (!evaluateCondition(cellVal, operator, value)) {
+          const physicalRow = jss.toPhysicalRow(d + 1)
+          rowsToHide.push(physicalRow)
+          hiddenRows.add(physicalRow)
         }
       }
-      return `Filtered: hiding ${hidden} rows where "${p.column}" ${operator} ${value}.`
+      const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
+      if (hiddenPlugin && rowsToHide.length) {
+        hiddenPlugin.hideRows(rowsToHide)
+        jss.render()
+      }
+      return `Filtered: hiding ${rowsToHide.length} rows where "${p.column}" ${operator} ${value}.`
     }
 
     case 'show_all_rows': {
-      const tbody = jss.el?.querySelector('table tbody') as HTMLElement | null
-      tbody?.querySelectorAll('tr').forEach((tr) => {
-        ;(tr as HTMLElement).style.display = ''
-      })
+      const hiddenPlugin = (jss as any).getPlugin('hiddenRows')
+      if (hiddenPlugin) {
+        const currentlyHidden: number[] = hiddenPlugin.getHiddenRows()
+        if (currentlyHidden.length) {
+          hiddenPlugin.showRows(currentlyHidden)
+          jss.render()
+        }
+      }
       hiddenRows.clear()
       return 'Showing all rows — filter cleared.'
     }
 
     case 'add_row': {
       const count = Number(p.count ?? 1)
-      const pos = p.position != null ? Number(p.position) : getRowCount(jss)
-      jss.insertRow(count, pos)
+      const pos = p.position != null ? Number(p.position) + 1 : jss.countRows() - 1
+      jss.alter('insert_row_below', pos, count)
       return `Inserted ${count} row(s).`
     }
 
     case 'remove_empty_rows': {
-      const data = getDataRows(jss)
+      const data: unknown[][] = jss.getData()
       let deleted = 0
-      for (let r = data.length - 1; r >= 0; r--) {
+      for (let r = data.length - 1; r >= 1; r--) {
         const isEmpty = (data[r] as unknown[]).every(
           (c) => c === '' || c === null || c === undefined,
         )
         if (isEmpty) {
-          jss.deleteRow(r, 1)
+          jss.alter('remove_row', r, 1)
           deleted++
         }
       }
@@ -632,13 +642,10 @@ async function applyOperation(
     }
 
     case 'format_cells': {
-      const props = (p.props ?? {}) as Record<string, unknown>
-      const style = buildStyle(props)
-      if (!style) return 'No formatting properties specified.'
+      const props = (p.props ?? {}) as Record<string, any>
       const colIdx = p.column != null ? resolveCol(p.column) : null
-      const targetRow = p.row != null ? Number(p.row) - 1 : null
-      const data = getDataRows(jss)
-      const styleMap: Record<string, string> = {}
+      const targetRow = p.row != null ? Number(p.row) : null
+      const data: unknown[][] = jss.getData()
       const rows = targetRow != null
         ? [targetRow]
         : Array.from({ length: data.length }, (_, i) => i)
@@ -647,23 +654,21 @@ async function applyOperation(
         : Array.from({ length: getColCount(jss) }, (_, i) => i)
       for (const r of rows) {
         for (const c of cols) {
-          styleMap[cellName(c, r)] = style
+          applyFmtExternal(r, c, props)
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Formatted ${p.column ? `"${p.column}"` : 'selection'}.`
     }
 
     case 'highlight_column': {
       const colIdx = resolveCol(p.column)
       if (colIdx === -1) return `Column "${p.column}" not found.`
-      const data = getDataRows(jss)
-      const style = `background-color: ${p.bgColor}`
-      const styleMap: Record<string, string> = {}
+      const data: unknown[][] = jss.getData()
       for (let r = 0; r < data.length; r++) {
-        styleMap[cellName(colIdx, r)] = style
+        applyFmtExternal(r, colIdx, { bgColor: String(p.bgColor) })
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Highlighted "${p.column}" with ${p.bgColor}.`
     }
 
@@ -671,61 +676,72 @@ async function applyOperation(
       const colIdx = resolveCol(p.column)
       if (colIdx === -1) return `Column "${p.column}" not found.`
       const data = getDataRows(jss)
-      const props = (p.props ?? {}) as Record<string, unknown>
-      const style = buildStyle(props)
+      const props = (p.props ?? {}) as Record<string, any>
       const operator = String(p.operator ?? '=')
       const value = String(p.value ?? '')
-      const styleMap: Record<string, string> = {}
       let matched = 0
-      for (let r = 0; r < data.length; r++) {
-        if (evaluateCondition((data[r] as unknown[])[colIdx], operator, value)) {
+      for (let d = 0; d < data.length; d++) {
+        if (evaluateCondition((data[d] as unknown[])[colIdx], operator, value)) {
           for (let c = 0; c < getColCount(jss); c++) {
-            styleMap[cellName(c, r)] = style
+            applyFmtExternal(d + 1, c, props)
           }
           matched++
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Conditional format applied to ${matched} row(s) where "${p.column}" ${operator} ${value}.`
     }
 
     case 'clear_format': {
       const colIdx = p.column != null ? resolveCol(p.column) : null
-      const data = getDataRows(jss)
-      const styleMap: Record<string, string> = {}
+      const data: unknown[][] = jss.getData()
       const cols = colIdx != null
         ? [colIdx]
         : Array.from({ length: getColCount(jss) }, (_, i) => i)
       for (let r = 0; r < data.length; r++) {
         for (const c of cols) {
-          styleMap[cellName(c, r)] = ''
+          clearFmtExternal(r, c)
         }
       }
-      jss.setStyle(styleMap)
+      renderExternal()
       return `Cleared formatting from ${p.column ? `"${p.column}"` : 'entire sheet'}.`
     }
 
     case 'export': {
       const spreadsheet = useSpreadsheetStore()
-      const exportHeaders = getColumnHeaders(jss)
-      const data = getDataRows(jss)
-      const wb = XLSX.utils.book_new()
-      const ws = XLSX.utils.aoa_to_sheet([exportHeaders, ...data])
-      XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-      XLSX.writeFile(wb, `${spreadsheet.fileName ?? 'export'}.xlsx`)
+      // getSourceData preserves formula strings; getData returns computed values
+      const sourceData: unknown[][] = (jss as any).getSourceData
+        ? (jss as any).getSourceData().map((r: any[]) => r.slice())
+        : jss.getData()
+      const wb2 = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet(sourceData as any[][])
+      Object.keys(ws)
+        .filter((k) => !k.startsWith('!'))
+        .forEach((addr) => {
+          const cell = ws[addr]
+          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
+            cell.f = cell.v.slice(1)
+            delete cell.v
+            delete cell.w
+            delete cell.t
+          }
+        })
+      XLSX.utils.book_append_sheet(wb2, ws, 'Sheet1')
+      XLSX.writeFile(wb2, `${spreadsheet.fileName ?? 'export'}.xlsx`)
       return 'Downloading spreadsheet as .xlsx…'
     }
 
     case 'save_record': {
       const spreadsheet = useSpreadsheetStore()
       const records = useRecordsStore()
-      const saveHeaders = getColumnHeaders(jss)
-      const data = getDataRows(jss)
+      const allData: unknown[][] = jss.getData()
+      const saveHeaders = (allData[0] as unknown[]).map((c) => String(c ?? ''))
+      const data = allData.slice(1) as unknown[][]
       const date = new Date().toLocaleDateString('en-US', {
         month: 'short', day: 'numeric', year: 'numeric',
       })
       const name = `${spreadsheet.fileName ?? 'Record'} — ${date}`
-      await records.createRecord({ name, headers: saveHeaders, rows: data as unknown[][] })
+      await records.createRecord({ name, headers: saveHeaders, rows: data })
       return `Saved "${name}" to master records.`
     }
 
@@ -756,7 +772,25 @@ export function useAiOperations() {
       return true
     }
 
-    if (!jss) return false
+    if (!jss) {
+      // Let formula creation work even without an open spreadsheet
+      if (FORMULA_CREATE_RE.test(text)) {
+        chat.addMessage('Creating formula…', 'ai')
+        try {
+          const formulaStore = useFormulasStore()
+          const saved = await formulaStore.createFromNL(text, [])
+          const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+          if (lastAi) lastAi.content = `Created formula "${saved.name}": \`${saved.expression}\` — saved to library. Open a spreadsheet and use the Formulas panel to apply it.`
+        } catch (err) {
+          const lastAi = [...chat.messages].reverse().find((m) => m.role === 'ai')
+          const msg = err instanceof Error ? err.message : String(err)
+          if (lastAi) lastAi.content = `Error creating formula: ${msg}`
+        }
+        return true
+      }
+      chat.addMessage('Open a spreadsheet file first — then I can apply commands to it.', 'ai')
+      return true
+    }
 
     if (SUGGEST_RE.test(text)) {
       await executeSuggestTemplate(jss, chat)
@@ -789,18 +823,24 @@ export function useAiOperations() {
     const snapshot = buildSnapshot(jss)
     const currentHeaders = getColumnHeaders(jss)
 
-    // Append saved formula library to snapshot so AI can reference named formulas
     const formulaStore = useFormulasStore()
     const formulaContext = formulaStore.formulas.length
       ? '\n\nSaved formula library:\n' +
-        formulaStore.formulas.map((f) => `- "${f.name}": ${f.expression}`).join('\n')
+        formulaStore.formulas.map((f) => `- "${f.name}": ${f.expression} (${f.formula_type ?? 'formula'})`).join('\n')
       : ''
 
-    const resp = await api.post<CommandApiResponse>('/api/ai/command', {
-      message: text,
-      headers: currentHeaders,
-      snapshot: snapshot + formulaContext,
-    })
+    let resp: CommandApiResponse
+    try {
+      resp = await api.post<CommandApiResponse>('/api/ai/command', {
+        message: text,
+        headers: currentHeaders,
+        snapshot: snapshot + formulaContext,
+      })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      chat.addMessage(`Command failed: ${msg}. Check that the backend is running and the API key is configured.`, 'ai')
+      return true
+    }
 
     if (!resp.op) return false
 

@@ -38,6 +38,29 @@ export const fmtState = ref({
 export const lastTextColor = ref('#111111')
 export const lastFillColor = ref('#ffff00')
 export const detectedFormulas = ref<{ column: string; expression: string }[]>([])
+export const selectedCol = ref(0)
+
+// ── Formula panel helpers (used by FormulaLibraryPanel) ─────────
+export function getColumnHeadersExternal(): { idx: number; letter: string; name: string }[] {
+  if (!_currentInstance) return []
+  const data = _currentInstance.getData() as unknown[][]
+  if (!data.length) return []
+  const headers = (data[0] as unknown[]).map((c) => String(c ?? ''))
+  return headers
+    .map((name, idx) => ({ idx, letter: _colLetter(idx), name }))
+    .filter((h) => h.name.trim())
+}
+
+export function applyFormulaToColumn(expression: string, colIdx: number): number {
+  if (!_currentInstance) return 0
+  const rowCount = Math.max(0, (_currentInstance.countRows?.() ?? 1) - 1)
+  const changes: [number, number, string][] = []
+  for (let d = 0; d < rowCount; d++) {
+    changes.push([d + 1, colIdx, expression.replace(/\{row\}/gi, String(d + 2))])
+  }
+  if (changes.length) _currentInstance.setDataAtCell(changes)
+  return rowCount
+}
 
 // ── Test-exported helpers ────────────────────────────────────────
 export function argbToCssTest(argb: string): string | null {
@@ -54,6 +77,23 @@ export function setFmtTest(sheetIdx: number, row: number, col: number, props: Re
 }
 export function resetFormatsTest() {
   _allSheetFormats = []
+}
+
+export function applyFmtExternal(row: number, col: number, props: Record<string, any>): void {
+  const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+  const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+  _setFmt(_currentSheetIdx, physRow, physCol, props)
+}
+
+export function clearFmtExternal(row: number, col: number): void {
+  if (!_allSheetFormats[_currentSheetIdx]) return
+  const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+  const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+  delete _allSheetFormats[_currentSheetIdx][`${physRow},${physCol}`]
+}
+
+export function renderExternal(): void {
+  _currentInstance?.render()
 }
 
 // ── Private helpers ──────────────────────────────────────────────
@@ -107,7 +147,7 @@ Handsontable.renderers.registerRenderer(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .apply(null as any, [hot, TD, row, col, prop, value, cellProps])
 
-    const fmt = _getFmt(_currentSheetIdx, row, col)
+    const fmt = _getFmt(_currentSheetIdx, hot.toPhysicalRow(row), hot.toPhysicalColumn(col))
     // Header row defaults
     if (row === 0) {
       if (!fmt.bgColor) TD.style.backgroundColor = '#e9f0e9'
@@ -156,7 +196,9 @@ export function useSpreadsheetEditor() {
   }
 
   function _updateToolbarState(row: number, col: number): void {
-    const fmt = _getFmt(_currentSheetIdx, row, col)
+    const physRow = _currentInstance ? _currentInstance.toPhysicalRow(row) : row
+    const physCol = _currentInstance ? _currentInstance.toPhysicalColumn(col) : col
+    const fmt = _getFmt(_currentSheetIdx, physRow, physCol)
     fmtState.value = {
       bold: !!fmt.bold,
       italic: !!fmt.italic,
@@ -183,15 +225,17 @@ export function useSpreadsheetEditor() {
     const c2 = Math.max(rng.from.col, rng.to.col)
     for (let r = r1; r <= r2; r++)
       for (let c = c1; c <= c2; c++)
-        _setFmt(_currentSheetIdx, r, c, props)
+        _setFmt(_currentSheetIdx, _currentInstance.toPhysicalRow(r), _currentInstance.toPhysicalColumn(c), props)
     _currentInstance.render()
     _updateToolbarState(rng.from.row, rng.from.col)
   }
 
   function _toggleFmt(key: string): void {
     const rng = _getRange()
-    if (!rng) return
-    const current = _getFmt(_currentSheetIdx, rng.from.row, rng.from.col)[key]
+    if (!rng || !_currentInstance) return
+    const physRow = _currentInstance.toPhysicalRow(rng.from.row)
+    const physCol = _currentInstance.toPhysicalColumn(rng.from.col)
+    const current = _getFmt(_currentSheetIdx, physRow, physCol)[key]
     _applyFmt({ [key]: !current })
   }
 
@@ -338,7 +382,7 @@ export function useSpreadsheetEditor() {
       height: container.offsetHeight > 0 ? container.offsetHeight : '100%',
       licenseKey: 'non-commercial-and-evaluation',
       theme: 'ht-theme-main',
-      formulas: { engine: HyperFormula },
+      formulas: { engine: HyperFormula, licenseKey: 'non-commercial-and-evaluation' } as any,
       colWidths: _allSheetColWidths[0] ?? 100,
       manualColumnResize: true,
       manualRowResize: true,
@@ -355,6 +399,7 @@ export function useSpreadsheetEditor() {
       afterSelectionEnd(row: number, col: number) {
         _updateFormulaBar(row, col)
         _updateToolbarState(row, col)
+        selectedCol.value = col
       },
       afterChange(changes: any) {
         if (!changes) return
@@ -623,9 +668,9 @@ export function useSpreadsheetEditor() {
           const cell = ws[addr]
           if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
             cell.f = cell.v.slice(1)
-            cell.t = 'n'
             delete cell.v
             delete cell.w
+            delete cell.t
           }
         })
       XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)

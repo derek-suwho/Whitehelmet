@@ -51,7 +51,7 @@ function readDirectoryFiles(dir: FileSystemDirectoryEntry): Promise<File[]> {
         for (const entry of entries) {
           if (entry.isFile) {
             const fe = entry as FileSystemFileEntry
-            if (/\.(xlsx|xls)$/i.test(fe.name)) {
+            if (/\.(xlsx|xls|xlsm)$/i.test(fe.name)) {
               await new Promise<void>(res => fe.file(f => { files.push(f); res() }))
             }
           }
@@ -148,7 +148,7 @@ function isChecked(id: string) { return sources.checkedIds.has(id) }
         <p class="pb-2.5 text-center text-xs text-gray-400">or drag &amp; drop</p>
       </div>
 
-      <input ref="fileInput"   type="file" accept=".xlsx,.xls" multiple  class="hidden" @change="handleFileSelect" />
+      <input ref="fileInput"   type="file" accept=".xlsx,.xls,.xlsm" multiple  class="hidden" @change="handleFileSelect" />
       <input ref="folderInput" type="file" webkitdirectory              class="hidden" @change="handleFolderSelect" />
     </div>
 
