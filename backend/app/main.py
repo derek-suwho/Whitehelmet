@@ -51,7 +51,7 @@ async def startup():
         Submission, ConsolidatedSheet, Formula,
     )
 
-    if settings.environment == "dev":
+    if settings.environment in ("dev", "staging"):
         try:
             Base.metadata.create_all(bind=engine)
             _seed_admin(engine)
