@@ -87,7 +87,7 @@ function handleKeydown(e: KeyboardEvent) {
             :class="{
               'bg-brand-600 text-white':          msg.role === 'user',
               'bg-gray-100 text-gray-700':        msg.role === 'ai',
-              'bg-red-50 text-red-600':           msg.role === 'system',
+              'bg-green-50 text-green-600':        msg.role === 'system',
             }"
           >
             <p class="whitespace-pre-wrap break-words">{{ msg.content }}</p>

@@ -2,18 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Spreadsheet toolbar ─────────────────────────────────────── */
+/* ── Spreadsheet toolbar (Excel-like light ribbon) ───────────── */
 .xt-btn {
-  @apply flex items-center justify-center rounded px-1.5 py-1 text-xs text-gray-300 transition-colors duration-100;
-  @apply hover:bg-white/10 hover:text-white active:bg-white/20;
+  @apply flex items-center justify-center rounded-sm px-1.5 py-1 text-xs text-gray-700 transition-colors duration-100;
+  @apply hover:bg-gray-200/80 active:bg-gray-300/60;
   min-width: 24px;
   height: 24px;
 }
 .xt-btn-active {
-  @apply bg-white/15 text-white;
+  @apply bg-gray-300/70 text-gray-900;
 }
 .xt-sep {
-  @apply mx-0.5 h-4 w-px bg-white/10 shrink-0;
+  @apply mx-0.5 h-4 w-px shrink-0 bg-gray-300;
 }
 .xt-color-btn {
   @apply flex-col gap-0;
@@ -26,46 +26,95 @@
   margin-top: 1px;
 }
 .xt-select {
-  @apply rounded bg-white/5 px-1 py-0.5 text-xs text-gray-300 border border-white/10;
-  @apply hover:bg-white/10 focus:outline-none;
   height: 24px;
+  border-radius: 2px;
+  border: 1px solid #c8c8c8;
+  background: #fff;
+  padding: 0 4px;
+  font-size: 11px;
+  color: #222;
+}
+.xt-select:hover {
+  border-color: #a0a0a0;
+}
+.xt-select:focus {
+  outline: none;
+  border-color: #217346;
 }
 .xt-zoom-label {
-  @apply text-xs text-gray-500 tabular-nums;
+  @apply text-xs tabular-nums text-gray-600;
   min-width: 36px;
   text-align: center;
 }
 
-/* ── Formula bar ─────────────────────────────────────────────── */
+/* ── Formula bar (Excel name box + formula field) ────────────── */
 .xt-formula-bar {
-  @apply flex items-center border-b border-white/5 bg-surface;
-  height: 28px;
+  display: flex;
+  align-items: stretch;
+  height: 26px;
   flex-shrink: 0;
+  background: #f3f3f3;
+  border-bottom: 1px solid #d4d4d4;
 }
 .xt-cell-ref {
-  @apply text-xs text-gray-400 font-mono px-2 border-r border-white/10;
-  min-width: 48px;
+  min-width: 52px;
+  max-width: 72px;
+  padding: 0 6px;
   text-align: center;
-  line-height: 28px;
+  font-size: 11px;
+  line-height: 26px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #333;
+  background: #fff;
+  border-right: 1px solid #d4d4d4;
 }
 .xt-formula-sep {
-  @apply w-px h-4 bg-white/10 mx-1 shrink-0;
+  width: 1px;
+  flex-shrink: 0;
+  background: #d4d4d4;
 }
 .xt-formula-input {
-  @apply flex-1 bg-transparent text-xs text-gray-200 px-2 focus:outline-none;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 26px;
+  color: #000;
+  background: #fff;
+}
+.xt-formula-input:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 1px #217346;
 }
 
-/* ── Sheet tabs ──────────────────────────────────────────────── */
+/* ── Sheet tabs (Excel bottom tab strip) ───────────────────── */
 .xt-sheet-tabs {
-  @apply flex border-t border-white/5 bg-surface overflow-x-auto;
+  display: flex;
+  align-items: flex-end;
   flex-shrink: 0;
+  overflow-x: auto;
+  background: #d4d4d4;
+  border-top: 1px solid #c0c0c0;
+  padding-left: 2px;
+  gap: 1px;
 }
 .xt-sheet-tab {
-  @apply px-3 py-1 text-xs text-gray-500 border-r border-white/5 hover:bg-white/5 hover:text-gray-300 transition-colors duration-100;
+  margin-bottom: -1px;
+  padding: 4px 12px 5px;
+  font-size: 11px;
   white-space: nowrap;
+  border: 1px solid #b4b4b4;
+  border-bottom: 1px solid #c0c0c0;
+  border-radius: 2px 2px 0 0;
+  cursor: pointer;
+  /* background, color, font-weight from inline OOXML tab colors */
+}
+.xt-sheet-tab:hover {
+  filter: brightness(1.07);
 }
 .xt-sheet-tab.active {
-  @apply bg-white/10 text-gray-200;
+  border-bottom-color: #fff;
 }
 
 /* ── Color picker dropdown ───────────────────────────────────── */
@@ -78,21 +127,21 @@
   grid-template-columns: repeat(8, 18px);
   gap: 2px;
   padding: 6px;
-  background: #1e1e38;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  background: #fff;
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
 }
 .xt-color-swatch {
   width: 18px;
   height: 18px;
   border-radius: 2px;
   cursor: pointer;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid #ccc;
 }
 .xt-color-swatch:hover {
-  transform: scale(1.2);
-  border-color: rgba(255,255,255,0.4);
+  transform: scale(1.15);
+  border-color: #217346;
 }
 
 /* ── Find & Replace modal ────────────────────────────────────── */
@@ -102,13 +151,13 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 99999;
-  background: #1e1e38;
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 10px;
-  padding: 20px;
+  background: #f3f3f3;
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+  padding: 16px;
   width: 320px;
-  box-shadow: 0 16px 48px rgba(0,0,0,0.6);
-  color: #e2e8f0;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  color: #222;
 }
 .xt-find-modal h3 {
   font-size: 13px;
@@ -118,18 +167,18 @@
 .xt-find-modal label {
   display: block;
   font-size: 11px;
-  color: #94a3b8;
+  color: #555;
   margin-bottom: 4px;
 }
 .xt-find-modal input {
   display: block;
   width: 100%;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #c8c8c8;
+  border-radius: 2px;
+  padding: 6px 8px;
   font-size: 12px;
-  color: #e2e8f0;
+  color: #000;
   margin-bottom: 10px;
   outline: none;
   box-sizing: border-box;
@@ -143,27 +192,89 @@
   flex: 1;
   padding: 5px 0;
   font-size: 11px;
-  border-radius: 5px;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(255,255,255,0.05);
-  color: #94a3b8;
+  border-radius: 2px;
+  border: 1px solid #b4b4b4;
+  background: #fff;
+  color: #333;
   cursor: pointer;
 }
 .xt-find-modal-btns button.primary {
-  background: #f59e0b;
-  color: #1a1a2e;
-  border-color: transparent;
+  background: #217346;
+  color: #fff;
+  border-color: #217346;
   font-weight: 600;
 }
 .xt-find-status {
   font-size: 11px;
-  color: #64748b;
+  color: #666;
   margin-top: 8px;
   min-height: 16px;
 }
 
-/* ── Handsontable overrides ──────────────────────────────────── */
-.handsontable .htCore td,
-.handsontable .htCore th {
-  font-size: 12px;
+/* ── Handsontable: Excel-like grid (scoped to workbook host) ─── */
+.excel-grid-host {
+  background: #fff;
+}
+
+.excel-grid-host .handsontable {
+  --ht-font-family: 'Aptos Narrow', Aptos, Calibri, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  --ht-font-size: 11px;
+  --ht-line-height: 14px;
+  --ht-font-weight: 400;
+  --ht-foreground-color: #000000;
+  --ht-background-color: #ffffff;
+  --ht-border-color: #d0d0d0;
+  --ht-cell-vertical-border-color: #d0d0d0;
+  --ht-cell-horizontal-border-color: #d0d0d0;
+  --ht-wrapper-border-color: #c8c8c8;
+  --ht-wrapper-border-width: 1px;
+  --ht-wrapper-border-radius: 0;
+  --ht-cell-vertical-padding: 1px;
+  --ht-cell-horizontal-padding: 4px;
+  --ht-row-cell-even-background-color: #ffffff;
+  --ht-row-cell-odd-background-color: #ffffff;
+  --ht-row-header-even-background-color: #f3f3f3;
+  --ht-row-header-odd-background-color: #f3f3f3;
+  --ht-header-background-color: #f3f3f3;
+  --ht-header-foreground-color: #333333;
+  --ht-header-font-weight: 400;
+  --ht-header-row-background-color: #f3f3f3;
+  --ht-header-row-foreground-color: #333333;
+  --ht-header-active-background-color: #e0e0e0;
+  --ht-header-active-foreground-color: #000000;
+  --ht-header-highlighted-background-color: #e7e7e7;
+  --ht-header-row-highlighted-background-color: #e0e0e0;
+  --ht-accent-color: #217346;
+  --ht-cell-selection-border-color: #217346;
+  --ht-cell-selection-background-color: #217346;
+  --ht-cell-autofill-background-color: #217346;
+  --ht-cell-autofill-border-color: #217346;
+}
+
+.excel-grid-host .handsontable .htCore td,
+.excel-grid-host .handsontable .htCore th {
+  font-size: 11px;
+}
+
+.excel-grid-host .handsontable.ht-wrapper::before {
+  border-color: #c8c8c8;
+  border-radius: 0;
+}
+
+/*
+ * Handsontable copies TD inline background onto the textarea (see textEditor.refreshDimensions).
+ * Dark-filled Excel cells would make the editor pitch-black; Excel-style editing stays light.
+ */
+.excel-grid-host .handsontableInputHolder .handsontableInput,
+.excel-grid-host .handsontableInputHolder textarea.handsontableInput {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  caret-color: #000000 !important;
+  box-shadow: inset 0 0 0 2px #217346 !important;
+}
+
+.excel-grid-host .htSelectEditor select {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  box-shadow: inset 0 0 0 2px #217346 !important;
 }

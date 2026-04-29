@@ -11,6 +11,7 @@ describe('spreadsheet store', () => {
     const store = useSpreadsheetStore()
     expect(store.instance).toBeNull()
     expect(store.workbook).toBeNull()
+    expect(store.workbookRaw).toBeNull()
     expect(store.fileName).toBeNull()
   })
 
@@ -34,7 +35,18 @@ describe('spreadsheet store', () => {
     expect(destroy).toHaveBeenCalledOnce()
     expect(store.instance).toBeNull()
     expect(store.workbook).toBeNull()
+    expect(store.workbookRaw).toBeNull()
     expect(store.fileName).toBeNull()
+  })
+
+  it('loadWorkbook stores optional raw bytes', () => {
+    const store = useSpreadsheetStore()
+    const wb = { SheetNames: ['A'] }
+    const raw = new ArrayBuffer(8)
+    store.loadWorkbook(wb, 'f.xlsx', raw)
+    expect(store.workbook).toBe(wb)
+    expect(store.workbookRaw).toBe(raw)
+    expect(store.fileName).toBe('f.xlsx')
   })
 
   it('clear with no instance does not call destroy', () => {

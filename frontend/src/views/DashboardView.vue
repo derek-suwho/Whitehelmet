@@ -81,7 +81,7 @@ async function handleDownloadFile(file: UserFile) {
     const blob = await resp.blob()
     const arrayBuffer = await blob.arrayBuffer()
     const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array' })
-    spreadsheet.loadWorkbook(wb, file.original_name)
+    spreadsheet.loadWorkbook(wb, file.original_name, arrayBuffer)
     router.push({ name: 'workspace' })
   } catch (err) {
     console.error('[dashboard] open file failed:', err)

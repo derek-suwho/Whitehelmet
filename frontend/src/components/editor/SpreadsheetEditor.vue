@@ -8,9 +8,10 @@ import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useRecordsStore } from '@/stores/records'
 import {
   useSpreadsheetEditor,
-  sheetNames, currentSheetIdx, zoomLevel,
+  sheetNames, sheetTabColors, currentSheetIdx, zoomLevel,
   formulaRef, formulaValue, fmtState, lastTextColor, lastFillColor,
 } from '@/composables/useSpreadsheetEditor'
+import { extractSheetTabColorsFromXlsx, pickContrastText } from '@/utils/sheetTabColors'
 
 const spreadsheet = useSpreadsheetStore()
 const records     = useRecordsStore()
@@ -100,11 +101,50 @@ const saving        = ref(false)
 const saveError     = ref('')
 const zoomPercent   = computed(() => Math.round(zoomLevel.value * 100) + '%')
 
-watch(() => spreadsheet.workbook, async (wb) => {
-  if (!wb) return; await nextTick(); openFile(wb)
+async function hydrateWorkbook(wb: { SheetNames?: string[] }) {
+  const n = wb.SheetNames?.length ?? 0
+  let colors: (string | null)[] = []
+  if (spreadsheet.workbookRaw && n > 0) {
+    try {
+      colors = await extractSheetTabColorsFromXlsx(spreadsheet.workbookRaw)
+    } catch {
+      colors = []
+    }
+  }
+  while (colors.length < n) colors.push(null)
+  sheetTabColors.value = colors.slice(0, n)
+  await nextTick()
+  openFile(wb)
+}
+
+watch(
+  () => spreadsheet.workbook,
+  (wb) => {
+    if (!wb) {
+      sheetTabColors.value = []
+      return
+    }
+    void hydrateWorkbook(wb)
+  },
+)
+onMounted(() => {
+  wireKeyboardShortcuts()
+  if (spreadsheet.workbook) void hydrateWorkbook(spreadsheet.workbook)
 })
-onMounted(() => { wireKeyboardShortcuts(); if (spreadsheet.workbook) openFile(spreadsheet.workbook) })
 onBeforeUnmount(() => cleanupKeyboardShortcuts())
+
+function sheetTabInlineStyle(idx: number): Record<string, string> {
+  const fill = sheetTabColors.value[idx] ?? '#d4d4d4'
+  const active = idx === currentSheetIdx.value
+  return {
+    backgroundColor: fill,
+    color: pickContrastText(fill),
+    borderColor: active ? '#666666' : '#b4b4b4',
+    borderBottomColor: active ? '#ffffff' : '#c0c0c0',
+    fontWeight: active ? '600' : '400',
+    zIndex: active ? '2' : '1',
+  }
+}
 
 function handleDownload() { downloadXlsx(spreadsheet.fileName ?? 'spreadsheet.xlsx') }
 function handleClose()    { showSaveModal.value = false; spreadsheet.clearPendingSave(); closeFile() }
@@ -243,10 +283,16 @@ function onColorBtn(e: MouseEvent, type: 'text' | 'fill') {
 
     <!-- ── SHEET VIEW ── -->
     <template v-if="activeTab === 'sheet'">
-      <div v-if="spreadsheet.fileName" id="spreadsheet-container" class="flex-1 overflow-auto" />
-      <div v-if="sheetNames.length > 1" class="xt-sheet-tabs">
-        <button v-for="(name, idx) in sheetNames" :key="idx" type="button"
-          :class="['xt-sheet-tab', idx === currentSheetIdx && 'active']" @click="switchSheet(idx)">
+      <div v-if="spreadsheet.fileName" id="spreadsheet-container" class="excel-grid-host flex-1 min-h-0 overflow-auto" />
+      <div v-if="spreadsheet.fileName && sheetNames.length > 0" class="xt-sheet-tabs">
+        <button
+          v-for="(name, idx) in sheetNames"
+          :key="idx"
+          type="button"
+          :class="['xt-sheet-tab', idx === currentSheetIdx && 'active']"
+          :style="sheetTabInlineStyle(idx)"
+          @click="switchSheet(idx)"
+        >
           {{ name }}
         </button>
       </div>

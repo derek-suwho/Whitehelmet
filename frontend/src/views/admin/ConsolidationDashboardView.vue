@@ -72,7 +72,7 @@ async function loadPreview(sheetId: string) {
     if (!resp.ok) throw new Error('Failed to load sheet')
     const buffer = await resp.arrayBuffer()
     const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' })
-    spreadsheetStore.loadWorkbook(wb, 'master.xlsx')
+    spreadsheetStore.loadWorkbook(wb, 'master.xlsx', buffer)
   } finally {
     loadingPreview.value = false
   }

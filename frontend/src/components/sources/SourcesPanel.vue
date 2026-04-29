@@ -16,7 +16,7 @@ async function openFile(source: Source) {
   const file = source.file
   const buffer = await file.arrayBuffer()
   const wb = XLSX.read(buffer, { type: 'array', cellFormula: true })
-  spreadsheet.loadWorkbook(wb, file.name)
+  spreadsheet.loadWorkbook(wb, file.name, buffer)
 }
 
 const isDragOver       = ref(false)

@@ -9,6 +9,8 @@ export interface PendingSave {
 export const useSpreadsheetStore = defineStore('spreadsheet', () => {
   const instance = shallowRef<any>(null)
   const workbook = shallowRef<any>(null)
+  /** Original .xlsx bytes (when loaded from file); used for tab colors and similar OOXML metadata. */
+  const workbookRaw = shallowRef<ArrayBuffer | null>(null)
   const fileName = ref<string | null>(null)
   const pendingSave = ref<PendingSave | null>(null)
 
@@ -24,17 +26,19 @@ export const useSpreadsheetStore = defineStore('spreadsheet', () => {
     }
     instance.value = null
     workbook.value = null
+    workbookRaw.value = null
     fileName.value = null
     pendingSave.value = null
   }
 
-  function loadWorkbook(wb: any, name: string) {
+  function loadWorkbook(wb: any, name: string, raw?: ArrayBuffer | null) {
     if (instance.value?.destroy) {
       instance.value.destroy()
     }
     instance.value = null
     fileName.value = name
     workbook.value = wb
+    workbookRaw.value = raw ?? null
   }
 
   function setPendingSave(data: PendingSave) {
@@ -45,5 +49,16 @@ export const useSpreadsheetStore = defineStore('spreadsheet', () => {
     pendingSave.value = null
   }
 
-  return { instance, workbook, fileName, pendingSave, setInstance, clear, loadWorkbook, setPendingSave, clearPendingSave }
+  return {
+    instance,
+    workbook,
+    workbookRaw,
+    fileName,
+    pendingSave,
+    setInstance,
+    clear,
+    loadWorkbook,
+    setPendingSave,
+    clearPendingSave,
+  }
 })

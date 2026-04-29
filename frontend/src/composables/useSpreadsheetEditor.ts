@@ -20,6 +20,8 @@ let _onKeydown: ((e: KeyboardEvent) => void) | null = null
 
 // ── Reactive state (bound in SpreadsheetEditor.vue template) ────
 export const sheetNames = ref<string[]>([])
+/** Per-sheet tab fill from OOXML tabColor (same order as sheetNames); null = default gray. */
+export const sheetTabColors = ref<(string | null)[]>([])
 export const currentSheetIdx = ref(0)
 export const zoomLevel = ref(1.0)
 export const formulaRef = ref('A1')
@@ -106,11 +108,6 @@ Handsontable.renderers.registerRenderer(
       .apply(null as any, [hot, TD, row, col, prop, value, cellProps])
 
     const fmt = _getFmt(_currentSheetIdx, row, col)
-    // Header row defaults
-    if (row === 0) {
-      if (!fmt.bgColor) TD.style.backgroundColor = '#e9f0e9'
-      if (!fmt.bold) TD.style.fontWeight = '600'
-    }
     if (fmt.bold) TD.style.fontWeight = 'bold'
     if (fmt.italic) TD.style.fontStyle = 'italic'
     if (fmt.underline) TD.style.textDecoration = 'underline'
@@ -395,6 +392,7 @@ export function useSpreadsheetEditor() {
     _currentSheetIdx = 0
     _allSheetFormats = []
     sheetNames.value = []
+    sheetTabColors.value = []
     currentSheetIdx.value = 0
     formulaRef.value = 'A1'
     formulaValue.value = ''
