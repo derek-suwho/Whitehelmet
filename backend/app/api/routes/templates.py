@@ -54,6 +54,19 @@ def get_template(template_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Template not found")
     return tmpl
 
+@router.patch("/{template_id}", response_model=TemplateResponse,
+              dependencies=[Depends(verify_csrf)])
+def update_template(template_id: str, body: dict, db: Session = Depends(get_db)):
+    tmpl = db.query(Template).filter(Template.id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+    if "name" in body and body["name"]:
+        tmpl.name = body["name"]
+    if "description" in body:
+        tmpl.description = body["description"]
+    db.commit()
+    db.refresh(tmpl)
+    return tmpl
 
 @router.patch("/{template_id}/status", response_model=TemplateResponse,
               dependencies=[Depends(verify_csrf)])

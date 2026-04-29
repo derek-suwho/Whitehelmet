@@ -10,6 +10,12 @@ export const useChatStore = defineStore('chat', () => {
     messages.value.push({ role, content: text })
   }
 
+  function addMutableMessage(text: string, role: ChatMessage['role']): ChatMessage {
+    const msg: ChatMessage = { role, content: text }
+    messages.value.push(msg)
+    return msg
+  }
+
   async function sendMessage(text: string) {
     const aiMsg: ChatMessage = { role: 'ai', content: '' }
     messages.value.push(aiMsg)
@@ -109,5 +115,5 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming.value = false
   }
 
-  return { messages, isStreaming, addMessage, sendMessage, clear }
+  return { messages, isStreaming, addMessage, addMutableMessage, sendMessage, clear }
 })

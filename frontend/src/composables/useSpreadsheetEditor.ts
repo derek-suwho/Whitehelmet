@@ -108,6 +108,12 @@ Handsontable.renderers.registerRenderer(
       .apply(null as any, [hot, TD, row, col, prop, value, cellProps])
 
     const fmt = _getFmt(_currentSheetIdx, row, col)
+    // Header row defaults
+    if (row === 0) {
+      if (!fmt.bgColor) TD.style.backgroundColor = '#e9f0e9'
+      if (!fmt.bold) TD.style.fontWeight = '600'
+      if (!fmt.color) TD.style.color = '#111827'
+    }
     if (fmt.bold) TD.style.fontWeight = 'bold'
     if (fmt.italic) TD.style.fontStyle = 'italic'
     if (fmt.underline) TD.style.textDecoration = 'underline'
@@ -329,8 +335,9 @@ export function useSpreadsheetEditor() {
       rowHeaders: true,
       colHeaders: true,
       width: '100%',
-      height: '100%',
+      height: container.offsetHeight > 0 ? container.offsetHeight : '100%',
       licenseKey: 'non-commercial-and-evaluation',
+      theme: 'ht-theme-main',
       formulas: { engine: HyperFormula },
       colWidths: _allSheetColWidths[0] ?? 100,
       manualColumnResize: true,

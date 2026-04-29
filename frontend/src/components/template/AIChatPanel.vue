@@ -38,7 +38,11 @@ async function send() {
 }
 
 async function sendTemplateBuilder(prompt: string) {
-  const data = await api.post<{ schema_json: object }>('/api/ai/template-generate', { prompt })
+  const history = messages.value.slice(0, -1).map((m) => ({ role: m.role, content: m.content }))
+  const data = await api.post<{ schema_json?: object; message?: string }>(
+    '/api/ai/template-generate',
+    { prompt, messages: history },
+  )
   if (data?.schema_json) {
     emit('schema-generated', data.schema_json)
     const colCount = (data.schema_json as { columns: unknown[] }).columns?.length ?? 0
@@ -46,6 +50,8 @@ async function sendTemplateBuilder(prompt: string) {
       role: 'assistant',
       content: `Generated a template with ${colCount} column${colCount !== 1 ? 's' : ''}. Review and adjust in the editor.`,
     })
+  } else if (data?.message) {
+    messages.value.push({ role: 'assistant', content: data.message })
   }
 }
 
@@ -101,7 +107,7 @@ async function sendFinetune(prompt: string) {
         v-model="input"
         type="text"
         :placeholder="mode === 'template-builder' ? 'Describe your template...' : 'Describe a change...'"
-        class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="flex-1 rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
         @keydown.enter="send"
       />
       <button

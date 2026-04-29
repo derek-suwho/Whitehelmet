@@ -47,32 +47,12 @@ export interface DetectedFormula {
   expression: string
 }
 
-export type AiOperationType =
-  | 'add_column'
-  | 'remove_column'
-  | 'rename_column'
-  | 'sort'
-  | 'apply_formula'
-  | 'apply_saved_formula'
-  | 'create_formula'
-  | 'filter'
-  | 'show_all_rows'
-  | 'remove_empty_rows'
-  | 'aggregate'
-  | 'find_duplicates'
-  | 'add_row'
-  | 'format_cells'
-  | 'highlight_column'
-  | 'conditional_format'
-  | 'clear_format'
-  | 'export'
-  | 'save_record'
-  | 'show_dashboard'
-
-export interface CommandApiResponse {
-  op: AiOperationType | null
-  params: Record<string, unknown>
-}
+export type AgentEvent =
+  | { type: 'tool_call'; tool: string; params: Record<string, unknown> }
+  | { type: 'tool_result'; tool: string; result: string; error: boolean }
+  | { type: 'message'; content: string }
+  | { type: 'done' }
+  | { type: 'error'; message: string }
 
 export interface ConsolidationPayload {
   files_data: { name: string; headers: string[]; rows: unknown[][] }[]

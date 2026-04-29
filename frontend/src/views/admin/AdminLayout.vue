@@ -20,7 +20,7 @@ async function logout() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-50">
+  <div class="flex min-h-0 bg-gray-50 pt-14" style="height: 100vh">
     <!-- Sidebar -->
     <aside class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-5 py-4 border-b border-gray-200">
@@ -45,7 +45,7 @@ async function logout() {
     </aside>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-y-auto">
+    <main class="flex-1 overflow-hidden flex flex-col">
       <RouterView />
     </main>
   </div>

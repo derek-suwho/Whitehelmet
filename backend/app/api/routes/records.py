@@ -12,7 +12,7 @@ from app.schemas.records import RecordCreate, RecordResponse, RecordList
 router = APIRouter(
     prefix="/api/records",
     tags=["records"],
-    dependencies=[Depends(get_current_user), Depends(verify_csrf)],
+    dependencies=[Depends(get_current_user)],
 )
 
 
@@ -34,7 +34,7 @@ async def list_records(
     )
 
 
-@router.post("", response_model=RecordResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=RecordResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def create_record(
     body: RecordCreate,
     user: User = Depends(get_current_user),
@@ -71,7 +71,7 @@ async def get_record(
     return record
 
 
-@router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{record_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
 async def delete_record(
     record_id: int,
     user: User = Depends(get_current_user),

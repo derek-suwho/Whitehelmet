@@ -37,6 +37,13 @@ export const useTemplatesStore = defineStore('templates', () => {
     return ver
   }
 
+  async function updateTemplate(templateId: string, name: string, description?: string): Promise<Template> {
+    const updated = await api.patch<Template>(`/api/templates/${templateId}`, { name, description })
+    _syncTemplate(updated)
+    currentTemplate.value = updated
+    return updated
+  }
+
   async function publishTemplate(templateId: string) {
     const updated = await api.patch<Template>(`/api/templates/${templateId}/status`, { status: 'active' })
     _syncTemplate(updated)
@@ -63,7 +70,7 @@ export const useTemplatesStore = defineStore('templates', () => {
 
   return {
     templates, currentTemplate, currentVersion, versions, consolidatedSheets,
-    fetchTemplates, fetchTemplate, createTemplate, saveVersion,
+    fetchTemplates, fetchTemplate, createTemplate, updateTemplate, saveVersion,
     publishTemplate, deprecateTemplate, fetchConsolidatedSheets, getDownloadUrl,
   }
 })

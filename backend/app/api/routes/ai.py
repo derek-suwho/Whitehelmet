@@ -14,7 +14,7 @@ from pydantic import BaseModel
 import httpx
 
 from app.core.config import get_settings
-from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, CommandRequest, CommandResponse
+from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -122,47 +122,6 @@ async def consolidate(body: ConsolidateRequest):
     return ConsolidateResponse(**parsed)
 
 
-COMMAND_SYSTEM_PROMPT = """\
-You are a spreadsheet command parser. Given a user message and the current \
-spreadsheet state, return ONLY a JSON object (no markdown, no extra text).
-
-Supported operations (return exactly one):
-{"op":"add_column","name":"<header>","position":<0-based index or null for end>}
-{"op":"remove_column","name":"<header>"}
-{"op":"rename_column","from":"<old>","to":"<new>"}
-{"op":"apply_formula","column":"<header>","formula":"<e.g. =A{row}+B{row}>"}
-{"op":"apply_saved_formula","formula_name":"<name from formula library>","column":"<header>"}
-{"op":"create_formula","nl_request":"<user description of the formula>","column":"<target column or null>"}
-{"op":"sort","column":"<header>","order":"asc|desc"}
-{"op":"filter","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>"}
-{"op":"show_all_rows"}
-{"op":"remove_empty_rows"}
-{"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}
-{"op":"find_duplicates","column":"<header>"}
-{"op":"add_row","count":<number>,"position":<0-based or null for end>}
-{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"color":"#hex","bgColor":"#hex","align":"left|center|right"}}
-{"op":"highlight_column","column":"<header>","bgColor":"#hex"}
-{"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}
-{"op":"clear_format","column":"<header or null>"}
-{"op":"export"}
-{"op":"save_record"}
-{"op":"show_dashboard"}
-{"op":null}
-
-Notes:
-- filter: hide rows where column does NOT match the condition.
-- show_all_rows: triggered by "show all", "clear filter", "unfilter".
-- aggregate: report sum/avg/count/min/max in chat, no grid change.
-- find_duplicates: report duplicate values in chat, no grid change.
-- export: download spreadsheet as xlsx.
-- save_record: save current grid to master records.
-- show_dashboard: navigate to master records dashboard.
-- format_cells: column=null means whole sheet; row=null means all data rows.
-- apply_saved_formula: use when user references a named formula from their library.
-- create_formula: use when user wants to create/generate a new formula via natural language.
-- If NOT a spreadsheet command return {"op":null}.
-"""
-
 FORMULA_SYSTEM_PROMPT = """\
 You are an Excel formula expert. Given a list of column headers and a user request, \
 return ONLY a JSON object with no markdown or extra text.
@@ -176,34 +135,6 @@ Rules:
 - name should be 2-5 words, title case
 - If the request is unclear, make a reasonable best-guess formula
 """
-
-
-@router.post("/command", response_model=CommandResponse)
-async def command(body: CommandRequest):
-    """Parse NL spreadsheet command via OpenRouter."""
-    context_parts = []
-    if body.snapshot:
-        context_parts.append(body.snapshot)
-    else:
-        context_parts.append(f"Column headers: {json.dumps(body.headers)}")
-    context_parts.append(f"User command: {body.message}")
-
-    data = await _openrouter_post({
-        "model": body.model,
-        "max_tokens": 512,
-        "messages": [
-            {"role": "system", "content": COMMAND_SYSTEM_PROMPT},
-            {"role": "user", "content": "\n\n".join(context_parts)},
-        ],
-    })
-    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-    try:
-        parsed = json.loads(content.strip())
-    except json.JSONDecodeError:
-        parsed = {"op": None}
-
-    op = parsed.pop("op", None)
-    return CommandResponse(op=op, params=parsed)
 
 
 @router.post("/parse-template")
@@ -238,24 +169,39 @@ async def parse_template(file: UploadFile = File(...)):
 
 @router.post("/template-generate")
 async def template_generate(body: dict):
-    """Generate a template schema from a natural-language prompt."""
+    """Generate a template schema or answer a conversational question."""
+    messages_history = body.get("messages", [])
     prompt = body.get("prompt", "")
     system = (
-        "You are a KPI template designer. Given a description, return ONLY a JSON object: "
-        '{"schema_json": {"columns": [{"id": "<uuid>", "name": "<col name>", "type": "text|number|date|percentage"}]}} '
-        "No markdown. No extra text."
+        "You are a KPI template designer assistant for WhiteHelmet, a construction KPI reporting platform. "
+        "You help PIF admins design templates that DevCo companies fill out monthly.\n\n"
+        "The template builder UI has:\n"
+        "- Left sidebar: navigation (Templates, Organizations, Users, etc.)\n"
+        "- Center: spreadsheet preview of the template structure (column headers in row 1)\n"
+        "- Right panel: column editor where you define fields; 'Build with AI' opens this chat\n"
+        "- Top bar: Save Draft / Publish buttons; Publish makes the template available to DevCos\n\n"
+        "If the user asks you to CREATE, GENERATE, MAKE, ADD, or UPDATE a template or its columns, "
+        "respond with ONLY this JSON (no markdown, no extra text):\n"
+        '{"schema_json": {"columns": [{"id": "<uuid4>", "name": "<col name>", "type": "text|number|date|percentage", "description": "<optional>"}]}}\n\n'
+        "For ALL other messages (questions, guidance requests, conversation), respond with ONLY:\n"
+        '{"message": "<your helpful answer>"}\n\n'
+        "No markdown. No extra text outside the JSON object."
     )
+    api_messages = [{"role": "system", "content": system}]
+    for m in messages_history:
+        api_messages.append({"role": m["role"], "content": m["content"]})
+    api_messages.append({"role": "user", "content": prompt})
+
     data = await _openrouter_post({
         "model": "anthropic/claude-sonnet-4-5",
         "max_tokens": 1024,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
-        ],
+        "messages": api_messages,
     })
-    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}").strip()
+    if content.startswith("```"):
+        content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
     try:
-        return json.loads(content.strip())
+        return json.loads(content)
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="AI returned invalid JSON")
 
@@ -329,3 +275,250 @@ async def generate_formula(body: FormulaRequest):
         description=parsed.get("description", ""),
         formula_type=parsed.get("formula_type", "calculation"),
     )
+
+
+# ── Agentic spreadsheet editing ───────────────────────────────────────────────
+
+AGENT_TOOLS = [
+    {"type": "function", "function": {
+        "name": "get_spreadsheet_data",
+        "description": "Re-read current spreadsheet state (headers + all data rows). Use after writes to verify results.",
+        "parameters": {"type": "object", "properties": {}, "required": []}
+    }},
+    {"type": "function", "function": {
+        "name": "add_column",
+        "description": "Add a new column. position is 0-based index; null = append at end.",
+        "parameters": {"type": "object", "properties": {
+            "name": {"type": "string"},
+            "position": {"type": ["integer", "null"]}
+        }, "required": ["name"]}
+    }},
+    {"type": "function", "function": {
+        "name": "remove_column",
+        "description": "Remove column by name.",
+        "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
+    }},
+    {"type": "function", "function": {
+        "name": "rename_column",
+        "description": "Rename a column.",
+        "parameters": {"type": "object", "properties": {
+            "old_name": {"type": "string"}, "new_name": {"type": "string"}
+        }, "required": ["old_name", "new_name"]}
+    }},
+    {"type": "function", "function": {
+        "name": "write_column",
+        "description": "Write values to every data row of a column. values list length must match row count.",
+        "parameters": {"type": "object", "properties": {
+            "column_name": {"type": "string"},
+            "values": {"type": "array", "items": {"type": ["string", "number", "null"]}}
+        }, "required": ["column_name", "values"]}
+    }},
+    {"type": "function", "function": {
+        "name": "write_cells",
+        "description": "Write specific cells. row and col are 0-based data indices (excluding header row).",
+        "parameters": {"type": "object", "properties": {
+            "updates": {"type": "array", "items": {"type": "object", "properties": {
+                "row": {"type": "integer"}, "col": {"type": "integer"}, "value": {"type": ["string", "number", "null"]}
+            }, "required": ["row", "col", "value"]}}
+        }, "required": ["updates"]}
+    }},
+    {"type": "function", "function": {
+        "name": "sort",
+        "description": "Sort data rows by a column.",
+        "parameters": {"type": "object", "properties": {
+            "column": {"type": "string"}, "order": {"type": "string", "enum": ["asc", "desc"]}
+        }, "required": ["column", "order"]}
+    }},
+    {"type": "function", "function": {
+        "name": "filter",
+        "description": "Filter rows; hides non-matching rows.",
+        "parameters": {"type": "object", "properties": {
+            "column": {"type": "string"},
+            "operator": {"type": "string", "enum": [">", "<", ">=", "<=", "=", "!=", "contains"]},
+            "value": {"type": "string"}
+        }, "required": ["column", "operator", "value"]}
+    }},
+    {"type": "function", "function": {
+        "name": "show_all_rows",
+        "description": "Clear active filter, show all rows.",
+        "parameters": {"type": "object", "properties": {}, "required": []}
+    }},
+    {"type": "function", "function": {
+        "name": "remove_empty_rows",
+        "description": "Remove all rows where every cell is empty.",
+        "parameters": {"type": "object", "properties": {}, "required": []}
+    }},
+    {"type": "function", "function": {
+        "name": "aggregate",
+        "description": "Compute sum/avg/count/min/max of a column. Returns text result — no grid change.",
+        "parameters": {"type": "object", "properties": {
+            "column": {"type": "string"},
+            "func": {"type": "string", "enum": ["sum", "avg", "count", "min", "max"]}
+        }, "required": ["column", "func"]}
+    }},
+]
+
+
+class SpreadsheetState:
+    def __init__(self, headers: list[str], data: list[list]):
+        self.headers = list(headers)
+        self.data = [list(row) for row in data]
+
+    def col_idx(self, name: str) -> int:
+        lower = name.lower()
+        for i, h in enumerate(self.headers):
+            if h.lower() == lower:
+                return i
+        raise ValueError(f"Column '{name}' not found. Available: {self.headers}")
+
+
+def execute_tool(state: SpreadsheetState, name: str, params: dict) -> str:
+    if name == "get_spreadsheet_data":
+        return f"{len(state.headers)} columns, {len(state.data)} rows. Headers: {state.headers}"
+    elif name == "add_column":
+        pos = params.get("position") if params.get("position") is not None else len(state.headers)
+        state.headers.insert(pos, params["name"])
+        for row in state.data:
+            row.insert(pos, "")
+        return f"Added column '{params['name']}' at position {pos}."
+    elif name == "remove_column":
+        idx = state.col_idx(params["name"])
+        state.headers.pop(idx)
+        for row in state.data:
+            row.pop(idx)
+        return f"Removed column '{params['name']}'."
+    elif name == "rename_column":
+        idx = state.col_idx(params["old_name"])
+        state.headers[idx] = params["new_name"]
+        return f"Renamed '{params['old_name']}' to '{params['new_name']}'."
+    elif name == "write_column":
+        idx = state.col_idx(params["column_name"])
+        for r, v in enumerate(params["values"]):
+            if r < len(state.data):
+                state.data[r][idx] = v
+        return f"Wrote {len(params['values'])} values to '{params['column_name']}'."
+    elif name == "write_cells":
+        for u in params["updates"]:
+            r, c, v = u["row"], u["col"], u["value"]
+            if 0 <= r < len(state.data) and 0 <= c < len(state.headers):
+                state.data[r][c] = v
+        return f"Updated {len(params['updates'])} cell(s)."
+    elif name == "sort":
+        idx = state.col_idx(params["column"])
+        reverse = params["order"] == "desc"
+        def key(row):
+            v = row[idx] if idx < len(row) else ""
+            try:
+                return (0, float(str(v)))
+            except Exception:
+                return (1, str(v).lower())
+        state.data.sort(key=key, reverse=reverse)
+        return f"Sorted by '{params['column']}' {params['order']}."
+    elif name == "filter":
+        return f"Filter spec: '{params['column']}' {params['operator']} {params['value']}."
+    elif name == "show_all_rows":
+        return "Filter cleared."
+    elif name == "remove_empty_rows":
+        before = len(state.data)
+        state.data = [r for r in state.data if any(str(c).strip() for c in r)]
+        return f"Removed {before - len(state.data)} empty row(s)."
+    elif name == "aggregate":
+        idx = state.col_idx(params["column"])
+        vals = []
+        for row in state.data:
+            try:
+                vals.append(float(str(row[idx] if idx < len(row) else "")))
+            except Exception:
+                pass
+        if not vals:
+            return f"No numeric values in '{params['column']}'."
+        func = params["func"]
+        if func == "sum":
+            res = sum(vals)
+        elif func == "avg":
+            res = sum(vals) / len(vals)
+        elif func == "count":
+            return f"Count: {len(vals)}"
+        elif func == "min":
+            res = min(vals)
+        elif func == "max":
+            res = max(vals)
+        else:
+            return f"Unknown func: {func}"
+        return f"{func}('{params['column']}') = {round(res, 4)}"
+    return f"Unknown tool: {name}"
+
+
+AGENT_SYSTEM_PROMPT = """\
+You are an AI spreadsheet assistant with tools to read and modify spreadsheets.
+- Chain multiple tool calls to complete complex tasks in one pass
+- Use get_spreadsheet_data to re-read data after writes when you need to verify or compute from results
+- Use write_column to fill an entire column at once; use write_cells for sparse updates
+- After all tool calls, give a brief summary of what was done
+- Do not exceed 20 tool calls per request
+"""
+
+
+@router.post("/agent")
+async def agent(body: AgentRequest):
+    """Agentic spreadsheet editing via tool-use loop. Streams SSE events."""
+    state = SpreadsheetState(body.headers, body.data)
+
+    async def sse_stream():
+        messages = [{"role": "user", "content": (
+            f"Spreadsheet: {len(state.headers)} columns, {len(state.data)} rows. "
+            f"Headers: {state.headers}\n\nRequest: {body.message}"
+        )}]
+        tool_calls_made = 0
+
+        try:
+            while tool_calls_made < 20:
+                data = await _openrouter_post({
+                    "model": body.model,
+                    "max_tokens": 4096,
+                    "messages": [{"role": "system", "content": AGENT_SYSTEM_PROMPT}] + messages,
+                    "tools": AGENT_TOOLS,
+                })
+                msg = data.get("choices", [{}])[0].get("message", {})
+                content = msg.get("content") or ""
+                tool_calls = msg.get("tool_calls") or []
+                finish_reason = data.get("choices", [{}])[0].get("finish_reason", "stop")
+
+                messages.append({"role": "assistant", "content": content, "tool_calls": tool_calls})
+
+                if not tool_calls or finish_reason == "stop":
+                    yield f"data: {json.dumps({'type': 'message', 'content': content})}\n\n"
+                    break
+
+                tool_results = []
+                for tc in tool_calls:
+                    tool_name = tc.get("function", {}).get("name", "")
+                    try:
+                        params = json.loads(tc.get("function", {}).get("arguments", "{}"))
+                    except json.JSONDecodeError:
+                        params = {}
+                    tc_id = tc.get("id", "")
+
+                    yield f"data: {json.dumps({'type': 'tool_call', 'tool': tool_name, 'params': params})}\n\n"
+
+                    try:
+                        result = execute_tool(state, tool_name, params)
+                        error = False
+                    except Exception as e:
+                        result = str(e)
+                        error = True
+
+                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': result, 'error': error})}\n\n"
+                    tool_results.append({"role": "tool", "tool_call_id": tc_id, "content": result})
+                    tool_calls_made += 1
+
+                messages.extend(tool_results)
+            else:
+                yield f"data: {json.dumps({'type': 'message', 'content': 'Reached 20 tool call limit.'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(sse_stream(), media_type="text/event-stream")
