@@ -30,10 +30,6 @@ async function request<T = unknown>(
     if (auth.csrfToken) headers['X-CSRF-Token'] = auth.csrfToken
   }
 
-  if (MUTATING.has(method) && _csrfToken) {
-    headers['X-CSRF-Token'] = _csrfToken
-  }
-
   const opts: RequestOptions = {
     method,
     headers,

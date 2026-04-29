@@ -50,7 +50,7 @@ async function handleSubmit() {
       <!-- Logo -->
       <div class="mb-8 text-center">
         <h1 class="font-display text-3xl tracking-tight text-brand-400">Whitehelmet</h1>
-        <p class="mt-2 text-sm text-gray-500">Construction data consolidation</p>
+        <p class="mt-2 text-sm text-gray-300">Construction data consolidation</p>
       </div>
 
       <!-- Card -->
@@ -71,7 +71,7 @@ async function handleSubmit() {
         <div class="mb-4">
           <label
             for="login-email"
-            class="mb-1.5 block text-sm font-medium text-gray-400"
+            class="mb-1.5 block text-sm font-medium text-gray-700"
           >
             Email
           </label>
@@ -90,7 +90,7 @@ async function handleSubmit() {
         <div class="mb-6">
           <label
             for="login-password"
-            class="mb-1.5 block text-sm font-medium text-gray-400"
+            class="mb-1.5 block text-sm font-medium text-gray-700"
           >
             Password
           </label>
@@ -132,7 +132,7 @@ async function handleSubmit() {
         </button>
 
         <!-- Signup link -->
-        <p class="mt-4 text-center text-sm text-gray-500">
+        <p class="mt-4 text-center text-sm text-gray-600">
           Don't have an account?
           <router-link
             :to="{ name: 'signup' }"
