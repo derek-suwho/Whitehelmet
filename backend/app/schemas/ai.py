@@ -3,7 +3,7 @@
 from __future__ import annotations
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class ChatRequest(BaseModel):
@@ -15,8 +15,13 @@ class ChatRequest(BaseModel):
 
 class FileSchema(BaseModel):
     name: str
-    headers: list[str]
+    headers: list[str | None]
     sample_rows: list[list]  # first few rows for AI schema detection only
+
+    @field_validator('headers', mode='before')
+    @classmethod
+    def coerce_headers(cls, v: list) -> list:
+        return ['' if h is None else str(h) for h in v]
 
 class ColumnMapping(BaseModel):
     file: str
@@ -31,13 +36,8 @@ class ConsolidateResponse(BaseModel):
     mappings: list[ColumnMapping]
 
 
-class CommandRequest(BaseModel):
+class AgentRequest(BaseModel):
     message: str
     headers: list[str]
-    snapshot: Optional[str] = None
-    model: str = "anthropic/claude-opus-4-5"
-
-
-class CommandResponse(BaseModel):
-    op: Optional[str]
-    params: dict = {}
+    data: list[list] = []
+    model: str = "anthropic/claude-sonnet-4-6"

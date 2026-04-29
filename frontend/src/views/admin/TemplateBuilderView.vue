@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTemplatesStore } from '@/stores/templates'
 import { useAdminStore } from '@/stores/admin'
+import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import ColumnEditor from '@/components/template/ColumnEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 import VersionHistoryTable from '@/components/template/VersionHistoryTable.vue'
 import AssignmentModal from './modals/AssignmentModal.vue'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
+import * as XLSX from 'xlsx'
 import type { SchemaColumn, SchemaJson } from '@/types/database'
 
 const route = useRoute()
 const router = useRouter()
 const templatesStore = useTemplatesStore()
 const adminStore = useAdminStore()
+const spreadsheet = useSpreadsheetStore()
 
 const templateId = computed(() => route.params.id as string | undefined)
 const isNew = computed(() => !templateId.value)
@@ -24,14 +27,35 @@ const showAIPanel = ref(openWithAI.value)
 const showAssignmentModal = ref(false)
 const saving = ref(false)
 const saveError = ref('')
+const saveSuccess = ref('')
 const templateName = ref('')
 const columns = ref<SchemaColumn[]>([])
+
+function flashSuccess(msg: string) {
+  saveSuccess.value = msg
+  saveError.value = ''
+  setTimeout(() => { saveSuccess.value = '' }, 3000)
+}
+
+function loadColumnsIntoSpreadsheet(cols: SchemaColumn[]) {
+  if (cols.length === 0) return
+  const headers = cols.map((c) => c.name || '(unnamed)')
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...Array.from({ length: 20 }, () => new Array(headers.length).fill(''))])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Template')
+  spreadsheet.loadWorkbook(wb, 'template-preview.xlsx')
+}
+
+watch(columns, (cols) => { if (cols.length > 0) loadColumnsIntoSpreadsheet(cols) }, { deep: true })
 
 onMounted(async () => {
   if (templateId.value) {
     await templatesStore.fetchTemplate(templateId.value)
     templateName.value = templatesStore.currentTemplate?.name ?? ''
-    const schema = templatesStore.currentVersion?.schema_json as unknown as SchemaJson | null
+    const raw = templatesStore.currentVersion?.schema_json
+    const schema: SchemaJson | null = raw
+      ? (typeof raw === 'string' ? JSON.parse(raw) : raw as SchemaJson)
+      : null
     columns.value = schema?.columns ?? []
   }
   adminStore.fetchOrganizations()
@@ -40,13 +64,17 @@ onMounted(async () => {
 async function saveDraft() {
   saving.value = true
   saveError.value = ''
+  saveSuccess.value = ''
   try {
     if (isNew.value) {
       const t = await templatesStore.createTemplate(templateName.value || 'Untitled Template', '')
       await templatesStore.saveVersion(t.id, { columns: columns.value })
       router.replace(`/admin/templates/${t.id}/edit`)
+      flashSuccess('Draft saved')
     } else {
+      await templatesStore.updateTemplate(templateId.value!, templateName.value || 'Untitled Template')
       await templatesStore.saveVersion(templateId.value!, { columns: columns.value })
+      flashSuccess('Draft saved')
     }
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : 'Save failed'
@@ -58,15 +86,18 @@ async function saveDraft() {
 async function publish() {
   saving.value = true
   saveError.value = ''
+  saveSuccess.value = ''
   try {
     if (isNew.value) {
       const t = await templatesStore.createTemplate(templateName.value || 'Untitled Template', '')
       await templatesStore.saveVersion(t.id, { columns: columns.value })
       await templatesStore.publishTemplate(t.id)
       router.replace(`/admin/templates/${t.id}/edit`)
+      flashSuccess('Template published')
     } else {
       await templatesStore.saveVersion(templateId.value!, { columns: columns.value })
       await templatesStore.publishTemplate(templateId.value!)
+      flashSuccess('Template published')
     }
   } catch (e) {
     saveError.value = e instanceof Error ? e.message : 'Publish failed'
@@ -75,17 +106,30 @@ async function publish() {
   }
 }
 
+function exportExcel() {
+  const name = (templateName.value || 'template').replace(/[^\w\s-]/g, '').trim()
+  if (spreadsheet.workbook) {
+    XLSX.writeFile(spreadsheet.workbook, `${name}.xlsx`)
+    return
+  }
+  const headers = columns.value.map((c) => c.name || '(unnamed)')
+  if (!headers.length) return
+  const ws = XLSX.utils.aoa_to_sheet([headers])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Template')
+  XLSX.writeFile(wb, `${name}.xlsx`)
+}
+
 function onSchemaGenerated(schema: object) {
   const s = schema as SchemaJson
   if (s.columns) {
     columns.value = s.columns
-    showAIPanel.value = false
   }
 }
 </script>
 
 <template>
-  <div class="flex flex-col h-screen">
+  <div class="flex flex-col flex-1 min-h-0">
     <!-- Header -->
     <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-200 bg-white">
       <RouterLink to="/admin/templates" class="text-gray-400 hover:text-gray-600 text-sm">← Templates</RouterLink>
@@ -93,21 +137,33 @@ function onSchemaGenerated(schema: object) {
         v-model="templateName"
         type="text"
         placeholder="Template name"
-        class="flex-1 text-base font-medium border-0 outline-none focus:ring-0 bg-transparent"
+        class="flex-1 text-base font-medium border-0 outline-none focus:ring-0 bg-transparent text-gray-900"
       />
       <div class="flex items-center gap-2">
-        <span v-if="saveError" class="text-xs text-red-600">{{ saveError }}</span>
+        <span v-if="saveSuccess" class="text-xs text-green-600 font-medium">{{ saveSuccess }}</span>
+        <span v-else-if="saveError" class="text-xs text-red-600 max-w-xs truncate" :title="saveError">{{ saveError }}</span>
+        <button
+          :disabled="!columns.length && !spreadsheet.workbook"
+          class="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="exportExcel"
+        >Export .xlsx</button>
         <button
           :disabled="saving"
           class="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
           @click="saveDraft"
-        >Save Draft</button>
+        >{{ saving ? 'Saving…' : 'Save Draft' }}</button>
         <button
           :disabled="saving"
           class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           @click="publish"
-        >Publish</button>
+        >{{ saving ? 'Publishing…' : 'Publish' }}</button>
       </div>
+    </div>
+
+    <!-- Error banner (full-width, more visible) -->
+    <div v-if="saveError" class="px-5 py-2 bg-red-50 border-b border-red-200 text-sm text-red-700 flex items-center gap-2">
+      <span class="font-medium">Error:</span> {{ saveError }}
+      <button class="ml-auto text-red-400 hover:text-red-600" @click="saveError = ''">✕</button>
     </div>
 
     <!-- Tabs -->
@@ -127,10 +183,10 @@ function onSchemaGenerated(schema: object) {
     <div class="flex-1 overflow-hidden flex">
       <!-- Columns tab -->
       <template v-if="activeTab === 'columns'">
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-hidden flex flex-col">
           <SpreadsheetEditor :model-value="null" />
         </div>
-        <div class="w-80 shrink-0 border-l border-gray-200 flex flex-col overflow-y-auto">
+        <div class="w-80 shrink-0 border-l border-gray-200 flex flex-col min-h-0">
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <span class="text-sm font-medium text-gray-700">Columns</span>
             <button

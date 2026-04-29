@@ -37,7 +37,7 @@ function update(patch: Partial<SchemaColumn>) {
         :value="column.name"
         type="text"
         placeholder="Column name"
-        class="flex-1 rounded border border-gray-300 px-2 py-1 text-sm font-medium"
+        class="flex-1 rounded border border-gray-300 px-2 py-1 text-sm font-medium text-gray-900"
         @input="update({ name: ($event.target as HTMLInputElement).value })"
       />
       <FieldTypeSelect

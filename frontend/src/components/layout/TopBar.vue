@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const auth = useAuthStore()
+const showMenu = ref(false)
 
 async function handleLogout() {
   await auth.logout()
@@ -69,15 +71,33 @@ async function handleLogout() {
       </button>
 
       <!-- Kebab -->
-      <button
-        type="button"
-        class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/8 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        aria-label="More options"
-      >
-        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
-          <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
-        </svg>
-      </button>
+      <div class="relative">
+        <button
+          type="button"
+          class="flex h-8 w-8 items-center justify-center rounded-lg bg-white/8 text-white/60 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
+          aria-label="More options"
+          @click="showMenu = !showMenu"
+        >
+          <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
+            <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
+          </svg>
+        </button>
+        <div
+          v-if="showMenu"
+          class="absolute right-0 mt-1 w-44 rounded-lg border border-white/10 bg-surface shadow-lg py-1 z-50"
+          @click="showMenu = false"
+        >
+          <router-link
+            v-if="auth.user?.role === 'pif_admin'"
+            to="/admin/templates"
+            class="block px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white"
+          >Admin Panel</router-link>
+          <button
+            class="block w-full text-left px-4 py-2 text-sm text-white/70 hover:bg-white/10 hover:text-white"
+            @click="handleLogout"
+          >Sign out</button>
+        </div>
+      </div>
     </div>
 
   </header>

@@ -34,7 +34,7 @@ function update(patch: Partial<ValidationRule>) {
           <input
             type="number"
             :value="modelValue.min"
-            class="block w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            class="block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900"
             @input="update({ min: Number(($event.target as HTMLInputElement).value) || undefined })"
           />
         </div>
@@ -43,7 +43,7 @@ function update(patch: Partial<ValidationRule>) {
           <input
             type="number"
             :value="modelValue.max"
-            class="block w-full rounded border border-gray-300 px-2 py-1 text-sm"
+            class="block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900"
             @input="update({ max: Number(($event.target as HTMLInputElement).value) || undefined })"
           />
         </div>
@@ -57,7 +57,7 @@ function update(patch: Partial<ValidationRule>) {
           type="text"
           :value="modelValue.options?.join(', ')"
           placeholder="e.g. Yes, No, N/A"
-          class="block w-full rounded border border-gray-300 px-2 py-1 text-sm"
+          class="block w-full rounded border border-gray-300 px-2 py-1 text-sm text-gray-900"
           @input="update({ options: ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean) })"
         />
       </div>

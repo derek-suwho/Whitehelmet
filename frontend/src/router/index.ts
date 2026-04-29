@@ -73,6 +73,16 @@ const router = createRouter({
           name: 'admin-users',
           component: () => import('@/views/admin/UserManagementView.vue'),
         },
+        {
+          path: 'formulas',
+          name: 'admin-formulas',
+          component: () => import('@/views/admin/FormulaLibraryView.vue'),
+        },
+        {
+          path: 'freeform-uploads',
+          name: 'admin-freeform-uploads',
+          component: () => import('@/views/admin/FreeformUploadsView.vue'),
+        },
       ],
     },
     // ===== END GROUP 2 ROUTES =====
