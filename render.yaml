@@ -1,0 +1,44 @@
+services:
+  - type: web
+    name: whitehelmet-backend
+    runtime: docker
+    dockerfilePath: ./deploy/docker/backend.Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: whitehelmet-db
+          property: connectionString
+      - key: AUTH_MODE
+        value: local
+      - key: DEBUG
+        value: "false"
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: CSRF_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: '["https://whitehelmet-frontend.onrender.com"]'
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+  - type: web
+    name: whitehelmet-frontend
+    runtime: docker
+    dockerfilePath: ./deploy/docker/frontend.Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: BACKEND_URL
+        value: https://whitehelmet-backend.onrender.com
+
+databases:
+  - name: whitehelmet-db
+    plan: free
+    databaseName: whitehelmet
+    user: whitehelmet
