@@ -194,14 +194,15 @@ function onSchemaGenerated(schema: object) {
               @click="showAIPanel = !showAIPanel"
             >{{ showAIPanel ? 'Hide AI' : 'Build with AI' }}</button>
           </div>
-          <div v-if="showAIPanel" class="flex-1">
+          <div v-show="showAIPanel" class="flex-1 min-h-0">
             <AIChatPanel
               mode="template-builder"
               :template-id="templateId"
+              :current-columns="columns"
               @schema-generated="onSchemaGenerated"
             />
           </div>
-          <div v-else class="flex-1 p-3 overflow-y-auto">
+          <div v-show="!showAIPanel" class="flex-1 p-3 overflow-y-auto">
             <ColumnEditor v-model="columns" />
           </div>
         </div>

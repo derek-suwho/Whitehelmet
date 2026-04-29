@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, onMounted, nextTick } from 'vue'
 import { api } from '@/composables/useApi'
 
 const props = defineProps<{
   mode: 'template-builder' | 'consolidation-finetune'
   templateId?: string
   consolidatedSheetId?: string
+  currentColumns?: { id: string; name: string; type: string }[]
 }>()
 
 const emit = defineEmits<{
@@ -15,10 +16,39 @@ const emit = defineEmits<{
 
 interface Message { role: 'user' | 'assistant'; content: string }
 
-const messages = ref<Message[]>([])
+const MAX_MESSAGES = 100
+
+function storageKey() {
+  return `wh_chat_${props.templateId ?? 'new'}`
+}
+
+function loadMessages(): Message[] {
+  try {
+    const raw = localStorage.getItem(storageKey())
+    if (raw) return JSON.parse(raw) as Message[]
+  } catch {}
+  return []
+}
+
+function saveMessages(msgs: Message[]) {
+  const trimmed = msgs.slice(-MAX_MESSAGES)
+  try { localStorage.setItem(storageKey(), JSON.stringify(trimmed)) } catch {}
+}
+
+const messages = ref<Message[]>(loadMessages())
 const input = ref('')
 const loading = ref(false)
 const error = ref('')
+const scrollEl = ref<HTMLElement | null>(null)
+
+watch(messages, (msgs) => {
+  saveMessages(msgs)
+  nextTick(() => { if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight })
+}, { deep: true })
+
+onMounted(() => {
+  nextTick(() => { if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight })
+})
 
 async function send() {
   const text = input.value.trim()
@@ -41,7 +71,7 @@ async function sendTemplateBuilder(prompt: string) {
   const history = messages.value.slice(0, -1).map((m) => ({ role: m.role, content: m.content }))
   const data = await api.post<{ schema_json?: object; message?: string }>(
     '/api/ai/template-generate',
-    { prompt, messages: history },
+    { prompt, messages: history, existing_columns: props.currentColumns ?? [] },
   )
   if (data?.schema_json) {
     emit('schema-generated', data.schema_json)
@@ -68,11 +98,16 @@ async function sendFinetune(prompt: string) {
 
 <template>
   <div class="flex flex-col h-full bg-white border-l border-gray-200">
-    <div class="px-4 py-3 border-b border-gray-200 font-medium text-sm text-gray-700">
-      {{ mode === 'template-builder' ? 'Build with AI' : 'AI Fine-Tuning' }}
+    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+      <span class="font-medium text-sm text-gray-700">{{ mode === 'template-builder' ? 'Build with AI' : 'AI Fine-Tuning' }}</span>
+      <button
+        v-if="messages.length"
+        class="text-xs text-gray-400 hover:text-red-500 transition-colors"
+        @click="messages = []; saveMessages([])"
+      >Clear</button>
     </div>
 
-    <div class="flex-1 overflow-y-auto p-4 space-y-3">
+    <div ref="scrollEl" class="flex-1 overflow-y-auto p-4 space-y-3">
       <div
         v-for="(msg, i) in messages"
         :key="i"

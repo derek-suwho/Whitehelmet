@@ -36,7 +36,7 @@ function onImportCreated(templateId: string) {
 </script>
 
 <template>
-  <div class="p-6">
+  <div class="p-6 overflow-y-auto flex-1 min-h-0">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-semibold text-gray-800">Templates</h1>
       <div class="relative">

@@ -7,14 +7,21 @@ Depends(verify_csrf)]` on the router once login is implemented.
 
 import io
 import json
+import uuid
 import openpyxl
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import httpx
 
 from app.core.config import get_settings
+from app.core.dependencies import get_current_user
+from app.db.session import get_db
+from app.models.template import Template
+from app.models.template_version import TemplateVersion
+from app.models.user import User
 from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -263,11 +270,110 @@ async def parse_template(file: UploadFile = File(...)):
     return {"columns": columns, "sheet": best["sheet"]}
 
 
+@router.post("/import-template")
+async def import_template(
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Parse an xlsx upload, create a Template + TemplateVersion in one shot,
+    and return the new template_id so the frontend can redirect to the builder.
+    """
+    content = await file.read()
+    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+
+    candidates = []
+    for sheet_name in wb.sheetnames:
+        if any(kw in sheet_name.lower() for kw in _SKIP_SHEET_KEYWORDS):
+            continue
+        ws = wb[sheet_name]
+        if ws.max_row is None or ws.max_row < 2:
+            continue
+        rows = _expand_merged(ws)
+        header_idx, header_row = _find_header_row(rows)
+        useful = [v for v in header_row if v is not None and str(v).strip()]
+        if len(useful) < 2:
+            continue
+        data_rows = rows[header_idx + 1: header_idx + 6]
+        candidates.append({
+            "sheet": sheet_name,
+            "header_row": header_row,
+            "data_rows": data_rows,
+            "useful_count": len(useful),
+        })
+
+    if not candidates:
+        raise HTTPException(status_code=422, detail="No usable data table found in this file.")
+
+    best = max(candidates, key=lambda c: c["useful_count"])
+
+    schema_columns = []
+    for col_i, name in enumerate(best["header_row"]):
+        name_str = str(name).strip() if name is not None else ""
+        if not name_str:
+            continue
+        samples = [
+            str(row[col_i]) for row in best["data_rows"]
+            if col_i < len(row) and row[col_i] is not None
+        ]
+        schema_columns.append({
+            "id": str(uuid.uuid4()),
+            "name": name_str,
+            "type": _infer_type(samples),
+        })
+
+    template_name = (file.filename or "Imported Template").replace(".xlsx", "").replace(".xls", "")
+
+    tmpl = Template(
+        id=str(uuid.uuid4()),
+        name=template_name,
+        description=f"Imported from {file.filename}",
+        created_by=str(user.id),
+        status="draft",
+    )
+    db.add(tmpl)
+    db.flush()
+
+    ver = TemplateVersion(
+        id=str(uuid.uuid4()),
+        template_id=tmpl.id,
+        version_number=1,
+        schema_json=json.dumps({"columns": schema_columns}),
+        created_by=str(user.id),
+    )
+    db.add(ver)
+    db.commit()
+
+    return {
+        "template_id": tmpl.id,
+        "template_name": tmpl.name,
+        "columns_count": len(schema_columns),
+        "sheet": best["sheet"],
+    }
+
+
 @router.post("/template-generate")
 async def template_generate(body: dict):
     """Generate a template schema or answer a conversational question."""
     messages_history = body.get("messages", [])
     prompt = body.get("prompt", "")
+    existing_columns = body.get("existing_columns", [])
+
+    existing_context = ""
+    if existing_columns:
+        col_list = ", ".join(
+            f'"{c.get("name", "")}" ({c.get("type", "text")})'
+            for c in existing_columns
+        )
+        existing_context = (
+            f"\n\nThe template currently has {len(existing_columns)} column(s): {col_list}. "
+            "When the user asks to ADD or INSERT a column, return ALL existing columns PLUS the new one(s). "
+            "When the user asks to REMOVE or RENAME a column, return the full updated list. "
+            "When the user asks to CREATE or GENERATE a new template from scratch, return only the new columns. "
+            "Always return the complete final column list — never a partial list."
+        )
+
     system = (
         "You are a KPI template designer assistant for WhiteHelmet, a construction KPI reporting platform. "
         "You help PIF admins design templates that DevCo companies fill out monthly.\n\n"
@@ -276,12 +382,13 @@ async def template_generate(body: dict):
         "- Center: spreadsheet preview of the template structure (column headers in row 1)\n"
         "- Right panel: column editor where you define fields; 'Build with AI' opens this chat\n"
         "- Top bar: Save Draft / Publish buttons; Publish makes the template available to DevCos\n\n"
-        "If the user asks you to CREATE, GENERATE, MAKE, ADD, or UPDATE a template or its columns, "
+        "If the user asks you to CREATE, GENERATE, MAKE, ADD, REMOVE, RENAME, or UPDATE a template or its columns, "
         "respond with ONLY this JSON (no markdown, no extra text):\n"
         '{"schema_json": {"columns": [{"id": "<uuid4>", "name": "<col name>", "type": "text|number|date|percentage", "description": "<optional>"}]}}\n\n'
         "For ALL other messages (questions, guidance requests, conversation), respond with ONLY:\n"
         '{"message": "<your helpful answer>"}\n\n'
         "No markdown. No extra text outside the JSON object."
+        + existing_context
     )
     api_messages = [{"role": "system", "content": system}]
     for m in messages_history:

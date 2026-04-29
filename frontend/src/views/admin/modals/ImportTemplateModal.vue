@@ -1,166 +1,96 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { api } from '@/composables/useApi'
-import { useTemplatesStore } from '@/stores/templates'
-import type { SchemaColumn } from '@/types/database'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; created: [templateId: string] }>()
 
-const templatesStore = useTemplatesStore()
-
-const step = ref<1 | 2>(1)
-const uploading = ref(false)
+const importing = ref(false)
 const error = ref('')
-const templateName = ref('')
-const parsedColumns = ref<Array<{
-  name: string
-  inferred_type: 'text' | 'number' | 'date' | 'percentage'
-  sample_values: string[]
-}>>([])
+const fileInput = ref<HTMLInputElement | null>(null)
 
 async function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
-  if (!file.name.endsWith('.xlsx')) { error.value = 'Only .xlsx files are supported.'; return }
-  error.value = ''
-  uploading.value = true
-  templateName.value = file.name.replace('.xlsx', '')
-  try {
-    const formData = new FormData()
-    formData.append('file', file)
-    const data = await api.postForm<{ columns: typeof parsedColumns.value }>('/api/ai/parse-template', formData)
-    parsedColumns.value = data.columns ?? []
-    step.value = 2
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Upload failed'
-  } finally {
-    uploading.value = false
+  if (!file.name.match(/\.xlsx?$/i)) {
+    error.value = 'Only .xlsx / .xls files are supported.'
+    return
   }
-}
-
-async function confirm() {
-  if (!templateName.value.trim()) { error.value = 'Template name is required.'; return }
-  uploading.value = true
   error.value = ''
+  importing.value = true
   try {
-    const template = await templatesStore.createTemplate(templateName.value, '')
-    const schemaJson = {
-      columns: parsedColumns.value.map((c) => ({
-        id: crypto.randomUUID(),
-        name: c.name,
-        type: c.inferred_type,
-      } satisfies SchemaColumn)),
-    }
-    await templatesStore.saveVersion(template.id, schemaJson)
-    emit('created', template.id)
+    const result = await api.upload<{ template_id: string }>('/api/ai/import-template', file)
+    emit('created', result.template_id)
     emit('close')
-    reset()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Failed to create template'
+    error.value = e instanceof Error ? e.message : 'Import failed'
   } finally {
-    uploading.value = false
+    importing.value = false
+    if (fileInput.value) fileInput.value.value = ''
   }
 }
 
-function reset() {
-  step.value = 1; parsedColumns.value = []; templateName.value = ''; error.value = ''
+function onDrop(e: DragEvent) {
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  const dt = new DataTransfer()
+  dt.items.add(file)
+  if (fileInput.value) {
+    fileInput.value.files = dt.files
+    fileInput.value.dispatchEvent(new Event('change'))
+  }
 }
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
-          <h2 class="font-semibold text-gray-800">
-            {{ step === 1 ? 'Upload Template' : 'Preview Columns' }}
-          </h2>
+          <h2 class="font-semibold text-gray-800">Import Template</h2>
           <button class="text-gray-400 hover:text-gray-600 text-lg" @click="$emit('close')">✕</button>
         </div>
 
         <div class="p-5">
-          <!-- Step 1: Upload -->
-          <template v-if="step === 1">
-            <label
-              class="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-10 cursor-pointer hover:border-blue-400 transition-colors"
-            >
-              <svg class="w-10 h-10 mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              <span class="text-sm text-gray-600">Click to upload or drag & drop</span>
-              <span class="text-xs text-gray-400 mt-1">.xlsx files only</span>
-              <input type="file" accept=".xlsx" class="hidden" @change="onFileChange" />
-            </label>
-            <div v-if="uploading" class="mt-3 text-sm text-blue-600 text-center animate-pulse">
-              Uploading and parsing…
-            </div>
-          </template>
-
-          <!-- Step 2: Preview -->
-          <template v-else>
-            <div class="mb-3">
-              <label class="block text-xs text-gray-500 mb-1">Template name</label>
-              <input
-                v-model="templateName"
-                type="text"
-                class="block w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-800 bg-white"
-              />
-            </div>
-            <div class="overflow-y-auto max-h-60 border rounded-lg">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th class="px-3 py-2 text-left font-medium text-gray-500">Column</th>
-                    <th class="px-3 py-2 text-left font-medium text-gray-500">Type</th>
-                    <th class="px-3 py-2 text-left font-medium text-gray-500">Sample</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                  <tr v-for="(col, i) in parsedColumns" :key="i">
-                    <td class="px-3 py-2">
-                      <input
-                        v-model="parsedColumns[i].name"
-                        type="text"
-                        class="w-full rounded border border-gray-200 px-1 py-0.5 text-xs text-gray-800 bg-white"
-                      />
-                    </td>
-                    <td class="px-3 py-2">
-                      <select
-                        v-model="parsedColumns[i].inferred_type"
-                        class="rounded border border-gray-200 px-1 py-0.5 text-xs text-gray-800 bg-white"
-                      >
-                        <option value="text">Text</option>
-                        <option value="number">Number</option>
-                        <option value="date">Date</option>
-                        <option value="percentage">Percentage</option>
-                      </select>
-                    </td>
-                    <td class="px-3 py-2 text-gray-400 text-xs truncate max-w-[120px]">
-                      {{ col.sample_values.slice(0, 2).join(', ') }}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </template>
+          <label
+            class="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-10 transition-colors"
+            :class="importing
+              ? 'border-blue-300 bg-blue-50 cursor-wait'
+              : 'border-gray-300 hover:border-blue-400 cursor-pointer'"
+            @dragover.prevent
+            @drop.prevent="onDrop"
+          >
+            <template v-if="importing">
+              <div class="w-8 h-8 mb-3 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+              <span class="text-sm text-blue-600 font-medium">Importing…</span>
+              <span class="text-xs text-gray-400 mt-1">Detecting columns and creating template</span>
+            </template>
+            <template v-else>
+              <svg class="w-10 h-10 mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+              </svg>
+              <span class="text-sm text-gray-600 font-medium">Click to upload or drag & drop</span>
+              <span class="text-xs text-gray-400 mt-1">.xlsx and .xls files — all sheets supported</span>
+            </template>
+            <input
+              ref="fileInput"
+              type="file"
+              accept=".xlsx,.xls"
+              class="hidden"
+              :disabled="importing"
+              @change="onFileChange"
+            />
+          </label>
 
           <div v-if="error" class="mt-3 text-sm text-red-600">{{ error }}</div>
         </div>
 
-        <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">
+        <div class="flex justify-end px-5 py-4 border-t border-gray-200">
           <button
-            class="px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100"
-            @click="step === 1 ? $emit('close') : (step = 1)"
-          >
-            {{ step === 1 ? 'Cancel' : 'Back' }}
-          </button>
-          <button
-            v-if="step === 2"
-            :disabled="uploading"
-            class="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
-            @click="confirm"
-          >
-            {{ uploading ? 'Creating…' : 'Create Template' }}
-          </button>
+            :disabled="importing"
+            class="px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+            @click="$emit('close')"
+          >Cancel</button>
         </div>
       </div>
     </div>
