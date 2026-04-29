@@ -51,13 +51,13 @@ function onImportCreated(templateId: string) {
           class="absolute right-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-44 z-10"
         >
           <button
-            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
             @click="showImportModal = true; showNewMenu = false"
-          >📂 Upload Excel</button>
+          >Import Template</button>
           <button
-            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 text-gray-700"
             @click="router.push('/admin/templates/new?ai=true'); showNewMenu = false"
-          >✨ Build with AI</button>
+          >Create Custom Template</button>
         </div>
       </div>
     </div>

@@ -102,7 +102,7 @@ function reset() {
               <input
                 v-model="templateName"
                 type="text"
-                class="block w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                class="block w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-800 bg-white"
               />
             </div>
             <div class="overflow-y-auto max-h-60 border rounded-lg">
@@ -120,13 +120,13 @@ function reset() {
                       <input
                         v-model="parsedColumns[i].name"
                         type="text"
-                        class="w-full rounded border border-gray-200 px-1 py-0.5 text-xs"
+                        class="w-full rounded border border-gray-200 px-1 py-0.5 text-xs text-gray-800 bg-white"
                       />
                     </td>
                     <td class="px-3 py-2">
                       <select
                         v-model="parsedColumns[i].inferred_type"
-                        class="rounded border border-gray-200 px-1 py-0.5 text-xs"
+                        class="rounded border border-gray-200 px-1 py-0.5 text-xs text-gray-800 bg-white"
                       >
                         <option value="text">Text</option>
                         <option value="number">Number</option>
