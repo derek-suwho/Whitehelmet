@@ -30,6 +30,12 @@ const router = createRouter({
     },
 
     // ===== GROUP 1 ROUTES — do not edit outside this block =====
+    {
+      path: '/submissions',
+      name: 'submissions',
+      component: () => import('@/views/SubcontractorView.vue'),
+      meta: { requiresAuth: true },
+    },
     // ===== END GROUP 1 ROUTES =====
 
     // ===== GROUP 2 ROUTES — do not edit outside this block =====
@@ -64,14 +70,24 @@ const router = createRouter({
           component: () => import('@/views/admin/ConsolidationDashboardView.vue'),
         },
         {
-          path: 'organizations',
-          name: 'admin-organizations',
-          component: () => import('@/views/admin/OrganizationListView.vue'),
+          path: 'projects',
+          name: 'admin-projects',
+          component: () => import('@/views/admin/ProjectListView.vue'),
+        },
+        {
+          path: 'projects/:projectId',
+          name: 'admin-project-detail',
+          component: () => import('@/views/admin/ProjectDetailView.vue'),
         },
         {
           path: 'users',
           name: 'admin-users',
           component: () => import('@/views/admin/UserManagementView.vue'),
+        },
+        {
+          path: 'freeform-uploads',
+          name: 'admin-freeform-uploads',
+          component: () => import('@/views/admin/FreeformUploadsView.vue'),
         },
       ],
     },

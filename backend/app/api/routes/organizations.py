@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, verify_csrf
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.models.user import User
 from app.schemas.organizations import OrganizationCreate, OrganizationResponse
 
 router = APIRouter(

@@ -6,14 +6,13 @@ const adminStore = useAdminStore()
 const showInviteModal = ref(false)
 const email = ref('')
 const displayName = ref('')
-const orgId = ref('')
 const role = ref<'pif_admin' | 'devco_admin' | 'devco_user'>('devco_user')
 const saving = ref(false)
 const error = ref('')
 
 onMounted(() => {
   adminStore.fetchUsers()
-  adminStore.fetchOrganizations()
+  adminStore.fetchProjects()
 })
 
 function roleBadge(r: string) {
@@ -23,18 +22,17 @@ function roleBadge(r: string) {
 }
 
 async function invite() {
-  if (!email.value || !displayName.value || !orgId.value) {
+  if (!email.value || !displayName.value) {
     error.value = 'All fields are required.'
     return
   }
   saving.value = true
   error.value = ''
   try {
-    await adminStore.createUser(email.value, displayName.value, orgId.value, role.value)
+    await adminStore.createUser(email.value, displayName.value, role.value)
     showInviteModal.value = false
     email.value = ''
     displayName.value = ''
-    orgId.value = ''
     role.value = 'devco_user'
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
@@ -64,7 +62,7 @@ async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' |
         <thead class="bg-gray-50">
           <tr>
             <th class="px-5 py-3 text-left font-medium text-gray-500">Name</th>
-            <th class="px-5 py-3 text-left font-medium text-gray-500">Organization</th>
+            <th class="px-5 py-3 text-left font-medium text-gray-500">Project</th>
             <th class="px-5 py-3 text-left font-medium text-gray-500">Role</th>
             <th class="px-5 py-3 text-left font-medium text-gray-500">Actions</th>
           </tr>
@@ -73,7 +71,7 @@ async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' |
           <tr v-for="user in adminStore.users" :key="user.id" class="hover:bg-gray-50">
             <td class="px-5 py-3 font-medium text-gray-800">{{ user.display_name }}</td>
             <td class="px-5 py-3 text-gray-500">
-              {{ (user as any).organization?.name ?? '—' }}
+              {{ adminStore.projects.find(p => p.id === user.org_id)?.name ?? '—' }}
             </td>
             <td class="px-5 py-3">
               <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" :class="roleBadge(user.role ?? '')">
@@ -116,15 +114,6 @@ async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' |
           <div>
             <label class="block text-xs text-gray-500 mb-1">Display name *</label>
             <input v-model="displayName" type="text" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1">Organization *</label>
-            <select v-model="orgId" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
-              <option value="">Select…</option>
-              <option v-for="org in adminStore.organizations" :key="org.id" :value="org.id">
-                {{ org.name }}
-              </option>
-            </select>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1">Role *</label>

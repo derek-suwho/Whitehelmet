@@ -8,13 +8,34 @@ import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 import ConsolidationStatusModal from './modals/ConsolidationStatusModal.vue'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
+import SubmissionTracker from '@/components/admin/SubmissionTracker.vue'
 
 const route = useRoute()
 const templatesStore = useTemplatesStore()
 const spreadsheetStore = useSpreadsheetStore()
 
+interface OrgStatus {
+  org_id: string
+  org_name: string
+  assignment_id: string
+  assignment_status: string
+  submission_id: string | null
+  submitted_at: string | null
+  file_name: string | null
+}
+
+interface ProgressData {
+  template_id: string
+  template_version_id: string | null
+  total_orgs: number
+  submitted_count: number
+  all_submitted: boolean
+  orgs: OrgStatus[]
+}
+
 const templateId = route.params.templateId as string
 const allSubmitted = ref(false)
+const progressData = ref<ProgressData | null>(null)
 const consolidating = ref(false)
 const consolidationResult = ref<{
   consolidated_sheet_id: string
@@ -27,7 +48,19 @@ const showStatusModal = ref(false)
 const consolidatedSheetId = ref('')
 const loadingPreview = ref(false)
 
-onMounted(() => templatesStore.fetchTemplate(templateId))
+onMounted(() => {
+  templatesStore.fetchTemplate(templateId)
+  fetchProgress()
+})
+
+async function fetchProgress() {
+  try {
+    progressData.value = await api.get<ProgressData>(
+      `/api/admin/templates/${templateId}/consolidation-progress`,
+    )
+    if (progressData.value?.all_submitted) allSubmitted.value = true
+  } catch { /* non-fatal — PM can still consolidate manually */ }
+}
 
 function onAllSubmitted() { allSubmitted.value = true }
 
@@ -107,14 +140,13 @@ async function onFinetuneApplied() {
       </button>
     </div>
 
-    <!-- Submission tracking (Group 1 component will go here) -->
-    <div class="bg-white border border-gray-200 rounded-xl p-4 text-sm text-gray-500">
-      SubmissionTrackingView (Group 1) will be embedded here — listening for @all-submitted event.
-      <br />
-      <button class="mt-2 text-xs text-blue-600 hover:underline" @click="onAllSubmitted">
-        [Dev: simulate all-submitted]
-      </button>
-    </div>
+    <!-- Submission tracking -->
+    <SubmissionTracker
+      v-if="progressData"
+      :progress="progressData"
+      @all-submitted="onAllSubmitted"
+    />
+    <div v-else class="h-20 animate-pulse rounded-xl border border-gray-200 bg-white" />
 
     <!-- Post-consolidation: preview + AI fine-tune -->
     <div v-if="consolidationResult" class="flex gap-4 h-[500px]">

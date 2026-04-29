@@ -17,8 +17,8 @@ const loading = ref(false)
 const error = ref('')
 const successUrl = ref('')
 
-onMounted(() => adminStore.fetchOrganizations())
-const devcoOrgs = () => adminStore.organizations.filter((o) => o.type === 'devco')
+onMounted(() => adminStore.fetchProjects())
+const devcoOrgs = () => adminStore.projects
 
 async function assign() {
   error.value = ''
@@ -84,7 +84,7 @@ function copyUrl() { navigator.clipboard.writeText(successUrl.value) }
           <!-- Template mode -->
           <template v-if="mode === 'template'">
             <div>
-              <label class="block text-xs text-gray-500 mb-1">DevCo organizations</label>
+              <label class="block text-xs text-gray-500 mb-1">Projects</label>
               <div class="border rounded-lg divide-y max-h-44 overflow-y-auto">
                 <label
                   v-for="org in devcoOrgs()"
@@ -94,7 +94,7 @@ function copyUrl() { navigator.clipboard.writeText(successUrl.value) }
                   <input v-model="selectedOrgIds" type="checkbox" :value="org.id" class="rounded" />
                   {{ org.name }}
                 </label>
-                <div v-if="!devcoOrgs().length" class="px-3 py-3 text-xs text-gray-400">No DevCo orgs found</div>
+                <div v-if="!devcoOrgs().length" class="px-3 py-3 text-xs text-gray-400">No projects found</div>
               </div>
             </div>
             <div>
@@ -114,7 +114,7 @@ function copyUrl() { navigator.clipboard.writeText(successUrl.value) }
             </div>
             <template v-else>
               <div>
-                <label class="block text-xs text-gray-500 mb-1">DevCo organization</label>
+                <label class="block text-xs text-gray-500 mb-1">Project</label>
                 <select v-model="selectedOrgId" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
                   <option value="">Select…</option>
                   <option v-for="org in devcoOrgs()" :key="org.id" :value="org.id">{{ org.name }}</option>

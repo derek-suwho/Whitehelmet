@@ -12,6 +12,6 @@ class TemplateVersion(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     template_id = Column(String(36), nullable=False, index=True)
     version_number = Column(Integer, nullable=False)
-    schema_json = Column(Text, nullable=False)   # JSON string of SchemaJson
+    schema_json = Column(Text, nullable=False)
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

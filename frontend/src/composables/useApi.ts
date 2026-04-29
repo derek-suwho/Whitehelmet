@@ -1,3 +1,5 @@
+import { useAuthStore } from '@/stores/auth'
+
 const BASE_URL = '' // same-origin; Vite proxy handles /api → backend
 
 interface RequestOptions {
@@ -14,6 +16,11 @@ async function request<T = unknown>(
   isUpload = false,
 ): Promise<T> {
   const headers: Record<string, string> = {}
+
+  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    const auth = useAuthStore()
+    if (auth.csrfToken) headers['X-CSRF-Token'] = auth.csrfToken
+  }
 
   const opts: RequestOptions = {
     method,

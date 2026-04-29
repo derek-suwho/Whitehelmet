@@ -1,6 +1,6 @@
 """Uploaded file metadata — tracks xlsx uploads with integrity checksums."""
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, BigInteger, func
+from sqlalchemy import Column, Integer, String, DateTime, BigInteger, ForeignKey, func
 
 from app.db.session import Base
 
@@ -10,7 +10,7 @@ class UploadedFile(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    org_id = Column(Integer, ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True, index=True)
+    org_id = Column(String(36), nullable=True, index=True)
     original_name = Column(String(500), nullable=False)
     stored_path = Column(String(1000), nullable=False)
     mime_type = Column(String(100), nullable=False)

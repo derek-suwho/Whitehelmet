@@ -1,5 +1,6 @@
 """Template routes — CRUD, versioning, status management."""
-import uuid, json
+import uuid
+import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse as FastAPIFileResponse
@@ -23,9 +24,11 @@ router = APIRouter(
     dependencies=[Depends(get_current_user)],
 )
 
+
 @router.get("", response_model=list[TemplateResponse])
 def list_templates(db: Session = Depends(get_db)):
     return db.query(Template).order_by(Template.updated_at.desc()).all()
+
 
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(verify_csrf)])
@@ -43,12 +46,14 @@ def create_template(body: TemplateCreate, user: User = Depends(get_current_user)
     db.refresh(tmpl)
     return tmpl
 
+
 @router.get("/{template_id}", response_model=TemplateResponse)
 def get_template(template_id: str, db: Session = Depends(get_db)):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
     if not tmpl:
         raise HTTPException(status_code=404, detail="Template not found")
     return tmpl
+
 
 @router.patch("/{template_id}/status", response_model=TemplateResponse,
               dependencies=[Depends(verify_csrf)])
@@ -64,6 +69,7 @@ def update_status(template_id: str, body: dict, db: Session = Depends(get_db)):
     db.refresh(tmpl)
     return tmpl
 
+
 @router.get("/{template_id}/versions", response_model=list[TemplateVersionResponse])
 def list_versions(template_id: str, db: Session = Depends(get_db)):
     return (
@@ -72,6 +78,7 @@ def list_versions(template_id: str, db: Session = Depends(get_db)):
         .order_by(TemplateVersion.version_number.desc())
         .all()
     )
+
 
 @router.post("/{template_id}/versions", response_model=TemplateVersionResponse,
              status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
@@ -100,9 +107,9 @@ def save_version(template_id: str, body: TemplateVersionCreate,
     db.commit()
     db.refresh(ver)
 
-    # Return schema_json as parsed object
     ver.schema_json = body.schema_json
     return ver
+
 
 @router.get("/consolidations/{sheet_id}/download")
 def download_consolidated(sheet_id: str, db: Session = Depends(get_db)):
@@ -117,6 +124,7 @@ def download_consolidated(sheet_id: str, db: Session = Depends(get_db)):
         filename=f"consolidated_{sheet_id}.xlsx",
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
 
 @router.get("/{template_id}/consolidations", response_model=list[ConsolidatedSheetResponse])
 def list_consolidations(template_id: str, db: Session = Depends(get_db)):
