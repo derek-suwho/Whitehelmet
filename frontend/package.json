@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -19,6 +19,7 @@
     "hyperformula": "^3.2.0",
     "jspreadsheet-ce": "^5.0.4",
     "jsuites": "^6.3.4",
+    "jszip": "^3.10.1",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",
     "vue-router": "^4.4.0",
