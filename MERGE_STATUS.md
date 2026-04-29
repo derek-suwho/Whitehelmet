@@ -26,7 +26,14 @@
 
 ### Phase 1 — Merge group2-master
 - [x] Conflict scan complete
-- [x] **No merge needed** — `group2-master` is a direct ancestor of `artem` (44 commits behind). All group2-master features (AI schema mapping, smart pivot, consolidation engine) are already present in `artem`.
+- [x] Merged `de9aff8` ("fully finished group2 stuff") — 4 conflicts resolved
+- [x] Bug fixes applied post-merge:
+  - Modal inputs white-on-white text fixed
+  - Emojis replaced with SVG icons site-wide
+  - Smart Excel parser (header detection, merged cells, multi-sheet)
+  - Import template: single-step upload → redirect to builder
+  - AI chat: persistent history (localStorage, 100 msg cap), column context fix
+  - Template list scrollable
 - [x] Committed and pushed to origin/artem
 
 ### Phase 2 — Merge ethan (start when instructed)
