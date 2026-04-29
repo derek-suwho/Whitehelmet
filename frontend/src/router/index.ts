@@ -114,9 +114,9 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
 
-  // Redirect authenticated users away from login/signup to dashboard
+  // Redirect authenticated users away from login/signup
   if ((to.name === 'login' || to.name === 'signup') && auth.user) {
-    return { name: 'dashboard' }
+    return auth.user.role === 'pif_admin' ? { name: 'admin-templates' } : { name: 'workspace' }
   }
 
   if (to.meta.role === 'pif_admin' && auth.user?.role !== 'pif_admin') {

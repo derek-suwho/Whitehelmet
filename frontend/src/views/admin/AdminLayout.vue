@@ -11,6 +11,7 @@ const navLinks = [
   { label: 'Users', to: '/admin/users' },
   { label: 'Formula Library', to: '/admin/formulas' },
   { label: 'Freeform Uploads', to: '/admin/freeform-uploads' },
+  { label: 'Consolidate Files', to: '/' },
 ]
 
 async function logout() {
@@ -20,7 +21,7 @@ async function logout() {
 </script>
 
 <template>
-  <div class="flex min-h-0 bg-gray-50 pt-14" style="height: 100vh">
+  <div class="flex h-screen bg-gray-50 pt-14">
     <!-- Sidebar -->
     <aside class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-5 py-4 border-b border-gray-200">

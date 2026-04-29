@@ -4,8 +4,10 @@
 //  2. DataMap composable / inline map state
 // Everything else is identical — do not remove existing imports/logic.
 import { ref, watch, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useRecordsStore } from '@/stores/records'
+import { useTemplatesStore } from '@/stores/templates'
 import {
   useSpreadsheetEditor,
   sheetNames, sheetTabColors, currentSheetIdx, zoomLevel,
@@ -13,8 +15,10 @@ import {
 } from '@/composables/useSpreadsheetEditor'
 import { extractSheetTabColorsFromXlsx, pickContrastText } from '@/utils/sheetTabColors'
 
-const spreadsheet = useSpreadsheetStore()
-const records     = useRecordsStore()
+const spreadsheet     = useSpreadsheetStore()
+const records         = useRecordsStore()
+const templatesStore  = useTemplatesStore()
+const router          = useRouter()
 
 const {
   openFile, closeFile, switchSheet, stepZoom, toolbarAction,
@@ -99,6 +103,41 @@ const showSaveModal = ref(false)
 const saveName      = ref('')
 const saving        = ref(false)
 const saveError     = ref('')
+
+// ── Create Template from sheet ───────────────────────────────
+const showTemplateModal  = ref(false)
+const templateName       = ref('')
+const creatingTemplate   = ref(false)
+const templateError      = ref('')
+
+function openTemplateModal() {
+  templateName.value = spreadsheet.fileName?.replace(/\.xlsx$/i, '') ?? ''
+  templateError.value = ''
+  showTemplateModal.value = true
+}
+
+async function createTemplateFromSheet() {
+  if (!templateName.value.trim()) { templateError.value = 'Name is required.'; return }
+  const headers = spreadsheet.pendingSave?.headers ?? []
+  if (!headers.length) { templateError.value = 'No column headers detected.'; return }
+  creatingTemplate.value = true
+  templateError.value = ''
+  try {
+    const t = await templatesStore.createTemplate(templateName.value.trim(), '')
+    const columns = headers.map(h => ({
+      id: crypto.randomUUID(),
+      name: h,
+      type: 'text' as const,
+    }))
+    await templatesStore.saveVersion(t.id, { columns })
+    showTemplateModal.value = false
+    router.push(`/admin/templates/${t.id}/edit`)
+  } catch (e) {
+    templateError.value = e instanceof Error ? e.message : 'Failed to create template'
+  } finally {
+    creatingTemplate.value = false
+  }
+}
 const zoomPercent   = computed(() => Math.round(zoomLevel.value * 100) + '%')
 
 async function hydrateWorkbook(wb: { SheetNames?: string[] }) {
@@ -276,8 +315,10 @@ function onColorBtn(e: MouseEvent, type: 'text' | 'fill') {
     <!-- ── Save banner ── -->
     <div v-if="spreadsheet.pendingSave" class="flex items-center gap-3 border-b border-brand-500/20 bg-brand-50 px-4 py-2">
       <svg class="h-4 w-4 shrink-0 text-brand-600" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
-      <span class="flex-1 text-xs text-gray-600">Save this consolidation to master records?</span>
-      <button type="button" class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700 transition-colors" @click="openSaveModal">Save</button>
+      <span class="flex-1 text-xs text-gray-600">Consolidation ready — download, save to records, or create a reusable template.</span>
+      <button type="button" class="rounded border border-green-300 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 transition-colors" @click="handleDownload">⬇ Download</button>
+      <button type="button" class="rounded border border-purple-300 bg-purple-50 px-3 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-100 transition-colors" @click="openTemplateModal">✨ Create Template</button>
+      <button type="button" class="rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white hover:bg-brand-700 transition-colors" @click="openSaveModal">Save to Records</button>
       <button type="button" class="rounded px-2 py-1 text-xs text-gray-400 hover:text-gray-600 transition-colors" @click="spreadsheet.clearPendingSave()">Dismiss</button>
     </div>
 
@@ -372,6 +413,39 @@ function onColorBtn(e: MouseEvent, type: 'text' | 'fill') {
           <div class="flex gap-2">
             <button type="button" :disabled="saving" class="flex-1 rounded-full bg-brand-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-brand-700 disabled:opacity-50" @click="handleSave">{{ saving ? 'Saving…' : 'Save' }}</button>
             <button type="button" class="flex-1 rounded-full border border-border py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50" @click="showSaveModal=false">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Create Template from sheet modal -->
+    <Teleport to="body">
+      <div v-if="showTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showTemplateModal=false">
+        <div class="w-96 rounded-xl border border-border bg-white p-6 shadow-2xl">
+          <h3 class="mb-1 text-base font-semibold text-gray-800">Create Template from Sheet</h3>
+          <p class="mb-4 text-xs text-gray-400">The column headers from the consolidated sheet will become the template fields subcontractors fill in.</p>
+          <label class="mb-1.5 block text-xs text-gray-500">Template name *</label>
+          <input
+            v-model="templateName"
+            type="text"
+            class="mb-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+            placeholder="e.g. Monthly QHSE KPIs"
+            @keydown.enter="createTemplateFromSheet"
+          />
+          <p v-if="templateError" class="mb-3 text-xs text-red-500">{{ templateError }}</p>
+          <div class="mb-4 mt-3 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2 max-h-32 overflow-y-auto">
+            <p class="text-xs font-medium text-gray-500 mb-1">Columns ({{ spreadsheet.pendingSave?.headers?.length ?? 0 }})</p>
+            <div class="flex flex-wrap gap-1">
+              <span
+                v-for="h in spreadsheet.pendingSave?.headers ?? []"
+                :key="h"
+                class="inline-flex px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs"
+              >{{ h }}</span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" :disabled="creatingTemplate" class="flex-1 rounded-lg bg-purple-600 py-2 text-sm font-semibold text-white transition-colors hover:bg-purple-700 disabled:opacity-50" @click="createTemplateFromSheet">{{ creatingTemplate ? 'Creating…' : 'Create Template' }}</button>
+            <button type="button" class="flex-1 rounded-lg border border-gray-200 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50" @click="showTemplateModal=false">Cancel</button>
           </div>
         </div>
       </div>
