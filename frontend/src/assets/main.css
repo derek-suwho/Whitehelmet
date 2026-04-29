@@ -2,6 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  input[type="number"],
+  input[type="search"],
+  textarea,
+  select {
+    color: #1f2937;
+  }
+}
+
 /* ── Spreadsheet toolbar ─────────────────────────────────────── */
 .xt-btn {
   @apply flex items-center justify-center rounded px-1.5 py-1 text-xs text-gray-300 transition-colors duration-100;

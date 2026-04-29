@@ -10,7 +10,8 @@ const navLinks = [
   { label: 'Projects', to: '/admin/projects', icon: '📁' },
   { label: 'Users', to: '/admin/users', icon: '👥' },
   { label: 'Formula Library', to: '/admin/formulas', icon: '∑' },
-  { label: 'Freeform Uploads', to: '/admin/freeform-uploads', icon: '📁' },
+  { label: 'Freeform Uploads', to: '/admin/freeform-uploads', icon: '📂' },
+  { label: 'Consolidate Files', to: '/', icon: '🔀' },
 ]
 
 async function logout() {
@@ -20,7 +21,7 @@ async function logout() {
 </script>
 
 <template>
-  <div class="flex h-screen bg-gray-50">
+  <div class="flex h-screen bg-gray-50 pt-14">
     <!-- Sidebar -->
     <aside class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-5 py-4 border-b border-gray-200">

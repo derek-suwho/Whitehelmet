@@ -3,7 +3,8 @@ import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
-import type { ProjectDetail, ProjectMember } from '@/stores/admin'
+import type { ProjectDetail } from '@/stores/admin'
+import type { ProjectMember } from '@/types/database'
 
 const route = useRoute()
 const adminStore = useAdminStore()

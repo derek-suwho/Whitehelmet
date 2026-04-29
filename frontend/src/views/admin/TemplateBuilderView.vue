@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import * as XLSX from 'xlsx'
 import { useTemplatesStore } from '@/stores/templates'
 import { useAdminStore } from '@/stores/admin'
 import ColumnEditor from '@/components/template/ColumnEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 import VersionHistoryTable from '@/components/template/VersionHistoryTable.vue'
+import TemplateSheetPreview from '@/components/template/TemplateSheetPreview.vue'
 import AssignmentModal from './modals/AssignmentModal.vue'
-import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import type { SchemaColumn, SchemaJson } from '@/types/database'
 
 const route = useRoute()
@@ -34,7 +35,7 @@ onMounted(async () => {
     const schema = templatesStore.currentVersion?.schema_json as unknown as SchemaJson | null
     columns.value = schema?.columns ?? []
   }
-  adminStore.fetchOrganizations()
+  adminStore.fetchProjects()
 })
 
 async function saveDraft() {
@@ -82,21 +83,51 @@ function onSchemaGenerated(schema: object) {
     showAIPanel.value = false
   }
 }
+
+function downloadTemplateXlsx() {
+  if (!columns.value.length) return
+  const headers = columns.value.map(c => c.name || '(unnamed)')
+  const ws = XLSX.utils.aoa_to_sheet([headers])
+  // Freeze the header row
+  ws['!freeze'] = { xSplit: 0, ySplit: 1 }
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, 'Template')
+  XLSX.writeFile(wb, `${templateName.value || 'template'}.xlsx`)
+}
+
+const linkCopied = ref(false)
+async function copySubmissionLink() {
+  const url = `${window.location.origin}/submissions`
+  await navigator.clipboard.writeText(url)
+  linkCopied.value = true
+  setTimeout(() => { linkCopied.value = false }, 2000)
+}
 </script>
 
 <template>
-  <div class="flex flex-col h-screen">
+  <div class="flex flex-col" style="height: calc(100vh - 56px)">
     <!-- Header -->
     <div class="flex items-center gap-3 px-5 py-3 border-b border-gray-200 bg-white">
-      <RouterLink to="/admin/templates" class="text-gray-400 hover:text-gray-600 text-sm">← Templates</RouterLink>
+      <RouterLink to="/admin/templates" class="text-gray-400 hover:text-gray-600 text-sm shrink-0">← Templates</RouterLink>
       <input
         v-model="templateName"
         type="text"
-        placeholder="Template name"
-        class="flex-1 text-base font-medium border-0 outline-none focus:ring-0 bg-transparent"
+        placeholder="Template name…"
+        class="flex-1 min-w-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-800 placeholder-gray-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
       />
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <span v-if="saveError" class="text-xs text-red-600">{{ saveError }}</span>
+        <button
+          v-if="columns.length > 0"
+          class="px-3 py-1.5 rounded border border-green-300 bg-green-50 text-sm text-green-700 hover:bg-green-100 transition-colors"
+          @click="downloadTemplateXlsx"
+        >⬇ Download</button>
+        <button
+          v-if="!isNew"
+          class="px-3 py-1.5 rounded border border-gray-200 text-sm transition-colors"
+          :class="linkCopied ? 'border-green-300 bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'"
+          @click="copySubmissionLink"
+        >{{ linkCopied ? '✓ Link copied!' : '🔗 Copy DevCo Link' }}</button>
         <button
           :disabled="saving"
           class="px-3 py-1.5 rounded border border-gray-300 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
@@ -127,18 +158,22 @@ function onSchemaGenerated(schema: object) {
     <div class="flex-1 overflow-hidden flex">
       <!-- Columns tab -->
       <template v-if="activeTab === 'columns'">
-        <div class="flex-1 overflow-hidden">
-          <SpreadsheetEditor :model-value="null" />
+        <!-- Left: live spreadsheet preview -->
+        <div class="flex-1 overflow-hidden bg-white relative">
+          <div class="absolute top-2 right-3 z-10 px-2 py-0.5 rounded bg-gray-100 text-xs text-gray-400 pointer-events-none">Preview</div>
+          <TemplateSheetPreview :columns="columns" class="w-full h-full" />
         </div>
-        <div class="w-80 shrink-0 border-l border-gray-200 flex flex-col overflow-y-auto">
+
+        <!-- Right: column editor + AI -->
+        <div class="w-80 shrink-0 border-l border-gray-200 flex flex-col bg-white">
           <div class="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <span class="text-sm font-medium text-gray-700">Columns</span>
             <button
               class="text-xs text-blue-600 hover:underline"
               @click="showAIPanel = !showAIPanel"
-            >{{ showAIPanel ? 'Hide AI' : 'Build with AI' }}</button>
+            >{{ showAIPanel ? 'Hide AI' : '✨ Build with AI' }}</button>
           </div>
-          <div v-if="showAIPanel" class="flex-1">
+          <div v-if="showAIPanel" class="flex-1 overflow-hidden">
             <AIChatPanel
               mode="template-builder"
               :template-id="templateId"
