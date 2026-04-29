@@ -1,5 +1,11 @@
 const BASE_URL = '' // same-origin; Vite proxy handles /api → backend
 
+// CSRF token set by auth store after login/session-check
+let _csrfToken = ''
+export function setCsrfToken(token: string) { _csrfToken = token }
+
+const MUTATING = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
 interface RequestOptions {
   method: string
   headers: HeadersInit
@@ -14,6 +20,10 @@ async function request<T = unknown>(
   isUpload = false,
 ): Promise<T> {
   const headers: Record<string, string> = {}
+
+  if (MUTATING.has(method) && _csrfToken) {
+    headers['X-CSRF-Token'] = _csrfToken
+  }
 
   const opts: RequestOptions = {
     method,

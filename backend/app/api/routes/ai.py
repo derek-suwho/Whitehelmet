@@ -1,8 +1,7 @@
-"""AI proxy routes — all traffic via OpenRouter.
+"""AI proxy routes — supports both Anthropic direct API and OpenRouter.
 
-Auth is intentionally stripped while Whitehelmet's external auth service is
-pending integration (see auth.py). Re-add `dependencies=[Depends(get_current_user),
-Depends(verify_csrf)]` on the router once login is implemented.
+Uses ANTHROPIC_API_KEY for direct Anthropic calls when set; falls back to
+OPENROUTER_API_KEY + OpenRouter otherwise. Set either key in .env.
 """
 
 import io
@@ -19,6 +18,66 @@ from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse,
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_VERSION = "2023-06-01"
+
+# OpenRouter model → Anthropic model ID mapping
+_OR_TO_ANTHROPIC = {
+    "anthropic/claude-opus-4-5": "claude-opus-4-5",
+    "anthropic/claude-sonnet-4-5": "claude-sonnet-4-5-20251001",
+    "anthropic/claude-haiku-4-5": "claude-haiku-4-5-20251001",
+}
+
+
+def _openrouter_to_anthropic_model(model: str) -> str:
+    return _OR_TO_ANTHROPIC.get(model, "claude-sonnet-4-5-20251001")
+
+
+def _messages_to_anthropic(messages: list[dict]) -> tuple:
+    """Split messages list into system prompt + user/assistant turns."""
+    system = None
+    turns = []
+    for m in messages:
+        if m["role"] == "system":
+            system = m["content"]
+        else:
+            turns.append({"role": m["role"], "content": m["content"]})
+    return system, turns
+
+
+async def _anthropic_post(payload: dict) -> dict:
+    """Call Anthropic API directly, returning OpenRouter-compatible response shape."""
+    settings = get_settings()
+    model = _openrouter_to_anthropic_model(payload.get("model", ""))
+    system, turns = _messages_to_anthropic(payload.get("messages", []))
+
+    body: dict = {
+        "model": model,
+        "max_tokens": payload.get("max_tokens", 1024),
+        "messages": turns,
+    }
+    if system:
+        body["system"] = system
+
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        resp = await client.post(
+            ANTHROPIC_URL,
+            headers={
+                "x-api-key": settings.anthropic_api_key,
+                "anthropic-version": ANTHROPIC_VERSION,
+                "Content-Type": "application/json",
+            },
+            json=body,
+        )
+        if not resp.is_success:
+            raise HTTPException(status_code=resp.status_code, detail=f"Anthropic error: {resp.text}")
+        data = resp.json()
+
+    # Normalise to OpenRouter/OpenAI response shape so callers don't care which backend was used
+    content = data.get("content", [{}])[0].get("text", "")
+    return {
+        "choices": [{"message": {"role": "assistant", "content": content}}]
+    }
 
 
 async def _openrouter_post(payload: dict) -> dict:
@@ -43,12 +102,25 @@ async def _openrouter_post(payload: dict) -> dict:
         return resp.json()
 
 
+async def _ai_post(payload: dict) -> dict:
+    """Route to Anthropic direct API or OpenRouter based on available keys."""
+    settings = get_settings()
+    if settings.anthropic_api_key:
+        return await _anthropic_post(payload)
+    if settings.openrouter_api_key:
+        return await _openrouter_post(payload)
+    raise HTTPException(
+        status_code=503,
+        detail="No AI API key configured. Set ANTHROPIC_API_KEY or OPENROUTER_API_KEY in backend/.env",
+    )
+
+
 @router.post("/chat")
 async def chat(body: ChatRequest):
-    """Proxy chat to OpenRouter. SSE stream when body.stream=True, else JSON."""
+    """Proxy chat to Anthropic or OpenRouter. SSE stream when body.stream=True."""
     settings = get_settings()
-    if not settings.openrouter_api_key:
-        raise HTTPException(status_code=503, detail="OpenRouter API key not configured")
+    if not settings.anthropic_api_key and not settings.openrouter_api_key:
+        raise HTTPException(status_code=503, detail="No AI API key configured")
 
     payload = {
         "model": body.model,
@@ -58,9 +130,54 @@ async def chat(body: ChatRequest):
     }
 
     if not body.stream:
-        return await _openrouter_post(payload)
+        return await _ai_post(payload)
 
-    async def sse():
+    # Streaming: prefer Anthropic SSE, fall back to OpenRouter SSE
+    if settings.anthropic_api_key:
+        model = _openrouter_to_anthropic_model(body.model)
+        system, turns = _messages_to_anthropic(body.messages)
+        anthropic_body: dict = {
+            "model": model,
+            "max_tokens": body.max_tokens,
+            "messages": turns,
+            "stream": True,
+        }
+        if system:
+            anthropic_body["system"] = system
+
+        async def anthropic_sse():
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                async with client.stream(
+                    "POST",
+                    ANTHROPIC_URL,
+                    headers={
+                        "x-api-key": settings.anthropic_api_key,
+                        "anthropic-version": ANTHROPIC_VERSION,
+                        "Content-Type": "application/json",
+                    },
+                    json=anthropic_body,
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line.startswith("data: "):
+                            raw = line[6:]
+                            try:
+                                evt = json.loads(raw)
+                            except Exception:
+                                continue
+                            # Translate Anthropic delta events → OpenAI SSE format
+                            if evt.get("type") == "content_block_delta":
+                                delta_text = evt.get("delta", {}).get("text", "")
+                                chunk = json.dumps({
+                                    "choices": [{"delta": {"content": delta_text}}]
+                                })
+                                yield f"data: {chunk}\n\n"
+                            elif evt.get("type") == "message_stop":
+                                yield "data: [DONE]\n\n"
+
+        return StreamingResponse(anthropic_sse(), media_type="text/event-stream")
+
+    # OpenRouter streaming fallback
+    async def openrouter_sse():
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
@@ -75,7 +192,7 @@ async def chat(body: ChatRequest):
                     if line.startswith("data: "):
                         yield f"{line}\n\n"
 
-    return StreamingResponse(sse(), media_type="text/event-stream")
+    return StreamingResponse(openrouter_sse(), media_type="text/event-stream")
 
 
 @router.post("/consolidate", response_model=ConsolidateResponse)
@@ -105,7 +222,7 @@ async def consolidate(body: ConsolidateRequest):
             for f in body.files_schema
         ])},
     ]
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": body.model,
         "max_tokens": 2048,
         "messages": messages,
@@ -193,7 +310,7 @@ async def command(body: CommandRequest):
         context_parts.append(f"Column headers: {json.dumps(body.headers)}")
     context_parts.append(f"User command: {body.message}")
 
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": body.model,
         "max_tokens": 512,
         "messages": [
@@ -250,7 +367,7 @@ async def template_generate(body: dict):
         '{"schema_json": {"columns": [{"id": "<uuid>", "name": "<col name>", "type": "text|number|date|percentage"}]}} '
         "No markdown. No extra text."
     )
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
         "max_tokens": 1024,
         "messages": [
@@ -278,7 +395,7 @@ async def finetune_consolidated(body: dict):
         "Acknowledge the change and describe what you would do. "
         "Return JSON: {\"message\": \"<description of change applied>\"}"
     )
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
         "max_tokens": 256,
         "messages": [
@@ -315,7 +432,7 @@ async def generate_formula(body: FormulaRequest):
         if body.column_headers
         else "No headers provided."
     )
-    data = await _openrouter_post({
+    data = await _ai_post({
         "model": body.model,
         "max_tokens": 256,
         "messages": [

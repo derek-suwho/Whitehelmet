@@ -378,7 +378,7 @@ export function useSpreadsheetEditor() {
       width: '100%',
       height: '100%',
       licenseKey: 'non-commercial-and-evaluation',
-      formulas: { engine: HyperFormula, licenseKey: 'non-commercial-and-evaluation' },
+      formulas: { engine: HyperFormula, licenseKey: 'non-commercial-and-evaluation' } as any,
       colWidths: _allSheetColWidths[0] ?? 100,
       manualColumnResize: true,
       manualRowResize: true,
