@@ -19,5 +19,7 @@ class UserResponse(BaseModel):
     external_id: str
     email: str
     display_name: str
+    role: str | None = None
+    org_id: str | None = None
 
     model_config = {"from_attributes": True}

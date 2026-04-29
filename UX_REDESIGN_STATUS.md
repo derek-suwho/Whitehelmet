@@ -13,28 +13,28 @@ Individual feature pages are already built — this is a navigation/landing-page
 | `subcontractor` | `/submissions` |
 
 ## Phase 1 — Router & Guards (`frontend/src/router/index.ts`)
-- [ ] Add `/admin/dashboard` child route
-- [ ] Add empty-path `/admin` → `admin-dashboard` redirect
-- [ ] Fix `beforeEach`: pif_admin → `admin-dashboard`, devco/* → `submissions`
-- [ ] Add `dashboard` to interception list (LoginView pushes to `dashboard` post-login)
-- [ ] Fix unauthorized guard: `workspace` → `submissions`
+- [x] Add `/admin/dashboard` child route
+- [x] Add empty-path `/admin` → `admin-dashboard` redirect
+- [x] Fix `beforeEach`: pif_admin → `admin-dashboard`, devco/* → `submissions`
+- [x] Add `dashboard` to interception list (LoginView pushes to `dashboard` post-login)
+- [x] Fix unauthorized guard: `workspace` → `submissions`
 
 ## Phase 2 — AdminLayout (`frontend/src/views/admin/AdminLayout.vue`)
-- [ ] Rename "Salama Admin" → "Whitehelmet" (line 28)
-- [ ] Add "Overview" as first nav link → `/admin/dashboard`
-- [ ] Rename "Freeform Uploads" → "File Uploads"
-- [ ] Fix Consolidate Files always-active RouterLink bug (`exact-active-class`)
+- [x] Rename "Salama Admin" → "Whitehelmet" (line 28)
+- [x] Add "Overview" as first nav link → `/admin/dashboard`
+- [x] Rename "Freeform Uploads" → "File Uploads"
+- [x] Fix Consolidate Files always-active RouterLink bug (`exact-active-class`)
 
 ## Phase 3 — Admin Overview Dashboard (new file)
-- [ ] Create `frontend/src/views/admin/AdminOverviewDashboardView.vue`
-- [ ] Stat cards: Active Templates, Draft Templates, Projects, Users
-- [ ] Quick action cards: Create Template, Track Submissions, Upload Files, Formula Library
-- [ ] Recent Templates table (last 6, click → edit)
-- [ ] Loading skeleton state
+- [x] Create `frontend/src/views/admin/AdminOverviewDashboardView.vue`
+- [x] Stat cards: Active Templates, Draft Templates, Projects, Users
+- [x] Quick action cards: Create Template, Track Submissions, Upload Files, Formula Library
+- [x] Recent Templates table (last 6, click → edit)
+- [x] Loading skeleton state
 
 ## Phase 4 — SubcontractorView TopBar (`frontend/src/views/SubcontractorView.vue`)
-- [ ] Import `TopBar` from `@/components/layout/TopBar.vue`
-- [ ] Prepend `<TopBar />` to template (page already has `pt-14` for the offset)
+- [x] Import `TopBar` from `@/components/layout/TopBar.vue`
+- [x] Prepend `<TopBar />` to template (page already has `pt-14` for the offset)
 
 ## Verification
 - [ ] pif_admin login → lands on `/admin/dashboard`

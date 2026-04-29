@@ -6,12 +6,13 @@ const auth = useAuthStore()
 const router = useRouter()
 
 const navLinks = [
+  { label: 'Overview', to: '/admin/dashboard' },
   { label: 'Templates', to: '/admin/templates' },
   { label: 'Projects', to: '/admin/projects' },
   { label: 'Users', to: '/admin/users' },
   { label: 'Formula Library', to: '/admin/formulas' },
-  { label: 'Freeform Uploads', to: '/admin/freeform-uploads' },
-  { label: 'Consolidate Files', to: '/' },
+  { label: 'File Uploads', to: '/admin/freeform-uploads' },
+  { label: 'Consolidate Files', to: '/', exact: true },
 ]
 
 async function logout() {
@@ -25,7 +26,7 @@ async function logout() {
     <!-- Sidebar -->
     <aside class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-5 py-4 border-b border-gray-200">
-        <span class="text-sm font-semibold text-gray-800">Salama Admin</span>
+        <span class="text-sm font-semibold text-gray-800">Whitehelmet</span>
       </div>
       <nav class="flex-1 px-3 py-4 space-y-1">
         <RouterLink
@@ -33,7 +34,8 @@ async function logout() {
           :key="link.to"
           :to="link.to"
           class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-          active-class="bg-blue-50 text-blue-700 font-medium"
+          :active-class="link.exact ? '' : 'bg-blue-50 text-blue-700 font-medium'"
+          :exact-active-class="link.exact ? 'bg-blue-50 text-blue-700 font-medium' : ''"
         >
           {{ link.label }}
         </RouterLink>

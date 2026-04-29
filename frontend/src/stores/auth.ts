@@ -37,6 +37,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = resp.user
     csrfToken.value = resp.csrf_token
     setCsrfToken(resp.csrf_token)
+    checked.value = true
   }
 
   async function register(email: string, password: string, displayName: string) {

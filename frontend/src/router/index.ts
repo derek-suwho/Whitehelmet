@@ -45,6 +45,15 @@ const router = createRouter({
       meta: { requiresAuth: true, role: 'pif_admin' },
       children: [
         {
+          path: '',
+          redirect: { name: 'admin-dashboard' },
+        },
+        {
+          path: 'dashboard',
+          name: 'admin-dashboard',
+          component: () => import('@/views/admin/AdminOverviewDashboardView.vue'),
+        },
+        {
           path: 'templates',
           name: 'admin-templates',
           component: () => import('@/views/admin/TemplateListView.vue'),
@@ -116,11 +125,16 @@ router.beforeEach(async (to) => {
 
   // Redirect authenticated users away from login/signup
   if ((to.name === 'login' || to.name === 'signup') && auth.user) {
-    return auth.user.role === 'pif_admin' ? { name: 'admin-templates' } : { name: 'workspace' }
+    return auth.user.role === 'pif_admin' ? { name: 'admin-dashboard' } : { name: 'submissions' }
+  }
+
+  // Intercept post-login 'dashboard' push (LoginView calls router.push({ name: 'dashboard' }))
+  if (to.name === 'dashboard' && auth.user) {
+    return auth.user.role === 'pif_admin' ? { name: 'admin-dashboard' } : { name: 'submissions' }
   }
 
   if (to.meta.role === 'pif_admin' && auth.user?.role !== 'pif_admin') {
-    return { name: 'workspace' }
+    return { name: 'submissions' }
   }
 })
 

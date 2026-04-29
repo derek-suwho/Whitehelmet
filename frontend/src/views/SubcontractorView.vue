@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
+import TopBar from '@/components/layout/TopBar.vue'
 
 interface Assignment {
   id: string
@@ -87,6 +88,7 @@ onMounted(fetchData)
 
 <template>
   <div class="min-h-screen bg-surface-light pt-14">
+    <TopBar />
     <div class="mx-auto max-w-4xl px-6 py-8 space-y-8">
 
       <!-- Page header -->
