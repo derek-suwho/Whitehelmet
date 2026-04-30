@@ -251,12 +251,20 @@ async def consolidate_submissions(
     _PREFERRED = ("ard", "quality", "data", "input", "kpi", "hse", "safety", "metrics")
 
     def _best_header_row(rows: list) -> tuple:
-        """Row with the most distinct non-empty string values in the first 30 rows."""
-        best_idx, best_row, best_count = 0, rows[0] if rows else [], 0
+        """Return the most likely column-name row in the first 30 rows.
+
+        Scoring: most DISTINCT non-empty strings wins. Ties broken by shortest
+        average string length — column names (e.g. '#', 'Level 1') are short,
+        description/preamble rows use full sentences, so the column-names row
+        wins even when both rows have the same number of distinct strings."""
+        best_idx, best_row, best_count, best_avg = 0, rows[0] if rows else [], 0, float('inf')
         for idx, row in enumerate(rows[:30]):
-            count = sum(1 for v in row if v is not None and isinstance(v, str) and str(v).strip())
-            if count > best_count:
-                best_count, best_idx, best_row = count, idx, row
+            strings = [str(v).strip() for v in row
+                       if v is not None and isinstance(v, str) and str(v).strip()]
+            distinct = len(set(strings))
+            avg_len = sum(len(s) for s in strings) / len(strings) if strings else float('inf')
+            if distinct > best_count or (distinct == best_count and avg_len < best_avg):
+                best_count, best_idx, best_row, best_avg = distinct, idx, row, avg_len
         return best_idx, best_row
 
     def _pick_sheet(wb):
@@ -304,12 +312,37 @@ async def consolidate_submissions(
 
             # Truncate verbose header strings — KPI templates use full sentences as column names
             headers = [str(h).strip()[:80] if h is not None else '' for h in header_row]
-            # Require ≥3 non-empty cells to exclude sparse rows that only have a
-            # sequence number or a single merged label (common in these templates)
+
+            def _nonempty(v) -> bool:
+                return v is not None and str(v).strip() != ''
+
+            def _coerce(v):
+                """Preserve native numeric types; only stringify text."""
+                if v is None:
+                    return None
+                if isinstance(v, (int, float)):
+                    return v
+                s = str(v).strip()
+                if s == '':
+                    return None
+                try:
+                    return int(s)
+                except ValueError:
+                    pass
+                try:
+                    return float(s)
+                except ValueError:
+                    return s
+
+            # Keep rows with ≥3 non-empty cells AND >1 distinct value
+            # (excludes sparse sequence-number rows and label rows like "KPI Ratings" repeated)
             data_rows = [
-                [str(c) if c is not None else '' for c in r]
+                [_coerce(c) for c in r]
                 for r in rows[header_idx + 1:]
-                if sum(1 for c in r if c is not None and str(c).strip()) >= 3
+                if (
+                    sum(1 for c in r if _nonempty(c)) >= 3
+                    and len({str(c) for c in r if _nonempty(c)}) > 1
+                )
             ]
             if not data_rows:
                 continue
@@ -359,7 +392,7 @@ async def consolidate_submissions(
     unified_headers = schema.get("unified_headers", ["Source File"])
     mappings = {m["file"]: m.get("column_map", {}) for m in schema.get("mappings", [])}
 
-    # Merge rows
+    # Merge rows — emit None for missing values so Excel leaves the cell blank
     merged_rows = []
     for f in all_file_data:
         col_map = mappings.get(f["name"], {})
@@ -373,10 +406,11 @@ async def consolidate_submissions(
             out = [f["name"]]
             for h in unified_headers[1:]:
                 idx = unified_to_idx.get(h)
-                out.append(row[idx] if idx is not None and idx < len(row) else "")
+                val = row[idx] if idx is not None and idx < len(row) else None
+                out.append(val)
             merged_rows.append(out)
 
-    # Write output xlsx
+    # Write output xlsx — values are already native Python types (int/float/str/None)
     wb_out = openpyxl.Workbook()
     ws_out = wb_out.active
     ws_out.title = "Consolidated"
