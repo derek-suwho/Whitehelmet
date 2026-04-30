@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { api } from '@/composables/useApi'
@@ -17,7 +17,7 @@ const spreadsheetStore = useSpreadsheetStore()
 interface OrgStatus {
   org_id: string
   org_name: string
-  assignment_id: string
+  assignment_id: string | null
   assignment_status: string
   submission_id: string | null
   submitted_at: string | null
@@ -34,8 +34,11 @@ interface ProgressData {
 }
 
 const templateId = route.params.templateId as string
+const projectId = route.query.project_id as string | undefined
+
 const allSubmitted = ref(false)
 const progressData = ref<ProgressData | null>(null)
+const selectedSubmissionIds = ref<string[]>([])
 const consolidating = ref(false)
 const consolidationResult = ref<{
   consolidated_sheet_id: string
@@ -48,6 +51,26 @@ const showStatusModal = ref(false)
 const consolidatedSheetId = ref('')
 const loadingPreview = ref(false)
 
+const canConsolidate = computed(() => {
+  if (consolidating.value) return false
+  if (!progressData.value) return false
+  // If project_id context: need at least one submitted file
+  if (projectId) {
+    const hasSubmitted = progressData.value.orgs.some(o => o.submission_id)
+    return hasSubmitted
+  }
+  return allSubmitted.value
+})
+
+const consolidateLabel = computed(() => {
+  if (consolidating.value) return 'Consolidating…'
+  if (projectId) {
+    const count = selectedSubmissionIds.value.length
+    return count > 0 ? `Consolidate ${count} Selected` : 'Consolidate All'
+  }
+  return 'Consolidate All'
+})
+
 onMounted(() => {
   templatesStore.fetchTemplate(templateId)
   fetchProgress()
@@ -55,11 +78,12 @@ onMounted(() => {
 
 async function fetchProgress() {
   try {
-    progressData.value = await api.get<ProgressData>(
-      `/api/admin/templates/${templateId}/consolidation-progress`,
-    )
+    const url = projectId
+      ? `/api/admin/templates/${templateId}/consolidation-progress?project_id=${projectId}`
+      : `/api/admin/templates/${templateId}/consolidation-progress`
+    progressData.value = await api.get<ProgressData>(url)
     if (progressData.value?.all_submitted) allSubmitted.value = true
-  } catch { /* non-fatal — PM can still consolidate manually */ }
+  } catch { /* non-fatal */ }
 }
 
 function onAllSubmitted() { allSubmitted.value = true }
@@ -79,21 +103,32 @@ async function loadPreview(sheetId: string) {
 }
 
 async function consolidate() {
-  if (!templatesStore.currentVersion) return
   consolidating.value = true
   consolidationError.value = ''
   consolidationResult.value = null
   showStatusModal.value = true
   try {
-    const data = await api.post<{
-      consolidated_sheet_id: string
-      file_path: string
-      freeform_count: number
-      template_count: number
-    }>('/api/ai/consolidate', {
-      template_id: templateId,
-      template_version_id: templatesStore.currentVersion.id,
-    })
+    let data: typeof consolidationResult.value
+
+    if (projectId) {
+      // Project-member submission consolidation
+      const submissionIds = selectedSubmissionIds.value.length > 0
+        ? selectedSubmissionIds.value
+        : null  // null = use all submitted
+
+      data = await api.post<typeof consolidationResult.value>(
+        `/api/admin/templates/${templateId}/consolidate-submissions`,
+        { project_id: projectId, submission_ids: submissionIds },
+      )
+    } else {
+      // Legacy freeform consolidation path
+      if (!templatesStore.currentVersion) throw new Error('No template version loaded')
+      data = await api.post<typeof consolidationResult.value>('/api/ai/consolidate', {
+        template_id: templateId,
+        template_version_id: templatesStore.currentVersion.id,
+      })
+    }
+
     consolidationResult.value = data
     consolidatedSheetId.value = data?.consolidated_sheet_id ?? ''
     if (data?.consolidated_sheet_id) {
@@ -122,21 +157,25 @@ async function onFinetuneApplied() {
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
     <div class="flex items-center justify-between">
       <div>
         <RouterLink to="/admin/templates" class="text-gray-400 hover:text-gray-600 text-sm">← Templates</RouterLink>
         <h1 class="text-xl font-semibold text-gray-800 mt-1">
           Consolidation — {{ templatesStore.currentTemplate?.name ?? '…' }}
         </h1>
+        <p v-if="projectId" class="text-xs text-gray-400 mt-0.5">
+          Showing subcontractors from this project.
+          {{ selectedSubmissionIds.length > 0 ? `${selectedSubmissionIds.length} selected.` : 'Select rows to consolidate a subset, or consolidate all.' }}
+        </p>
       </div>
       <button
-        :disabled="!allSubmitted || consolidating"
+        :disabled="!canConsolidate"
         class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-        :title="!allSubmitted ? 'Waiting for all DevCos to submit' : ''"
+        :title="!canConsolidate && !consolidating ? 'No submitted files to consolidate' : ''"
         @click="consolidate"
       >
-        {{ consolidating ? 'Consolidating…' : 'Consolidate All' }}
+        {{ consolidateLabel }}
       </button>
     </div>
 
@@ -144,6 +183,8 @@ async function onFinetuneApplied() {
     <SubmissionTracker
       v-if="progressData"
       :progress="progressData"
+      :selectable="!!projectId"
+      v-model:selected="selectedSubmissionIds"
       @all-submitted="onAllSubmitted"
     />
     <div v-else class="h-20 animate-pulse rounded-xl border border-gray-200 bg-white" />

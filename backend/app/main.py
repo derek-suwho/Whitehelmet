@@ -54,9 +54,25 @@ async def startup():
     if settings.environment in ("dev", "staging"):
         try:
             Base.metadata.create_all(bind=engine)
+            _migrate_columns(engine)
             _seed_admin(engine)
         except Exception as e:
             print(f"[WARN] DB unavailable on startup ({e.__class__.__name__}) - AI routes still work, DB-backed routes will 500")
+
+
+def _migrate_columns(engine):
+    """Add new columns to existing tables that predate them."""
+    from sqlalchemy import text
+    migrations = [
+        "ALTER TABLE projects ADD COLUMN master_template_id VARCHAR(36) NULL",
+    ]
+    with engine.connect() as conn:
+        for sql in migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+            except Exception:
+                pass  # column already exists
 
 
 def _seed_admin(engine):

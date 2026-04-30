@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
@@ -29,6 +29,15 @@ const templateDeadline = ref('')
 const selectedMemberIds = ref<number[]>([])
 const assigningTemplate = ref(false)
 const templateError = ref('')
+
+// Master template
+const showMasterModal = ref(false)
+const selectedMasterTemplateId = ref('')
+const settingMaster = ref(false)
+const masterError = ref('')
+const masterTemplates = computed(() =>
+  templatesStore.templates.filter(t => t.template_type === 'master')
+)
 
 onMounted(async () => {
   try {
@@ -110,6 +119,25 @@ async function assignTemplate() {
   }
 }
 
+function openMasterModal() {
+  selectedMasterTemplateId.value = project.value?.master_template_id ?? ''
+  masterError.value = ''
+  showMasterModal.value = true
+}
+
+async function setMasterTemplate(templateId: string | null) {
+  settingMaster.value = true
+  masterError.value = ''
+  try {
+    project.value = await adminStore.setProjectMasterTemplate(projectId, templateId)
+    showMasterModal.value = false
+  } catch (e) {
+    masterError.value = e instanceof Error ? e.message : 'Failed'
+  } finally {
+    settingMaster.value = false
+  }
+}
+
 async function onTemplateChange() {
   selectedVersionId.value = ''
   if (selectedTemplateId.value) {
@@ -134,6 +162,42 @@ function formatDate(iso: string | null) {
     </div>
 
     <div v-if="error" class="text-sm text-red-600">{{ error }}</div>
+
+    <!-- Master Template section -->
+    <div class="bg-white border rounded-xl overflow-hidden"
+         :class="project?.master_template_id ? 'border-amber-300' : 'border-gray-200'">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+        <div class="flex items-center gap-2">
+          <svg class="h-4 w-4 text-amber-500" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M2 5l4 4 4-7 4 7 4-4-2 9H4L2 5z"/>
+          </svg>
+          <h2 class="text-sm font-semibold text-gray-700">Master Template</h2>
+        </div>
+        <button class="text-blue-600 text-sm hover:underline" @click="openMasterModal">
+          {{ project?.master_template_id ? 'Change' : 'Assign' }}
+        </button>
+      </div>
+      <div class="px-5 py-4">
+        <div v-if="project?.master_template_id" class="flex items-center justify-between">
+          <div>
+            <p class="text-sm font-medium text-gray-800">{{ project.master_template_name ?? project.master_template_id }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">Used as the consolidated output schema for this project</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <RouterLink
+              :to="`/admin/templates/${project.master_template_id}/edit`"
+              class="text-xs text-blue-600 hover:underline"
+            >Edit</RouterLink>
+            <RouterLink
+              :to="`/admin/consolidations/${project.master_template_id}?project_id=${project.id}`"
+              class="text-xs font-medium text-green-600 hover:underline"
+            >Consolidate →</RouterLink>
+            <button class="text-xs text-gray-400 hover:text-red-500" @click="setMasterTemplate(null)">Remove</button>
+          </div>
+        </div>
+        <p v-else class="text-sm text-gray-400">No master template assigned. Assign one to define the consolidated output structure for this project.</p>
+      </div>
+    </div>
 
     <!-- Templates section -->
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -337,6 +401,45 @@ function formatDate(iso: string | null) {
             class="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             @click="assignTemplate"
           >{{ assigningTemplate ? 'Assigning…' : 'Assign' }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Assign Master Template Modal -->
+  <Teleport to="body">
+    <div v-if="showMasterModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <h2 class="font-semibold text-gray-800">Assign Master Template</h2>
+          <button class="text-gray-400 hover:text-gray-600 text-lg" @click="showMasterModal = false">✕</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Master Template *</label>
+            <select
+              v-model="selectedMasterTemplateId"
+              class="block w-full rounded border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Select master template…</option>
+              <option v-for="t in masterTemplates" :key="t.id" :value="t.id">
+                {{ t.name }}<template v-if="t.status !== 'active'"> ({{ t.status }})</template>
+              </option>
+            </select>
+            <p v-if="!masterTemplates.length" class="mt-1 text-xs text-gray-400">
+              No master templates exist yet.
+              <RouterLink to="/admin/master-template" class="text-blue-600 hover:underline">Create one →</RouterLink>
+            </p>
+          </div>
+          <div v-if="masterError" class="text-sm text-red-600">{{ masterError }}</div>
+        </div>
+        <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">
+          <button class="px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100" @click="showMasterModal = false">Cancel</button>
+          <button
+            :disabled="settingMaster || !selectedMasterTemplateId"
+            class="px-4 py-2 rounded bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 disabled:opacity-50"
+            @click="setMasterTemplate(selectedMasterTemplateId)"
+          >{{ settingMaster ? 'Saving…' : 'Assign' }}</button>
         </div>
       </div>
     </div>

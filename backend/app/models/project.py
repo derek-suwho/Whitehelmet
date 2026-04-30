@@ -14,4 +14,5 @@ class Project(Base):
     description = Column(Text, nullable=True)
     status = Column(String(20), nullable=False, default="active")
     created_by = Column(String(36), nullable=True)
+    master_template_id = Column(String(36), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

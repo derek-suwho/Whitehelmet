@@ -43,6 +43,15 @@ export const useAdminStore = defineStore('admin', () => {
     await api.delete(`/api/projects/${projectId}/members/${membershipId}`)
   }
 
+  async function setProjectMasterTemplate(
+    projectId: string,
+    masterTemplateId: string | null,
+  ): Promise<ProjectDetail> {
+    return api.patch<ProjectDetail>(`/api/projects/${projectId}/master-template`, {
+      master_template_id: masterTemplateId,
+    })
+  }
+
   async function assignTemplateToProject(
     projectId: string,
     templateVersionId: string,
@@ -89,6 +98,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchProjectDetail,
     addProjectMember,
     removeProjectMember,
+    setProjectMasterTemplate,
     assignTemplateToProject,
     fetchUsers,
     createUser,

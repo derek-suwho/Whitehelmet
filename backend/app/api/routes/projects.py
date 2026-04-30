@@ -17,6 +17,7 @@ from app.models.template_version import TemplateVersion
 from app.models.user import User
 from app.schemas.projects import (
     AddMemberRequest,
+    AssignMasterTemplateRequest,
     AssignTemplateRequest,
     ProjectCreate,
     ProjectDetailResponse,
@@ -134,11 +135,18 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
             }
         )
 
+    master_template_name = None
+    if p.master_template_id:
+        mt = db.query(Template).filter(Template.id == p.master_template_id).first()
+        master_template_name = mt.name if mt else None
+
     return ProjectDetailResponse(
         id=p.id,
         name=p.name,
         description=p.description,
         status=p.status,
+        master_template_id=p.master_template_id,
+        master_template_name=master_template_name,
         created_at=p.created_at,
         members=members,
         template_assignments=template_assignments,
@@ -207,6 +215,36 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Member not found")
     db.delete(m)
     db.commit()
+
+
+@router.patch(
+    "/{project_id}/master-template",
+    response_model=ProjectDetailResponse,
+    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+)
+def set_master_template(
+    project_id: str,
+    body: AssignMasterTemplateRequest,
+    db: Session = Depends(get_db),
+):
+    p = db.query(Project).filter(Project.id == project_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if body.master_template_id:
+        tmpl = db.query(Template).filter(
+            Template.id == body.master_template_id,
+            Template.template_type == "master",
+        ).first()
+        if not tmpl:
+            raise HTTPException(status_code=404, detail="Master template not found")
+        p.master_template_id = body.master_template_id
+    else:
+        p.master_template_id = None
+
+    db.commit()
+    db.refresh(p)
+    return get_project(project_id, db)
 
 
 @router.post(

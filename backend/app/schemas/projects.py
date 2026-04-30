@@ -17,6 +17,7 @@ class ProjectResponse(BaseModel):
     name: str
     description: Optional[str]
     status: str
+    master_template_id: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -32,11 +33,17 @@ class AssignTemplateRequest(BaseModel):
     member_user_ids: Optional[list[int]] = None  # if set, create per-member assignments
 
 
+class AssignMasterTemplateRequest(BaseModel):
+    master_template_id: Optional[str] = None
+
+
 class ProjectDetailResponse(BaseModel):
     id: str
     name: str
     description: Optional[str]
     status: str
+    master_template_id: Optional[str] = None
+    master_template_name: Optional[str] = None
     created_at: datetime
     members: list[dict[str, Any]]
     template_assignments: list[dict[str, Any]]

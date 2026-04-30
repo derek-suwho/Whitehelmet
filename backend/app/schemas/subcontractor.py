@@ -34,7 +34,7 @@ class SubmissionResponse(BaseModel):
 class OrgSubmissionStatus(BaseModel):
     org_id: str
     org_name: str
-    assignment_id: str
+    assignment_id: Optional[str]
     assignment_status: str
     submission_id: Optional[str]
     submitted_at: Optional[datetime]

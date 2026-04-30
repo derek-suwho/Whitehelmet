@@ -5,6 +5,8 @@ export interface Project {
   name: string
   description: string | null
   status: 'active' | 'archived'
+  master_template_id: string | null
+  master_template_name?: string | null
   created_at: string
 }
 
