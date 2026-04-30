@@ -79,7 +79,7 @@ function onImportCreated(templateId: string) {
 <template>
   <div class="p-6 overflow-y-auto flex-1 min-h-0">
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-xl font-semibold text-gray-800">Templates</h1>
+      <h1 class="text-xl font-semibold text-gray-800">Subcontractor Templates</h1>
       <div class="flex items-center gap-2">
         <button
           class="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
