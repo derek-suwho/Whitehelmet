@@ -302,7 +302,8 @@ async def consolidate_submissions(
                 continue
             _, rows, header_idx, header_row, _ = picked
 
-            headers = [str(h).strip() if h is not None else '' for h in header_row]
+            # Truncate verbose header strings — KPI templates use full sentences as column names
+            headers = [str(h).strip()[:80] if h is not None else '' for h in header_row]
             # Require ≥3 non-empty cells to exclude sparse rows that only have a
             # sequence number or a single merged label (common in these templates)
             data_rows = [
@@ -336,11 +337,11 @@ async def consolidate_submissions(
     )
     ai_data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 2048,
+        "max_tokens": 8192,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": json.dumps([
-                {"name": f["name"], "headers": f["headers"], "sample_rows": f["sample_rows"]}
+                {"name": f["name"], "headers": f["headers"], "sample_rows": f["sample_rows"][:3]}
                 for f in file_schemas
             ])},
         ],
