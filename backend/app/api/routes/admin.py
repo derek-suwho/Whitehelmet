@@ -155,32 +155,47 @@ def get_consolidation_progress(
 
     for a in assignments:
         project = db.query(Project).filter(Project.id == a.org_id).first()
-        sub = (
+        subs = (
             db.query(Submission)
             .filter(Submission.assignment_id == a.id)
             .order_by(Submission.submitted_at.desc())
-            .first()
+            .all()
         )
 
-        if a.status in ("submitted", "locked"):
-            submitted_count += 1
-
-        org_rows.append(
-            OrgSubmissionStatus(
-                org_id=a.org_id,
-                org_name=project.name if project else a.org_id,
-                assignment_id=a.id,
-                assignment_status=a.status,
-                submission_id=sub.id if sub else None,
-                submitted_at=sub.submitted_at if sub else None,
-                file_name=sub.file_name if sub else None,
+        if subs:
+            # One row per submitter so every file is visible and selectable
+            for sub in subs:
+                submitted_count += 1
+                submitter = db.query(User).filter(User.id == sub.submitted_by).first()
+                display = submitter.display_name if submitter else (project.name if project else a.org_id)
+                org_rows.append(
+                    OrgSubmissionStatus(
+                        org_id=sub.submitted_by or a.org_id,
+                        org_name=display,
+                        assignment_id=a.id,
+                        assignment_status="submitted",
+                        submission_id=sub.id,
+                        submitted_at=sub.submitted_at,
+                        file_name=sub.file_name,
+                    )
+                )
+        else:
+            org_rows.append(
+                OrgSubmissionStatus(
+                    org_id=a.org_id,
+                    org_name=project.name if project else a.org_id,
+                    assignment_id=a.id,
+                    assignment_status=a.status,
+                    submission_id=None,
+                    submitted_at=None,
+                    file_name=None,
+                )
             )
-        )
 
     return ConsolidationProgressResponse(
         template_id=template_id,
         template_version_id=latest_ver.id if latest_ver else None,
-        total_orgs=len(assignments),
+        total_orgs=len(org_rows),
         submitted_count=submitted_count,
         all_submitted=submitted_count == len(assignments) and len(assignments) > 0,
         orgs=org_rows,

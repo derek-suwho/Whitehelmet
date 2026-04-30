@@ -54,12 +54,7 @@ const loadingPreview = ref(false)
 const canConsolidate = computed(() => {
   if (consolidating.value) return false
   if (!progressData.value) return false
-  // If project_id context: need at least one submitted file
-  if (projectId) {
-    const hasSubmitted = progressData.value.orgs.some(o => o.submission_id)
-    return hasSubmitted
-  }
-  return allSubmitted.value
+  return progressData.value.orgs.some(o => o.submission_id !== null)
 })
 
 const consolidateLabel = computed(() => {
@@ -108,26 +103,26 @@ async function consolidate() {
   consolidationResult.value = null
   showStatusModal.value = true
   try {
-    let data: typeof consolidationResult.value
+    let submissionIds: string[] | null = null
 
     if (projectId) {
-      // Project-member submission consolidation
-      const submissionIds = selectedSubmissionIds.value.length > 0
+      // Project-scoped: respect checkbox selection, null = all submitted
+      submissionIds = selectedSubmissionIds.value.length > 0
         ? selectedSubmissionIds.value
-        : null  // null = use all submitted
-
-      data = await api.post<typeof consolidationResult.value>(
-        `/api/admin/templates/${templateId}/consolidate-submissions`,
-        { project_id: projectId, submission_ids: submissionIds },
-      )
+        : null
     } else {
-      // Legacy freeform consolidation path
-      if (!templatesStore.currentVersion) throw new Error('No template version loaded')
-      data = await api.post<typeof consolidationResult.value>('/api/ai/consolidate', {
-        template_id: templateId,
-        template_version_id: templatesStore.currentVersion.id,
-      })
+      // Assignment-based: collect submission IDs from progress rows
+      const ids = (progressData.value?.orgs ?? [])
+        .map(o => o.submission_id)
+        .filter((id): id is string => id !== null)
+      if (ids.length === 0) throw new Error('No submitted files to consolidate')
+      submissionIds = ids
     }
+
+    const data = await api.post<typeof consolidationResult.value>(
+      `/api/admin/templates/${templateId}/consolidate-submissions`,
+      { project_id: projectId ?? null, submission_ids: submissionIds },
+    )
 
     consolidationResult.value = data
     consolidatedSheetId.value = data?.consolidated_sheet_id ?? ''
