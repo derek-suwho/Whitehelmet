@@ -81,13 +81,20 @@ def list_my_assignments(
             .first()
         ) is not None
 
+        # Derive per-user status: locked is set by PM and is authoritative;
+        # otherwise reflect whether THIS user has submitted, not the shared assignment.
+        if a.status == "locked":
+            user_status = "locked"
+        else:
+            user_status = "submitted" if has_submission else "pending"
+
         result.append(
             AssignmentForSubcontractor(
                 id=a.id,
                 template_version_id=a.template_version_id,
                 deadline=a.deadline,
                 instructions=a.instructions,
-                status=a.status,
+                status=user_status,
                 assigned_at=a.assigned_at,
                 template_name=template_name,
                 has_submission=has_submission,
