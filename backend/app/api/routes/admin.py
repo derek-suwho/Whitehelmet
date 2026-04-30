@@ -237,6 +237,57 @@ async def consolidate_submissions(
     if not submissions:
         raise HTTPException(status_code=400, detail="No submissions to consolidate")
 
+    from app.api.routes.ai import _expand_merged
+
+    # Sheets to always skip (utility / formula / metadata sheets)
+    _SKIP_SHEETS = (
+        "dropdown", "instruction", "readme", "legend", "lookup", "ref", "notes",
+        "calculation sheet", "calculation", "formula", "sheet1",
+        "company infomation", "company information", "company info",
+        "wbs", "contracts", "construction cost", "milestones",
+        "progress", "assets", "observations",
+    )
+    # Preferred DevCo input sheet names — checked in order; first match wins
+    _PREFERRED = ("ard", "quality", "data", "input", "kpi", "hse", "safety", "metrics")
+
+    def _best_header_row(rows: list) -> tuple:
+        """Row with the most distinct non-empty string values in the first 30 rows."""
+        best_idx, best_row, best_count = 0, rows[0] if rows else [], 0
+        for idx, row in enumerate(rows[:30]):
+            count = sum(1 for v in row if v is not None and isinstance(v, str) and str(v).strip())
+            if count > best_count:
+                best_count, best_idx, best_row = count, idx, row
+        return best_idx, best_row
+
+    def _pick_sheet(wb):
+        """Return (sheet_name, rows, header_idx, header_row) for the DevCo input sheet."""
+        candidates = {}
+        for name in wb.sheetnames:
+            if any(kw in name.lower() for kw in _SKIP_SHEETS):
+                continue
+            ws = wb[name]
+            if ws.max_row is None or ws.max_row < 2:
+                continue
+            rows = _expand_merged(ws)
+            hidx, hrow = _best_header_row(rows)
+            useful = [v for v in hrow if v is not None and str(v).strip()]
+            if len(useful) < 3:
+                continue
+            data = [r for r in rows[hidx + 1:] if any(c is not None and str(c).strip() for c in r)]
+            if not data:
+                continue
+            candidates[name] = (name, rows, hidx, hrow, len(useful))
+
+        # Prefer known input sheet names (order matters: "ard" before "quality")
+        for keyword in _PREFERRED:
+            for name, val in candidates.items():
+                if keyword in name.lower():
+                    return val
+        # Fall back to the sheet with the most header columns
+        if candidates:
+            return max(candidates.values(), key=lambda c: c[4])
+        return None
+
     # Parse each xlsx
     file_schemas = []
     all_file_data = []
@@ -246,16 +297,22 @@ async def consolidate_submissions(
             continue
         try:
             wb = openpyxl.load_workbook(path, data_only=True)
-            ws = wb.active
-            raw = list(ws.iter_rows(values_only=True))
-            if not raw:
+            picked = _pick_sheet(wb)
+            if not picked:
                 continue
-            headers = [str(h) if h is not None else '' for h in raw[0]]
+            _, rows, header_idx, header_row, _ = picked
+
+            headers = [str(h).strip() if h is not None else '' for h in header_row]
+            # Require ≥3 non-empty cells to exclude sparse rows that only have a
+            # sequence number or a single merged label (common in these templates)
             data_rows = [
                 [str(c) if c is not None else '' for c in r]
-                for r in raw[1:]
-                if any(c is not None for c in r)
+                for r in rows[header_idx + 1:]
+                if sum(1 for c in r if c is not None and str(c).strip()) >= 3
             ]
+            if not data_rows:
+                continue
+
             file_schemas.append({"name": sub.file_name, "headers": headers, "sample_rows": data_rows[:5]})
             all_file_data.append({"name": sub.file_name, "headers": headers, "all_rows": data_rows})
         except Exception:
