@@ -10,6 +10,7 @@ from app.core.rbac import require_pif_admin
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_member import ProjectMember
+from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_version import TemplateVersion
@@ -64,6 +65,26 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Project not found")
 
     members_q = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+
+    assignments_q = (
+        db.query(TemplateAssignment)
+        .filter(TemplateAssignment.org_id == project_id)
+        .order_by(TemplateAssignment.assigned_at.desc())
+        .all()
+    )
+    assignment_ids = [a.id for a in assignments_q]
+
+    # Which users have submitted against any assignment in this project
+    submitter_ids: set[str] = set()
+    if assignment_ids:
+        rows = (
+            db.query(Submission.submitted_by)
+            .filter(Submission.assignment_id.in_(assignment_ids))
+            .all()
+        )
+        submitter_ids = {r[0] for r in rows if r[0] is not None}
+
+    # Re-build members list now that we have submitter info
     members = []
     for m in members_q:
         u = db.query(User).filter(User.id == m.user_id).first()
@@ -76,18 +97,14 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                     "email": u.email,
                     "role": u.role,
                     "added_at": m.added_at.isoformat() if m.added_at else None,
+                    "has_submission": str(u.id) in submitter_ids,
                 }
             )
 
-    assignments_q = (
-        db.query(TemplateAssignment)
-        .filter(TemplateAssignment.org_id == project_id)
-        .order_by(TemplateAssignment.assigned_at.desc())
-        .all()
-    )
     template_assignments = []
     for a in assignments_q:
         template_name = None
+        template_id = None
         if a.template_version_id:
             ver = (
                 db.query(TemplateVersion)
@@ -95,12 +112,14 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                 .first()
             )
             if ver:
+                template_id = ver.template_id
                 tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
                 template_name = tmpl.name if tmpl else None
         template_assignments.append(
             {
                 "assignment_id": a.id,
                 "template_version_id": a.template_version_id,
+                "template_id": template_id,
                 "template_name": template_name,
                 "status": a.status,
                 "deadline": a.deadline.isoformat() if a.deadline else None,

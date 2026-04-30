@@ -145,6 +145,7 @@ function formatDate(iso: string | null) {
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Status</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Deadline</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Assigned</th>
+            <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -162,9 +163,16 @@ function formatDate(iso: string | null) {
             </td>
             <td class="px-5 py-3 text-gray-500">{{ formatDate(a.deadline) }}</td>
             <td class="px-5 py-3 text-gray-400">{{ formatDate(a.assigned_at) }}</td>
+            <td class="px-5 py-3">
+              <RouterLink
+                v-if="a.template_id"
+                :to="`/admin/consolidations/${a.template_id}`"
+                class="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+              >Consolidate →</RouterLink>
+            </td>
           </tr>
           <tr v-if="!project?.template_assignments?.length">
-            <td colspan="4" class="px-5 py-8 text-center text-gray-400">No templates assigned yet.</td>
+            <td colspan="5" class="px-5 py-8 text-center text-gray-400">No templates assigned yet.</td>
           </tr>
         </tbody>
       </table>
@@ -185,6 +193,7 @@ function formatDate(iso: string | null) {
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Name</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Email</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Role</th>
+            <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Submission</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Actions</th>
           </tr>
         </thead>
@@ -194,11 +203,19 @@ function formatDate(iso: string | null) {
             <td class="px-5 py-3 text-gray-500">{{ m.email }}</td>
             <td class="px-5 py-3 text-gray-500">{{ m.role ?? '—' }}</td>
             <td class="px-5 py-3">
+              <span
+                class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
+                :class="m.has_submission
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-700'"
+              >{{ m.has_submission ? 'submitted' : 'pending' }}</span>
+            </td>
+            <td class="px-5 py-3">
               <button class="text-red-400 hover:text-red-600 text-xs" @click="removeMember(m)">Remove</button>
             </td>
           </tr>
           <tr v-if="!project?.members?.length">
-            <td colspan="4" class="px-5 py-8 text-center text-gray-400">No members yet.</td>
+            <td colspan="5" class="px-5 py-8 text-center text-gray-400">No members yet.</td>
           </tr>
         </tbody>
       </table>

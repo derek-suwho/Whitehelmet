@@ -15,11 +15,13 @@ export interface ProjectMember {
   email: string
   role: string | null
   added_at: string
+  has_submission: boolean
 }
 
 export interface ProjectTemplateAssignment {
   assignment_id: string
   template_version_id: string | null
+  template_id: string | null
   template_name: string | null
   status: string
   deadline: string | null
