@@ -113,14 +113,12 @@ def save_version(template_id: str, body: TemplateVersionCreate,
         id=str(uuid.uuid4()),
         template_id=template_id,
         version_number=next_version,
-        schema_json=json.dumps(body.schema_data),
+        schema_json=json.dumps(body.schema_json),
         created_by=str(user.id),
     )
     db.add(ver)
     db.commit()
     db.refresh(ver)
-
-    ver.schema_json = body.schema_json
     return ver
 
 
