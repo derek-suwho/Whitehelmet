@@ -47,10 +47,12 @@ export const useAdminStore = defineStore('admin', () => {
     projectId: string,
     templateVersionId: string,
     deadline?: string,
+    memberUserIds?: number[],
   ): Promise<void> {
     await api.post(`/api/projects/${projectId}/assign-template`, {
       template_version_id: templateVersionId,
       deadline: deadline ?? null,
+      member_user_ids: memberUserIds ?? null,
     })
   }
 

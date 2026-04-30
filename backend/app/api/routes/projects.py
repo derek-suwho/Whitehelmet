@@ -115,6 +115,11 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                 template_id = ver.template_id
                 tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
                 template_name = tmpl.name if tmpl else None
+        assigned_to_display = None
+        if a.assigned_to_user_id:
+            target = db.query(User).filter(User.id == a.assigned_to_user_id).first()
+            assigned_to_display = target.display_name if target else None
+
         template_assignments.append(
             {
                 "assignment_id": a.id,
@@ -124,6 +129,8 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                 "status": a.status,
                 "deadline": a.deadline.isoformat() if a.deadline else None,
                 "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+                "assigned_to_user_id": a.assigned_to_user_id,
+                "assigned_to_display": assigned_to_display,
             }
         )
 
@@ -219,16 +226,37 @@ def assign_template(
 
     deadline_dt = datetime.fromisoformat(body.deadline) if body.deadline else None
 
-    a = TemplateAssignment(
-        id=str(uuid.uuid4()),
-        template_version_id=body.template_version_id,
-        org_id=project_id,
-        assigned_by=str(user.id),
-        deadline=deadline_dt,
-        submission_type="template",
-        status="pending",
-    )
-    db.add(a)
-    db.commit()
-    db.refresh(a)
-    return {"ok": True, "assignment_id": a.id}
+    if body.member_user_ids:
+        # Per-member assignments — one record per selected user
+        created = []
+        for uid in body.member_user_ids:
+            a = TemplateAssignment(
+                id=str(uuid.uuid4()),
+                template_version_id=body.template_version_id,
+                org_id=project_id,
+                assigned_by=str(user.id),
+                deadline=deadline_dt,
+                submission_type="template",
+                status="pending",
+                assigned_to_user_id=str(uid),
+            )
+            db.add(a)
+            created.append(a.id)
+        db.commit()
+        return {"ok": True, "assignment_ids": created}
+    else:
+        # Project-wide assignment (all members see it)
+        a = TemplateAssignment(
+            id=str(uuid.uuid4()),
+            template_version_id=body.template_version_id,
+            org_id=project_id,
+            assigned_by=str(user.id),
+            deadline=deadline_dt,
+            submission_type="template",
+            status="pending",
+            assigned_to_user_id=None,
+        )
+        db.add(a)
+        db.commit()
+        db.refresh(a)
+        return {"ok": True, "assignment_id": a.id}

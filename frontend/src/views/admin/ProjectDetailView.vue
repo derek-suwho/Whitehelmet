@@ -26,6 +26,7 @@ const showTemplateModal = ref(false)
 const selectedTemplateId = ref('')
 const selectedVersionId = ref('')
 const templateDeadline = ref('')
+const selectedMemberIds = ref<number[]>([])
 const assigningTemplate = ref(false)
 const templateError = ref('')
 
@@ -45,16 +46,23 @@ async function loadProject() {
   project.value = await adminStore.fetchProjectDetail(projectId)
 }
 
-// Available users not already in this project
 function availableUsers() {
   const memberIds = new Set((project.value?.members ?? []).map(m => m.user_id))
   return adminStore.users.filter(u => !memberIds.has(u.id))
 }
 
-// Versions for selected template
 function versionsForTemplate() {
   if (!selectedTemplateId.value) return []
   return templatesStore.versions.filter(v => v.template_id === selectedTemplateId.value)
+}
+
+function openTemplateModal() {
+  selectedTemplateId.value = ''
+  selectedVersionId.value = ''
+  templateDeadline.value = ''
+  selectedMemberIds.value = []
+  templateError.value = ''
+  showTemplateModal.value = true
 }
 
 async function addMember() {
@@ -91,12 +99,10 @@ async function assignTemplate() {
       projectId,
       selectedVersionId.value,
       templateDeadline.value || undefined,
+      selectedMemberIds.value.length ? selectedMemberIds.value : undefined,
     )
     await loadProject()
     showTemplateModal.value = false
-    selectedTemplateId.value = ''
-    selectedVersionId.value = ''
-    templateDeadline.value = ''
   } catch (e) {
     templateError.value = e instanceof Error ? e.message : 'Failed'
   } finally {
@@ -133,24 +139,24 @@ function formatDate(iso: string | null) {
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-700">Templates</h2>
-        <button
-          class="text-blue-600 text-sm hover:underline"
-          @click="showTemplateModal = true"
-        >+ Assign Template</button>
+        <button class="text-blue-600 text-sm hover:underline" @click="openTemplateModal">+ Assign Template</button>
       </div>
       <table class="min-w-full divide-y divide-gray-100 text-sm">
         <thead class="bg-gray-50">
           <tr>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Template</th>
+            <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Assigned To</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Status</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Deadline</th>
-            <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Assigned</th>
             <th class="px-5 py-2.5 text-left font-medium text-gray-500 text-xs">Actions</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
           <tr v-for="a in project?.template_assignments ?? []" :key="a.assignment_id" class="hover:bg-gray-50">
             <td class="px-5 py-3 font-medium text-gray-800">{{ a.template_name ?? a.template_version_id ?? '—' }}</td>
+            <td class="px-5 py-3 text-gray-500 text-xs">
+              {{ a.assigned_to_display ?? 'All members' }}
+            </td>
             <td class="px-5 py-3">
               <span
                 class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
@@ -162,7 +168,6 @@ function formatDate(iso: string | null) {
               >{{ a.status }}</span>
             </td>
             <td class="px-5 py-3 text-gray-500">{{ formatDate(a.deadline) }}</td>
-            <td class="px-5 py-3 text-gray-400">{{ formatDate(a.assigned_at) }}</td>
             <td class="px-5 py-3">
               <RouterLink
                 v-if="a.template_id"
@@ -182,10 +187,7 @@ function formatDate(iso: string | null) {
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
       <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <h2 class="text-sm font-semibold text-gray-700">Subcontractors</h2>
-        <button
-          class="text-blue-600 text-sm hover:underline"
-          @click="showMemberModal = true"
-        >+ Add Member</button>
+        <button class="text-blue-600 text-sm hover:underline" @click="showMemberModal = true">+ Add Member</button>
       </div>
       <table class="min-w-full divide-y divide-gray-100 text-sm">
         <thead class="bg-gray-50">
@@ -205,9 +207,7 @@ function formatDate(iso: string | null) {
             <td class="px-5 py-3">
               <span
                 class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium"
-                :class="m.has_submission
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-amber-100 text-amber-700'"
+                :class="m.has_submission ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'"
               >{{ m.has_submission ? 'submitted' : 'pending' }}</span>
             </td>
             <td class="px-5 py-3">
@@ -262,7 +262,8 @@ function formatDate(iso: string | null) {
           <h2 class="font-semibold text-gray-800">Assign Template</h2>
           <button class="text-gray-400 hover:text-gray-600 text-lg" @click="showTemplateModal = false">✕</button>
         </div>
-        <div class="p-5 space-y-3">
+        <div class="p-5 space-y-4">
+          <!-- Template picker -->
           <div>
             <label class="block text-xs text-gray-500 mb-1">Template *</label>
             <select
@@ -274,6 +275,8 @@ function formatDate(iso: string | null) {
               <option v-for="t in templatesStore.templates" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
+
+          <!-- Version picker -->
           <div v-if="selectedTemplateId">
             <label class="block text-xs text-gray-500 mb-1">Version *</label>
             <select v-model="selectedVersionId" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
@@ -283,10 +286,48 @@ function formatDate(iso: string | null) {
               </option>
             </select>
           </div>
+
+          <!-- Deadline -->
           <div>
             <label class="block text-xs text-gray-500 mb-1">Deadline (optional)</label>
             <input v-model="templateDeadline" type="date" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm" />
           </div>
+
+          <!-- Member targeting -->
+          <div v-if="project?.members?.length">
+            <label class="block text-xs text-gray-500 mb-2">Assign to</label>
+            <div class="border border-gray-200 rounded-lg divide-y text-sm">
+              <!-- All members option -->
+              <label class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  :checked="selectedMemberIds.length === 0"
+                  class="rounded"
+                  @change="selectedMemberIds = []"
+                />
+                <span class="font-medium text-gray-700">All members</span>
+              </label>
+              <!-- Individual members -->
+              <label
+                v-for="m in project.members"
+                :key="m.user_id"
+                class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50"
+              >
+                <input
+                  v-model="selectedMemberIds"
+                  type="checkbox"
+                  :value="m.user_id"
+                  class="rounded"
+                />
+                <span class="text-gray-700">{{ m.display_name }}</span>
+                <span class="text-gray-400 text-xs ml-auto">{{ m.email }}</span>
+              </label>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">
+              {{ selectedMemberIds.length === 0 ? 'All members will see this template.' : `${selectedMemberIds.length} member(s) selected.` }}
+            </p>
+          </div>
+
           <div v-if="templateError" class="text-sm text-red-600">{{ templateError }}</div>
         </div>
         <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">

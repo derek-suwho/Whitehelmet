@@ -26,6 +26,8 @@ export interface ProjectTemplateAssignment {
   status: string
   deadline: string | null
   assigned_at: string
+  assigned_to_user_id: string | null
+  assigned_to_display: string | null
 }
 
 export interface Profile {

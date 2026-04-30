@@ -29,6 +29,7 @@ class AddMemberRequest(BaseModel):
 class AssignTemplateRequest(BaseModel):
     template_version_id: str
     deadline: Optional[str] = None
+    member_user_ids: Optional[list[int]] = None  # if set, create per-member assignments
 
 
 class ProjectDetailResponse(BaseModel):

@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse as FastAPIFileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -31,23 +32,30 @@ router = APIRouter(
     dependencies=[Depends(require_subcontractor)],
 )
 
+def _assignment_filter(user: User):
+    """Return an OR filter matching project-wide assignments OR user-targeted ones."""
+    return or_(
+        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id == None),
+        TemplateAssignment.assigned_to_user_id == str(user.id),
+    )
 
-# ── 1. List assignments for this org ─────────────────────────────────────────
+
+# ── 1. List assignments for this org/user ────────────────────────────────────
 
 @router.get("/assignments", response_model=list[AssignmentForSubcontractor])
 def list_my_assignments(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all template assignments for the authenticated user's org."""
+    """Return template assignments for this user — project-wide or directly targeted."""
     if not user.org_id:
         raise HTTPException(status_code=400, detail="User has no org_id assigned")
 
     assignments = (
         db.query(TemplateAssignment)
         .filter(
-            TemplateAssignment.org_id == user.org_id,
             TemplateAssignment.submission_type == "template",
+            _assignment_filter(user),
         )
         .order_by(TemplateAssignment.assigned_at.desc())
         .all()
@@ -68,7 +76,7 @@ def list_my_assignments(
             db.query(Submission)
             .filter(
                 Submission.assignment_id == a.id,
-                Submission.org_id == user.org_id,
+                Submission.submitted_by == str(user.id),
             )
             .first()
         ) is not None
@@ -102,7 +110,7 @@ def download_template(
 
     a = db.query(TemplateAssignment).filter(
         TemplateAssignment.id == assignment_id,
-        TemplateAssignment.org_id == user.org_id,
+        _assignment_filter(user),
     ).first()
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -120,7 +128,6 @@ def download_template(
     schema = ver.schema_json if isinstance(ver.schema_json, dict) else json.loads(ver.schema_json)
     columns = [col.get("name", col) for col in schema.get("columns", [])]
     if not columns:
-        # Fallback: use schema keys if no columns array
         columns = list(schema.keys()) if isinstance(schema, dict) else []
 
     wb = openpyxl.Workbook()
@@ -133,7 +140,6 @@ def download_template(
     wb.save(tmp.name)
     tmp.close()
 
-    # Derive a friendly filename from template name
     tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
     safe_name = (tmpl.name.replace(" ", "_") if tmpl else "template") + ".xlsx"
 
@@ -164,7 +170,7 @@ async def submit_file(
 
     a = db.query(TemplateAssignment).filter(
         TemplateAssignment.id == assignment_id,
-        TemplateAssignment.org_id == user.org_id,
+        _assignment_filter(user),
     ).first()
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
@@ -191,7 +197,7 @@ async def submit_file(
 
     existing = db.query(Submission).filter(
         Submission.assignment_id == assignment_id,
-        Submission.org_id == user.org_id,
+        Submission.submitted_by == str(user.id),
     ).first()
 
     if existing:
@@ -224,13 +230,10 @@ def list_my_submissions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all submissions made by this org, newest first."""
-    if not user.org_id:
-        raise HTTPException(status_code=400, detail="User has no org_id assigned")
-
+    """Return all submissions made by this user, newest first."""
     return (
         db.query(Submission)
-        .filter(Submission.org_id == user.org_id)
+        .filter(Submission.submitted_by == str(user.id))
         .order_by(Submission.submitted_at.desc())
         .all()
     )

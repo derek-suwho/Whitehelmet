@@ -20,3 +20,4 @@ class TemplateAssignment(Base):
     upload_token = Column(String(255), nullable=True, unique=True)
     upload_token_expires_at = Column(DateTime, nullable=True)
     assigned_at = Column(DateTime, server_default=func.now(), nullable=False)
+    assigned_to_user_id = Column(String(36), nullable=True, index=True)
