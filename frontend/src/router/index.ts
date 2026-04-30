@@ -103,6 +103,11 @@ const router = createRouter({
           name: 'admin-freeform-uploads',
           component: () => import('@/views/admin/FreeformUploadsView.vue'),
         },
+        {
+          path: 'master-template',
+          name: 'admin-master-template',
+          component: () => import('@/views/admin/AdminMasterTemplateView.vue'),
+        },
       ],
     },
     // ===== END GROUP 2 ROUTES =====

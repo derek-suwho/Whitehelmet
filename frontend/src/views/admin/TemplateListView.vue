@@ -19,9 +19,13 @@ const createError = ref('')
 
 onMounted(() => templatesStore.fetchTemplates())
 
+const subcontractorTemplates = computed(() =>
+  templatesStore.templates.filter(t => t.template_type !== 'master')
+)
+
 const filtered = computed(() => {
-  if (activeFilter.value === 'all') return templatesStore.templates
-  return templatesStore.templates.filter((t) => t.status === activeFilter.value)
+  if (activeFilter.value === 'all') return subcontractorTemplates.value
+  return subcontractorTemplates.value.filter((t) => t.status === activeFilter.value)
 })
 
 function formatDate(d: string) {

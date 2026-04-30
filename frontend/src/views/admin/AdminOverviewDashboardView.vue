@@ -19,13 +19,17 @@ onMounted(async () => {
   loading.value = false
 })
 
-const activeCount = computed(() => templatesStore.templates.filter(t => t.status === 'active').length)
-const draftCount = computed(() => templatesStore.templates.filter(t => t.status === 'draft').length)
+const subTemplates = computed(() => templatesStore.templates.filter(t => t.template_type !== 'master'))
+const masterTemplate = computed(() => templatesStore.templates.find(t => t.template_type === 'master' && t.status === 'active')
+  ?? templatesStore.templates.find(t => t.template_type === 'master'))
+
+const activeCount = computed(() => subTemplates.value.filter(t => t.status === 'active').length)
+const draftCount = computed(() => subTemplates.value.filter(t => t.status === 'draft').length)
 const projectCount = computed(() => adminStore.projects.length)
 const userCount = computed(() => adminStore.users.length)
 
 const recentTemplates = computed(() =>
-  [...templatesStore.templates]
+  [...subTemplates.value]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, 6)
 )
@@ -82,13 +86,19 @@ const quickActions = [
 
     <!-- Stat cards -->
     <div v-else class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <!-- Master Template card — links to master template page -->
+      <RouterLink
+        to="/admin/master-template"
+        class="rounded-xl border bg-white p-5 transition-shadow hover:shadow-sm"
+        :class="masterTemplate ? 'border-amber-300 bg-amber-50' : 'border-dashed border-gray-300'"
+      >
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Master Template</p>
+        <p v-if="masterTemplate" class="mt-2 text-sm font-semibold text-amber-700 truncate">{{ masterTemplate.name }}</p>
+        <p v-else class="mt-2 text-sm text-gray-400 italic">Not set — click to create</p>
+      </RouterLink>
       <div class="rounded-xl border border-gray-200 bg-white p-5">
-        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Templates</p>
+        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Active Sub-Templates</p>
         <p class="mt-2 text-3xl font-bold text-gray-900">{{ activeCount }}</p>
-      </div>
-      <div class="rounded-xl border border-gray-200 bg-white p-5">
-        <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Draft Templates</p>
-        <p class="mt-2 text-3xl font-bold text-gray-900">{{ draftCount }}</p>
       </div>
       <div class="rounded-xl border border-gray-200 bg-white p-5">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Projects</p>

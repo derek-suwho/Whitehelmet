@@ -20,11 +20,21 @@ export const useTemplatesStore = defineStore('templates', () => {
     currentVersion.value = versions.value[0] ?? null
   }
 
-  async function createTemplate(name: string, description: string): Promise<Template> {
-    const tmpl = await api.post<Template>('/api/templates', { name, description })
+  async function createTemplate(name: string, description: string, templateType = 'subcontractor'): Promise<Template> {
+    const tmpl = await api.post<Template>('/api/templates', { name, description, template_type: templateType })
     templates.value.unshift(tmpl)
     currentTemplate.value = tmpl
     return tmpl
+  }
+
+  async function fetchMasterTemplates(): Promise<Template[]> {
+    return api.get<Template[]>('/api/templates/master')
+  }
+
+  async function setTemplateType(templateId: string, templateType: 'subcontractor' | 'master'): Promise<Template> {
+    const updated = await api.patch<Template>(`/api/templates/${templateId}`, { template_type: templateType })
+    _syncTemplate(updated)
+    return updated
   }
 
   async function saveVersion(templateId: string, schemaJson: SchemaJson): Promise<TemplateVersion> {
@@ -72,5 +82,6 @@ export const useTemplatesStore = defineStore('templates', () => {
     templates, currentTemplate, currentVersion, versions, consolidatedSheets,
     fetchTemplates, fetchTemplate, createTemplate, updateTemplate, saveVersion,
     publishTemplate, deprecateTemplate, fetchConsolidatedSheets, getDownloadUrl,
+    fetchMasterTemplates, setTemplateType,
   }
 })

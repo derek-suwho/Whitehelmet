@@ -10,6 +10,7 @@ from pydantic import BaseModel
 class TemplateCreate(BaseModel):
     name: str
     description: Optional[str] = None
+    template_type: str = "subcontractor"
 
 
 class TemplateResponse(BaseModel):
@@ -18,6 +19,7 @@ class TemplateResponse(BaseModel):
     description: Optional[str]
     created_by: Optional[str]
     status: str
+    template_type: str = "subcontractor"
     created_at: datetime
     updated_at: datetime
 

@@ -44,6 +44,7 @@ export interface Template {
   description: string | null
   created_by: string | null
   status: 'draft' | 'active' | 'deprecated'
+  template_type: 'subcontractor' | 'master'
   created_at: string
   updated_at: string
 }

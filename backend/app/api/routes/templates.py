@@ -2,7 +2,8 @@
 import uuid
 import json
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Optional
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.orm import Session
 
@@ -26,8 +27,25 @@ router = APIRouter(
 
 
 @router.get("", response_model=list[TemplateResponse])
-def list_templates(db: Session = Depends(get_db)):
-    return db.query(Template).order_by(Template.updated_at.desc()).all()
+def list_templates(
+    type: Optional[str] = Query(None, alias="type"),
+    db: Session = Depends(get_db),
+):
+    q = db.query(Template)
+    if type:
+        q = q.filter(Template.template_type == type)
+    return q.order_by(Template.updated_at.desc()).all()
+
+
+@router.get("/master", response_model=list[TemplateResponse])
+def list_master_templates(db: Session = Depends(get_db)):
+    """Return all master templates, newest first."""
+    return (
+        db.query(Template)
+        .filter(Template.template_type == "master")
+        .order_by(Template.updated_at.desc())
+        .all()
+    )
 
 
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED,
@@ -40,6 +58,7 @@ def create_template(body: TemplateCreate, user: User = Depends(get_current_user)
         description=body.description,
         created_by=str(user.id),
         status="draft",
+        template_type=body.template_type,
     )
     db.add(tmpl)
     db.commit()
@@ -64,6 +83,8 @@ def update_template(template_id: str, body: dict, db: Session = Depends(get_db))
         tmpl.name = body["name"]
     if "description" in body:
         tmpl.description = body["description"]
+    if "template_type" in body and body["template_type"] in ("subcontractor", "master"):
+        tmpl.template_type = body["template_type"]
     db.commit()
     db.refresh(tmpl)
     return tmpl
