@@ -15,6 +15,27 @@ const newName = ref('')
 const newDesc = ref('')
 const creating = ref(false)
 const createError = ref('')
+const editingId = ref<string | null>(null)
+const editingName = ref('')
+
+function startRename(t: { id: string; name: string }, e: MouseEvent) {
+  e.stopPropagation()
+  editingId.value = t.id
+  editingName.value = t.name
+}
+
+async function commitRename(t: { id: string; name: string }) {
+  const name = editingName.value.trim()
+  if (name && name !== t.name) {
+    await templatesStore.updateTemplate(t.id, name)
+    await templatesStore.fetchTemplates()
+  }
+  editingId.value = null
+}
+
+function cancelRename() {
+  editingId.value = null
+}
 
 onMounted(async () => {
   await templatesStore.fetchTemplates()
@@ -122,12 +143,26 @@ function formatDate(d: string) {
         @click="router.push(`/admin/templates/${t.id}/edit`)"
       >
         <div>
-          <div class="flex items-center gap-2 mb-1">
+          <div class="flex items-center gap-2 mb-1" @click.stop>
             <!-- Crown icon for master -->
             <svg class="h-4 w-4 text-amber-500 shrink-0" viewBox="0 0 20 20" fill="currentColor">
               <path d="M2 5l4 4 4-7 4 7 4-4-2 9H4L2 5z"/>
             </svg>
-            <span class="font-medium text-gray-800">{{ t.name }}</span>
+            <input
+              v-if="editingId === t.id"
+              v-model="editingName"
+              class="font-medium text-gray-800 border border-amber-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 w-56"
+              @blur="commitRename(t)"
+              @keydown.enter="commitRename(t)"
+              @keydown.escape="cancelRename"
+              autofocus
+            />
+            <span
+              v-else
+              class="font-medium text-gray-800 hover:text-amber-600 transition-colors cursor-text"
+              title="Click to rename"
+              @click="startRename(t, $event)"
+            >{{ t.name }}</span>
             <TemplateStatusBadge :status="t.status" />
           </div>
           <p v-if="t.description" class="text-xs text-gray-400 ml-6">{{ t.description }}</p>

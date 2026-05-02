@@ -82,6 +82,7 @@ async function publish() {
       router.replace(`/admin/templates/${t.id}/edit`)
       flashSuccess('Template published')
     } else {
+      await templatesStore.updateTemplate(templateId.value!, templateName.value || 'Untitled Template')
       await templatesStore.saveVersion(templateId.value!, { columns: columns.value })
       await templatesStore.publishTemplate(templateId.value!)
       flashSuccess('Template published')

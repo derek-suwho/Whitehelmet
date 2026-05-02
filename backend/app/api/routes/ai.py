@@ -6,8 +6,10 @@ OPENROUTER_API_KEY + OpenRouter otherwise. Set either key in .env.
 
 import io
 import json
+import re
 import uuid
 import openpyxl
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -16,6 +18,7 @@ import httpx
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
+from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
 from app.models.user import User
@@ -600,31 +603,79 @@ async def template_generate(body: dict):
 
 
 @router.post("/finetune")
-async def finetune_consolidated(body: dict):
+async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     """Apply a natural-language change to a consolidated sheet (by ID)."""
     consolidated_sheet_id = body.get("consolidated_sheet_id")
     prompt = body.get("prompt", "")
     if not consolidated_sheet_id:
         raise HTTPException(status_code=422, detail="consolidated_sheet_id required")
 
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == consolidated_sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Consolidated sheet not found")
+    path = Path(sheet.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Read current sheet data
+    wb = openpyxl.load_workbook(path, data_only=True)
+    ws = wb.active
+    all_rows = [r for r in ws.iter_rows(values_only=True) if any(c is not None for c in r)]
+    if not all_rows:
+        raise HTTPException(status_code=400, detail="Sheet has no data")
+
+    headers = [str(c) if c is not None else "" for c in all_rows[0]]
+    data_rows = [list(row) for row in all_rows[1:]]
+    sheet_title = ws.title
+
     system = (
-        "You are a spreadsheet assistant. The user wants to modify a consolidated master sheet. "
-        "Acknowledge the change and describe what you would do. "
-        "Return JSON: {\"message\": \"<description of change applied>\"}"
+        "You are a spreadsheet transformation assistant. You receive the current state of a "
+        "spreadsheet (as JSON with 'headers' and 'data' arrays) and a user instruction. "
+        "Apply the instruction and return the COMPLETE modified spreadsheet as JSON:\n"
+        '{"headers": [...], "data": [[...], ...], "message": "<brief description>"}\n'
+        "Rules:\n"
+        "- Return ALL rows, including unchanged ones\n"
+        "- For computed columns: calculate each cell value from existing row data as a plain number\n"
+        "- Return ONLY the JSON object, no markdown fences or extra text"
     )
-    data = await _ai_post({
+
+    ai_data = await _ai_post({
         "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 256,
+        "max_tokens": 8192,
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": json.dumps({
+                "headers": headers,
+                "data": data_rows,
+                "instruction": prompt,
+            })},
         ],
     })
-    content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+
+    content = ai_data.get("choices", [{}])[0].get("message", {}).get("content", "")
     try:
-        return json.loads(content.strip())
+        result = json.loads(content.strip())
     except json.JSONDecodeError:
-        return {"message": content}
+        match = re.search(r'\{.*\}', content, re.DOTALL)
+        if match:
+            result = json.loads(match.group())
+        else:
+            raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {content[:200]}")
+
+    new_headers = result.get("headers", headers)
+    new_data = result.get("data", data_rows)
+    message = result.get("message", "Changes applied.")
+
+    # Write modified data back to the same file
+    new_wb = openpyxl.Workbook()
+    new_ws = new_wb.active
+    new_ws.title = sheet_title
+    new_ws.append(new_headers)
+    for row in new_data:
+        new_ws.append([v for v in row])
+    new_wb.save(path)
+
+    return {"message": message}
 
 
 class FormulaRequest(BaseModel):

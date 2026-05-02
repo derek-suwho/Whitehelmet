@@ -18,6 +18,7 @@ from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.submission import Submission
+from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_version import TemplateVersion
 from app.models.user import User
@@ -88,46 +89,59 @@ def get_consolidation_progress(
 
         org_rows: list[OrgSubmissionStatus] = []
         submitted_count = 0
+        member_count = 0
 
         for m in members:
             user = db.query(User).filter(User.id == m.user_id).first()
             if not user:
                 continue
+            member_count += 1
 
-            sub = None
+            subs = []
             if assignment_ids:
-                sub = (
+                subs = (
                     db.query(Submission)
                     .filter(
                         Submission.assignment_id.in_(assignment_ids),
                         Submission.submitted_by == str(user.id),
                     )
                     .order_by(Submission.submitted_at.desc())
-                    .first()
+                    .all()
                 )
 
-            status_val = "submitted" if sub else "pending"
-            if sub:
+            if subs:
                 submitted_count += 1
-
-            org_rows.append(
-                OrgSubmissionStatus(
-                    org_id=str(user.id),
-                    org_name=user.display_name,
-                    assignment_id=sub.assignment_id if sub else None,
-                    assignment_status=status_val,
-                    submission_id=sub.id if sub else None,
-                    submitted_at=sub.submitted_at if sub else None,
-                    file_name=sub.file_name if sub else None,
+                for sub in subs:
+                    org_rows.append(
+                        OrgSubmissionStatus(
+                            org_id=str(user.id),
+                            org_name=user.display_name,
+                            assignment_id=sub.assignment_id,
+                            assignment_status="submitted",
+                            submission_id=sub.id,
+                            submitted_at=sub.submitted_at,
+                            file_name=sub.file_name,
+                        )
+                    )
+            else:
+                org_rows.append(
+                    OrgSubmissionStatus(
+                        org_id=str(user.id),
+                        org_name=user.display_name,
+                        assignment_id=None,
+                        assignment_status="pending",
+                        submission_id=None,
+                        submitted_at=None,
+                        file_name=None,
+                    )
                 )
-            )
 
         return ConsolidationProgressResponse(
             template_id=template_id,
             template_version_id=None,
-            total_orgs=len(org_rows),
+            total_orgs=member_count,
             submitted_count=submitted_count,
-            all_submitted=submitted_count == len(org_rows) and len(org_rows) > 0,
+            all_submitted=submitted_count == member_count and member_count > 0,
             orgs=org_rows,
         )
 
@@ -200,6 +214,87 @@ def get_consolidation_progress(
         all_submitted=submitted_count == len(assignments) and len(assignments) > 0,
         orgs=org_rows,
     )
+
+
+@router.get(
+    "/projects/{project_id}/submission-overview",
+    dependencies=[Depends(require_pif_admin)],
+)
+def get_project_submission_overview(project_id: str, db: Session = Depends(get_db)):
+    """Return cross-template submission counts for a project.
+
+    Overall: total expected (members × templates) and total received.
+    Per-template: submitted_count and total_members for each template assigned to the project.
+    """
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
+    member_users = [
+        db.query(User).filter(User.id == m.user_id).first() for m in members
+    ]
+    member_users = [u for u in member_users if u]
+    total_members = len(member_users)
+
+    # All template version assignments for this project (project-wide org_id assignments)
+    project_assignments = (
+        db.query(TemplateAssignment)
+        .filter(TemplateAssignment.org_id == project_id)
+        .all()
+    )
+
+    # Resolve unique templates via template_version → template
+    seen_template_ids: set[str] = set()
+    templates_progress = []
+
+    for assignment in project_assignments:
+        if not assignment.template_version_id:
+            continue
+        version = db.query(TemplateVersion).filter(
+            TemplateVersion.id == assignment.template_version_id
+        ).first()
+        if not version:
+            continue
+        template = db.query(Template).filter(Template.id == version.template_id).first()
+        if not template or template.id in seen_template_ids:
+            continue
+        seen_template_ids.add(template.id)
+
+        # All assignment IDs for this template in this project
+        t_assignment_ids = [
+            a.id for a in db.query(TemplateAssignment).filter(
+                TemplateAssignment.org_id == project_id,
+                TemplateAssignment.template_version_id == version.id,
+            ).all()
+        ]
+
+        submitted_count = sum(
+            1 for u in member_users
+            if db.query(Submission).filter(
+                Submission.assignment_id.in_(t_assignment_ids),
+                Submission.submitted_by == str(u.id),
+            ).first()
+        )
+
+        templates_progress.append({
+            "template_id": template.id,
+            "template_name": template.name,
+            "total_members": total_members,
+            "submitted_count": submitted_count,
+            "all_submitted": submitted_count == total_members and total_members > 0,
+        })
+
+    total_expected = total_members * len(templates_progress)
+    total_submitted = sum(t["submitted_count"] for t in templates_progress)
+
+    return {
+        "total_members": total_members,
+        "total_expected": total_expected,
+        "total_submitted": total_submitted,
+        "all_submitted": total_submitted == total_expected and total_expected > 0,
+        "templates": templates_progress,
+    }
 
 
 @router.post(

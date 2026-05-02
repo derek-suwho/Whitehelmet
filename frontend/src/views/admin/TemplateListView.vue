@@ -16,6 +16,26 @@ const newName = ref('')
 const newDesc = ref('')
 const creating = ref(false)
 const createError = ref('')
+const editingId = ref<string | null>(null)
+const editingName = ref('')
+
+function startRename(t: Template, e: MouseEvent) {
+  e.stopPropagation()
+  editingId.value = t.id
+  editingName.value = t.name
+}
+
+async function commitRename(t: Template) {
+  const name = editingName.value.trim()
+  if (name && name !== t.name) {
+    await templatesStore.updateTemplate(t.id, name)
+  }
+  editingId.value = null
+}
+
+function cancelRename() {
+  editingId.value = null
+}
 
 onMounted(() => templatesStore.fetchTemplates())
 
@@ -136,8 +156,22 @@ function onImportCreated(templateId: string) {
         @click="router.push(`/admin/templates/${template.id}/edit`)"
       >
         <div>
-          <div class="flex items-center gap-2 mb-1">
-            <span class="font-medium text-gray-800 hover:text-blue-600 transition-colors">{{ template.name }}</span>
+          <div class="flex items-center gap-2 mb-1" @click.stop>
+            <input
+              v-if="editingId === template.id"
+              v-model="editingName"
+              class="font-medium text-gray-800 border border-blue-400 rounded px-1.5 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
+              @blur="commitRename(template)"
+              @keydown.enter="commitRename(template)"
+              @keydown.escape="cancelRename"
+              autofocus
+            />
+            <span
+              v-else
+              class="font-medium text-gray-800 hover:text-blue-600 transition-colors cursor-text"
+              :title="'Click to rename'"
+              @click="startRename(template, $event)"
+            >{{ template.name }}</span>
             <TemplateStatusBadge :status="template.status" />
           </div>
           <div class="text-xs text-gray-400">Updated {{ formatDate(template.updated_at) }}</div>

@@ -165,6 +165,7 @@ watch(
     }
     void hydrateWorkbook(wb)
   },
+  { flush: 'post' },
 )
 onMounted(() => {
   wireKeyboardShortcuts()

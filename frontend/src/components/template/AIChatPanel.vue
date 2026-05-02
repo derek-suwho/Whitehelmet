@@ -23,6 +23,7 @@ function storageKey() {
 }
 
 function loadMessages(): Message[] {
+  if (props.mode === 'consolidation-finetune') return []
   try {
     const raw = localStorage.getItem(storageKey())
     if (raw) return JSON.parse(raw) as Message[]
@@ -31,6 +32,7 @@ function loadMessages(): Message[] {
 }
 
 function saveMessages(msgs: Message[]) {
+  if (props.mode === 'consolidation-finetune') return
   const trimmed = msgs.slice(-MAX_MESSAGES)
   try { localStorage.setItem(storageKey(), JSON.stringify(trimmed)) } catch {}
 }

@@ -1,18 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import * as XLSX from 'xlsx'
+import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { useTemplatesStore } from '@/stores/templates'
-import { useSpreadsheetStore } from '@/stores/spreadsheet'
-import AIChatPanel from '@/components/template/AIChatPanel.vue'
 import ConsolidationStatusModal from './modals/ConsolidationStatusModal.vue'
-import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import SubmissionTracker from '@/components/admin/SubmissionTracker.vue'
 
 const route = useRoute()
+const router = useRouter()
 const templatesStore = useTemplatesStore()
-const spreadsheetStore = useSpreadsheetStore()
 
 interface OrgStatus {
   org_id: string
@@ -33,11 +29,28 @@ interface ProgressData {
   orgs: OrgStatus[]
 }
 
+interface TemplateOverview {
+  template_id: string
+  template_name: string
+  total_members: number
+  submitted_count: number
+  all_submitted: boolean
+}
+
+interface ProjectOverview {
+  total_members: number
+  total_expected: number
+  total_submitted: number
+  all_submitted: boolean
+  templates: TemplateOverview[]
+}
+
 const templateId = route.params.templateId as string
 const projectId = route.query.project_id as string | undefined
 
 const allSubmitted = ref(false)
 const progressData = ref<ProgressData | null>(null)
+const projectOverview = ref<ProjectOverview | null>(null)
 const selectedSubmissionIds = ref<string[]>([])
 const consolidating = ref(false)
 const consolidationResult = ref<{
@@ -48,8 +61,6 @@ const consolidationResult = ref<{
 } | null>(null)
 const consolidationError = ref('')
 const showStatusModal = ref(false)
-const consolidatedSheetId = ref('')
-const loadingPreview = ref(false)
 
 const canConsolidate = computed(() => {
   if (consolidating.value) return false
@@ -66,9 +77,15 @@ const consolidateLabel = computed(() => {
   return 'Consolidate All'
 })
 
+const overallPct = computed(() => {
+  if (!projectOverview.value || projectOverview.value.total_expected === 0) return 0
+  return Math.round((projectOverview.value.total_submitted / projectOverview.value.total_expected) * 100)
+})
+
 onMounted(() => {
   templatesStore.fetchTemplate(templateId)
   fetchProgress()
+  if (projectId) fetchProjectOverview()
 })
 
 async function fetchProgress() {
@@ -81,21 +98,15 @@ async function fetchProgress() {
   } catch { /* non-fatal */ }
 }
 
-function onAllSubmitted() { allSubmitted.value = true }
-
-async function loadPreview(sheetId: string) {
-  loadingPreview.value = true
+async function fetchProjectOverview() {
   try {
-    const url = await templatesStore.getDownloadUrl(sheetId)
-    const resp = await fetch(url, { credentials: 'include' })
-    if (!resp.ok) throw new Error('Failed to load sheet')
-    const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' })
-    spreadsheetStore.loadWorkbook(wb, 'master.xlsx', buffer)
-  } finally {
-    loadingPreview.value = false
-  }
+    projectOverview.value = await api.get<ProjectOverview>(
+      `/api/admin/projects/${projectId}/submission-overview`
+    )
+  } catch { /* non-fatal */ }
 }
+
+function onAllSubmitted() { allSubmitted.value = true }
 
 async function consolidate() {
   consolidating.value = true
@@ -106,12 +117,10 @@ async function consolidate() {
     let submissionIds: string[] | null = null
 
     if (projectId) {
-      // Project-scoped: respect checkbox selection, null = all submitted
       submissionIds = selectedSubmissionIds.value.length > 0
         ? selectedSubmissionIds.value
         : null
     } else {
-      // Assignment-based: collect submission IDs from progress rows
       const ids = (progressData.value?.orgs ?? [])
         .map(o => o.submission_id)
         .filter((id): id is string => id !== null)
@@ -125,10 +134,6 @@ async function consolidate() {
     )
 
     consolidationResult.value = data
-    consolidatedSheetId.value = data?.consolidated_sheet_id ?? ''
-    if (data?.consolidated_sheet_id) {
-      await loadPreview(data.consolidated_sheet_id)
-    }
   } catch (e) {
     consolidationError.value = e instanceof Error ? e.message : 'Consolidation failed'
   } finally {
@@ -136,23 +141,28 @@ async function consolidate() {
   }
 }
 
+function openMasterSheet() {
+  if (!consolidationResult.value) return
+  const sheetId = consolidationResult.value.consolidated_sheet_id
+  const query: Record<string, string> = { template_id: templateId }
+  if (projectId) query.project_id = projectId
+  if (selectedSubmissionIds.value.length > 0) {
+    query.submission_ids = selectedSubmissionIds.value.join(',')
+  }
+  router.push({ name: 'admin-master-sheet', params: { sheetId }, query })
+}
+
 async function download() {
   if (!consolidationResult.value) return
   const url = await templatesStore.getDownloadUrl(consolidationResult.value.consolidated_sheet_id)
   window.open(url, '_blank')
 }
-
-async function onFinetuneApplied() {
-  await templatesStore.fetchConsolidatedSheets(templateId)
-  const latest = templatesStore.consolidatedSheets[0]
-  if (latest) {
-    await loadPreview(latest.id)
-  }
-}
 </script>
 
 <template>
   <div class="p-6 space-y-6 overflow-y-auto flex-1 min-h-0">
+
+    <!-- Header -->
     <div class="flex items-center justify-between">
       <div>
         <RouterLink to="/admin/templates" class="text-gray-400 hover:text-gray-600 text-sm">← Templates</RouterLink>
@@ -174,7 +184,72 @@ async function onFinetuneApplied() {
       </button>
     </div>
 
-    <!-- Submission tracking -->
+    <!-- Overall cross-template progress (project scope only) -->
+    <div v-if="projectId && projectOverview" class="rounded-xl border border-gray-200 bg-white p-5 space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-semibold text-gray-700">Overall Submission Progress</span>
+        <span :class="projectOverview.all_submitted ? 'text-green-600' : 'text-gray-500'" class="text-sm font-medium">
+          {{ projectOverview.total_submitted }} / {{ projectOverview.total_expected }} submitted
+        </span>
+      </div>
+      <div class="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden">
+        <div
+          class="h-full rounded-full transition-all duration-500"
+          :class="projectOverview.all_submitted ? 'bg-green-500' : 'bg-blue-500'"
+          :style="{ width: overallPct + '%' }"
+        />
+      </div>
+      <p class="text-xs text-gray-400">
+        {{ projectOverview.total_members }} subcontractor{{ projectOverview.total_members !== 1 ? 's' : '' }}
+        × {{ projectOverview.templates.length }} template{{ projectOverview.templates.length !== 1 ? 's' : '' }}
+      </p>
+    </div>
+    <div v-else-if="projectId && !projectOverview" class="h-16 animate-pulse rounded-xl border border-gray-200 bg-white" />
+
+    <!-- Per-template breakdown -->
+    <div v-if="projectId && projectOverview && projectOverview.templates.length > 0" class="rounded-xl border border-gray-200 bg-white overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100">
+        <span class="text-sm font-semibold text-gray-700">Templates</span>
+      </div>
+      <div class="divide-y divide-gray-100">
+        <div
+          v-for="t in projectOverview.templates"
+          :key="t.template_id"
+          class="flex items-center gap-4 px-5 py-3"
+        >
+          <!-- Status icon -->
+          <div class="shrink-0">
+            <svg v-if="t.all_submitted" class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+            </svg>
+            <div v-else class="w-4 h-4 rounded-full border-2 border-gray-300" />
+          </div>
+          <!-- Name -->
+          <span
+            class="text-sm font-medium flex-1 truncate"
+            :class="t.template_id === templateId ? 'text-blue-600' : 'text-gray-700'"
+          >
+            {{ t.template_name }}
+            <span v-if="t.template_id === templateId" class="ml-1 text-xs text-blue-400 font-normal">(current)</span>
+          </span>
+          <!-- Mini bar -->
+          <div class="w-32 shrink-0">
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  class="h-full rounded-full"
+                  :class="t.all_submitted ? 'bg-green-500' : 'bg-blue-400'"
+                  :style="{ width: t.total_members > 0 ? Math.round((t.submitted_count / t.total_members) * 100) + '%' : '0%' }"
+                />
+              </div>
+              <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">{{ t.submitted_count }}/{{ t.total_members }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- This template's submissions -->
     <SubmissionTracker
       v-if="progressData"
       :progress="progressData"
@@ -184,30 +259,6 @@ async function onFinetuneApplied() {
     />
     <div v-else class="h-20 animate-pulse rounded-xl border border-gray-200 bg-white" />
 
-    <!-- Post-consolidation: preview + AI fine-tune -->
-    <div v-if="consolidationResult" class="flex gap-4 h-[500px]">
-      <div class="flex-1 border border-gray-200 rounded-xl overflow-hidden relative">
-        <div v-if="loadingPreview" class="absolute inset-0 flex items-center justify-center bg-white/80 z-10 text-sm text-gray-500">
-          Loading preview…
-        </div>
-        <SpreadsheetEditor />
-      </div>
-      <div class="w-80 shrink-0 border border-gray-200 rounded-xl overflow-hidden">
-        <AIChatPanel
-          mode="consolidation-finetune"
-          :template-id="templateId"
-          :consolidated-sheet-id="consolidatedSheetId"
-          @finetune-applied="onFinetuneApplied"
-        />
-      </div>
-    </div>
-
-    <div v-if="consolidationResult" class="flex justify-end">
-      <button
-        class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-        @click="download"
-      >Download Master Sheet</button>
-    </div>
   </div>
 
   <ConsolidationStatusModal
@@ -217,5 +268,6 @@ async function onFinetuneApplied() {
     :error="consolidationError"
     @close="showStatusModal = false"
     @download="download"
+    @open-master="openMasterSheet"
   />
 </template>

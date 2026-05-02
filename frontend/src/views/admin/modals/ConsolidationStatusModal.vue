@@ -11,7 +11,7 @@ defineProps<{
   error: string
 }>()
 
-const emit = defineEmits<{ close: []; download: [] }>()
+const emit = defineEmits<{ close: []; download: []; 'open-master': [] }>()
 </script>
 
 <template>
@@ -37,16 +37,16 @@ const emit = defineEmits<{ close: []; download: [] }>()
           </div>
           <div class="flex gap-2 mt-4 justify-center">
             <button
+              class="px-4 py-2 rounded bg-green-600 text-white text-sm font-medium hover:bg-green-700"
+              @click="$emit('open-master')"
+            >
+              Open Master Sheet
+            </button>
+            <button
               class="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700"
               @click="$emit('download')"
             >
-              Download Master Sheet
-            </button>
-            <button
-              class="px-4 py-2 rounded text-sm text-gray-600 hover:bg-gray-100"
-              @click="$emit('close')"
-            >
-              Close
+              Download
             </button>
           </div>
         </template>

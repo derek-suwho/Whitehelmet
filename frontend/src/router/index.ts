@@ -108,6 +108,11 @@ const router = createRouter({
           name: 'admin-master-template',
           component: () => import('@/views/admin/AdminMasterTemplateView.vue'),
         },
+        {
+          path: 'master-sheets/:sheetId',
+          name: 'admin-master-sheet',
+          component: () => import('@/views/admin/MasterSheetEditorView.vue'),
+        },
       ],
     },
     // ===== END GROUP 2 ROUTES =====
