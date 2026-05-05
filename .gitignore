@@ -10,6 +10,7 @@ backend/.env.*
 !PLAN.md
 !figma-components/*.md
 !docs/superpowers/plans/*.md
+!docs/superpowers/specs/*.md
 dist/
 .worktrees/
 __pycache__/
