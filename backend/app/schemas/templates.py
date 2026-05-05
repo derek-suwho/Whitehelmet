@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TemplateCreate(BaseModel):
@@ -27,18 +27,20 @@ class TemplateResponse(BaseModel):
 
 
 class TemplateVersionCreate(BaseModel):
-    schema_json: Any
+    schema_data: Any = Field(validation_alias="schema_json", serialization_alias="schema_json")
+
+    model_config = {"populate_by_name": True}
 
 
 class TemplateVersionResponse(BaseModel):
     id: str
     template_id: str
     version_number: int
-    schema_json: Any
+    schema_data: Any = Field(validation_alias="schema_json", serialization_alias="schema_json")
     created_by: Optional[str]
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class ConsolidatedSheetResponse(BaseModel):
