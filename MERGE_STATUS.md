@@ -2,9 +2,9 @@
 
 ## Branches
 - Base: `derek` → `artem` (reset)
-- Merge 1: `group2-master` — AI schema mapping, pivot reports
-- Merge 2: `ethan` — Auth system (pending user instruction)
-- Merge 3: `srijayTanay` — Formula library, Handsontable fixes (pending user instruction)
+- Merge 1: `group2-master` — AI schema mapping, pivot reports ✓
+- Merge 2: `ethan` — Auth system ✓
+- Merge 3: `srijayTanay` — Formula library, Handsontable fixes ✓
 
 ## Branch Feature Summary
 
@@ -36,20 +36,18 @@
   - Template list scrollable
 - [x] Committed and pushed to origin/artem
 
-### Phase 2 — Merge ethan (start when instructed)
-- [ ] Conflict scan complete
-- [ ] Auth routes merged (`backend/app/api/routes/auth.py`)
-- [ ] Auth store merged (`frontend/src/stores/auth.ts`)
-- [ ] Backend tests pass
-- [ ] Committed and pushed to origin/artem
+### Phase 2 — Merge ethan
+- [x] Conflict scan complete
+- [x] Auth routes merged (`backend/app/api/routes/auth.py`)
+- [x] Auth store merged (`frontend/src/stores/auth.ts`)
+- [x] Committed and pushed to origin/artem (`2a86f64`)
 
-### Phase 3 — Merge srijayTanay (start when instructed)
-- [ ] Conflict scan complete
-- [ ] Formula library merged/deduplicated vs derek's existing formula components
-- [ ] Handsontable fixes applied
-- [ ] Python 3.9 compat patches applied
-- [ ] Backend tests pass
-- [ ] Committed and pushed to origin/artem
+### Phase 3 — Merge srijayTanay
+- [x] Conflict scan complete
+- [x] Formula library merged/deduplicated vs derek's existing formula components
+- [x] Handsontable fixes applied
+- [x] Python 3.9 compat patches applied
+- [x] Committed and pushed to origin/artem (`7ccedba`)
 
 ### Phase 4 — Fresh-clone verification (after all merges complete)
 - [ ] `backend/.env.example` has ALL required environment variables
@@ -72,7 +70,10 @@
 - CSS strategy: concatenate additions from both sides
 
 ### Phase 2 (ethan) decisions
-<!-- Fill in when merging ethan -->
+- Merged template sheet preview, dark inputs, admin layout fixes
+- Auth store and routes integrated; Keycloak wiring deferred to production config
 
 ### Phase 3 (srijayTanay) decisions
-<!-- Fill in when merging srijayTanay -->
+- Formula library deduplicated against derek's existing formula components
+- AI provider fallback included
+- Python 3.9 compatibility patches applied
