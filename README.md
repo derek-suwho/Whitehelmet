@@ -72,58 +72,51 @@ All `/api/*` routes except `/api/auth/login` and `/health` require a valid sessi
 
 AI keys (`ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`) live server-side only — never exposed to the frontend.
 
-## Prerequisites
+## Quick Start
 
-- Python 3.11+
-- Node.js 18+
-- MySQL 8 (or Docker)
-- Redis (for rate limiting)
-- OpenRouter or Anthropic API key
+### Option A — docker-compose (recommended for fresh setup)
 
-## Local dev — production stack
+No local Python or Node required. Brings up frontend, backend, and MySQL. Migrations run automatically.
 
 ```bash
-# Backend
-cd backend
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in DB creds, API keys, session/csrf secrets
-alembic upgrade head
-uvicorn app.main:app --reload --port 8000
+cp backend/.env.example backend/.env
+# Edit backend/.env — fill in ANTHROPIC_API_KEY or OPENROUTER_API_KEY
+# All other defaults work for local docker-compose
 
-# Frontend (separate shell)
-cd frontend
-npm install
-npm run dev            # http://localhost:5173
-```
-
-Backend reads config from `backend/.env`. Required vars:
-
-```
-ENVIRONMENT=dev
-DEBUG=true
-DB_HOST=localhost
-DB_PORT=3306
-DB_NAME=whitehelmet
-DB_USER=whitehelmet
-DB_PASSWORD=...
-ANTHROPIC_API_KEY=...
-OPENROUTER_API_KEY=...
-SESSION_SECRET=...
-CSRF_SECRET=...
-CORS_ORIGINS=["http://localhost:5173"]
-```
-
-## Local dev — docker-compose
-
-Brings up frontend (nginx), backend, and MySQL together:
-
-```bash
 cd deploy/docker
 docker compose up --build
 ```
 
-Frontend on `:80`, backend on `:8000`, MySQL on `:3306`.
+- Frontend: http://localhost
+- Backend: http://localhost:8000
+
+### Option B — local dev (hot reload)
+
+Requires Python 3.11+, Node 18+, and a MySQL 8 instance.
+
+```bash
+cp backend/.env.example backend/.env
+# Edit backend/.env — set DATABASE_URL to your MySQL instance, fill in API keys
+
+./dev.sh
+```
+
+- Backend: http://localhost:8000 (uvicorn --reload)
+- Frontend: http://localhost:5173 (Vite, hot reload)
+
+`dev.sh` auto-creates the Python venv, installs npm deps, and runs `alembic upgrade head` on first run.
+
+### Required env vars
+
+| Var | Description |
+|-----|-------------|
+| `DATABASE_URL` | MySQL connection string (e.g. `mysql+pymysql://user:pass@localhost:3306/whitehelmet`) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (or use OpenRouter) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (optional alternative to Anthropic) |
+| `SESSION_SECRET` | Random 64-char string |
+| `CSRF_SECRET` | Different random 64-char string |
+
+All vars documented in `backend/.env.example`.
 
 ## Kubernetes
 

@@ -49,14 +49,16 @@
 - [x] Python 3.9 compat patches applied
 - [x] Committed and pushed to origin/artem (`7ccedba`)
 
-### Phase 4 — Fresh-clone verification (after all merges complete)
-- [ ] `backend/.env.example` has ALL required environment variables
-- [ ] `backend/requirements.txt` is pinned and complete
-- [ ] `frontend/package.json` has all dependencies
-- [ ] `alembic upgrade head` succeeds on a clean empty database
-- [ ] `./dev.sh` starts both services without manual steps
-- [ ] README documents full setup flow
-- [ ] Full smoke test passed on clean environment
+### Phase 4 — Fresh-clone verification
+- [x] `backend/.env.example` has ALL required environment variables
+- [x] `backend/requirements.txt` is pinned and complete
+- [x] `frontend/package.json` has all dependencies
+- [x] `alembic upgrade head` succeeds on a clean MySQL database
+- [x] `./dev.sh` fixed — npm install, alembic migrations, Vite frontend (was broken: called missing `serve.mjs`)
+- [x] `deploy/docker/backend.Dockerfile` — added `entrypoint.sh` to run alembic before uvicorn
+- [x] README rewritten — documents docker-compose and dev.sh paths clearly
+- [x] Smoke test: health endpoint returns `{"status":"ok"}`, alembic runs clean
+- [x] Note: 2 non-critical Pydantic warnings (`schema_json` field name shadow) — do not affect runtime
 
 ---
 

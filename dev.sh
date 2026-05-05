@@ -1,5 +1,5 @@
 #!/bin/bash
-# Whitehelmet dev: FastAPI backend (:8000) + serve.mjs proxy/static (:3000)
+# Whitehelmet dev: FastAPI backend (:8000) + Vite frontend (:5173)
 # Usage: ./dev.sh
 
 set -e
@@ -15,9 +15,20 @@ fi
 
 # Bootstrap backend .env
 if [ ! -f backend/.env ]; then
-  echo "→ Created backend/.env from template. Set OPENROUTER_API_KEY before using AI features."
   cp backend/.env.example backend/.env
+  echo "→ Created backend/.env from template. Fill in DATABASE_URL and API keys before continuing."
+  exit 1
 fi
+
+# Bootstrap frontend deps
+if [ ! -d frontend/node_modules ]; then
+  echo "→ Installing frontend npm dependencies..."
+  (cd frontend && npm install --silent)
+fi
+
+# Run DB migrations
+echo "→ Running alembic migrations..."
+(cd backend && PYTHONPATH=. .venv/bin/alembic upgrade head)
 
 # Clean up background processes on exit
 trap 'kill $(jobs -p) 2>/dev/null' EXIT INT TERM
@@ -25,8 +36,7 @@ trap 'kill $(jobs -p) 2>/dev/null' EXIT INT TERM
 echo "→ Starting FastAPI on http://localhost:8000"
 (cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000) &
 
-# Give uvicorn a moment to bind before serve.mjs starts forwarding
 sleep 1
 
-echo "→ Starting frontend proxy on http://localhost:3000"
-node serve.mjs
+echo "→ Starting Vite frontend on http://localhost:5173"
+(cd frontend && npm run dev)
