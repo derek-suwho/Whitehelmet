@@ -17,3 +17,4 @@ class Submission(Base):
     status = Column(String(10), nullable=False, default="submitted")  # submitted | locked
     submitted_at = Column(DateTime, server_default=func.now(), nullable=False)
     submitted_by = Column(String(36), nullable=True)
+    processed_file_path = Column(String(500), nullable=True)
