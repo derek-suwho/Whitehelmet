@@ -4,10 +4,12 @@ import io
 import json
 import openpyxl
 import uuid as _uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -20,10 +22,14 @@ from app.models.project_member import ProjectMember
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
+from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
 from app.models.user import User
 from app.schemas.admin import UserWithOrgResponse, UpdateRoleRequest
 from app.schemas.subcontractor import ConsolidationProgressResponse, OrgSubmissionStatus
+from app.schemas.template_formula import (
+    TemplateFormulaCreate, TemplateFormulaUpdate, TemplateFormulaResponse,
+)
 
 router = APIRouter(
     prefix="/api/admin",
@@ -534,3 +540,130 @@ async def consolidate_submissions(
         "template_count": len(all_file_data),
         "freeform_count": 0,
     }
+
+
+# ── Assignment Lock / Unlock ─────────────────────────────────────────────────
+
+class AssignmentLockResponse(BaseModel):
+    id: str
+    status: str
+    locked_at: Optional[datetime] = None
+    locked_by: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
+def lock_assignment(
+    assignment_id: str,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    """Lock a submission — no further uploads accepted from the DevCo."""
+    a = db.query(TemplateAssignment).filter(TemplateAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if a.status == "locked":
+        raise HTTPException(status_code=409, detail="Assignment already locked")
+    a.status = "locked"
+    a.locked_at = datetime.utcnow()
+    a.locked_by = str(user.id)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+@router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
+def unlock_assignment(
+    assignment_id: str,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    """Unlock a submission — allows DevCo to resubmit."""
+    a = db.query(TemplateAssignment).filter(TemplateAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    a.status = "submitted"
+    a.locked_at = None
+    a.locked_by = None
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+# ── Template Formula CRUD ────────────────────────────────────────────────────
+
+@router.get(
+    "/template-versions/{version_id}/formulas",
+    response_model=list[TemplateFormulaResponse],
+)
+def list_formulas(
+    version_id: str,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    return db.query(TemplateFormula).filter(
+        TemplateFormula.template_version_id == version_id
+    ).all()
+
+
+@router.post(
+    "/template-versions/{version_id}/formulas",
+    response_model=TemplateFormulaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_formula(
+    version_id: str,
+    body: TemplateFormulaCreate,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    import uuid as _u
+    f = TemplateFormula(
+        id=str(_u.uuid4()),
+        template_version_id=version_id,
+        name=body.name,
+        target_column=body.target_column,
+        formula_type=body.formula_type,
+        expression=body.expression,
+        weight=body.weight,
+        benchmark=body.benchmark,
+        scoring_rules=json.dumps(body.scoring_rules) if body.scoring_rules is not None else None,
+        created_by=str(user.id),
+    )
+    db.add(f)
+    db.commit()
+    db.refresh(f)
+    return f
+
+
+@router.put("/formulas/{formula_id}", response_model=TemplateFormulaResponse)
+def update_formula(
+    formula_id: str,
+    body: TemplateFormulaUpdate,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Formula not found")
+    for field, val in body.model_dump(exclude_unset=True).items():
+        if field == "scoring_rules" and val is not None:
+            val = json.dumps(val)
+        setattr(f, field, val)
+    db.commit()
+    db.refresh(f)
+    return f
+
+
+@router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_formula(
+    formula_id: str,
+    user: User = Depends(require_pif_admin),
+    db: Session = Depends(get_db),
+):
+    f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Formula not found")
+    db.delete(f)
+    db.commit()
