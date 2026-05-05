@@ -401,7 +401,7 @@ async def consolidate_submissions(
     file_schemas = []
     all_file_data = []
     for sub in submissions:
-        path = Path(sub.file_path)
+        path = Path(sub.processed_file_path or sub.file_path)
         if not path.exists():
             continue
         try:

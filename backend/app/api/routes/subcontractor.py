@@ -20,9 +20,11 @@ from app.db.session import get_db
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
+from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
 from app.models.user import User
 from app.schemas.subcontractor import AssignmentForSubcontractor, SubmissionResponse
+from app.services.formula_executor import FormulaExecutor
 
 ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 
@@ -225,6 +227,27 @@ async def submit_file(
         db.add(sub)
 
     a.status = "submitted"
+
+    # ── Apply formulas if template version has any ────────────────────────
+    if a.template_version_id:
+        formulas = db.query(TemplateFormula).filter(
+            TemplateFormula.template_version_id == a.template_version_id
+        ).all()
+        if formulas:
+            try:
+                processed_bytes = FormulaExecutor.execute(content, formulas)
+                processed_path = org_dir / f"{sha}_processed{ext}"
+                processed_path.write_bytes(processed_bytes)
+                if existing:
+                    existing.processed_file_path = str(processed_path)
+                else:
+                    sub.processed_file_path = str(processed_path)
+            except Exception as exc:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "Formula execution failed for submission %s: %s", sub.id if not existing else existing.id, exc
+                )
+
     db.commit()
     db.refresh(sub)
     return sub

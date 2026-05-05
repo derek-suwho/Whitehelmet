@@ -27,6 +27,7 @@ class SubmissionResponse(BaseModel):
     status: str
     submitted_at: datetime
     submitted_by: Optional[str]
+    processed_file_path: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
