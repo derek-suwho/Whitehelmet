@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { api } from '@/composables/useApi'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
 import type { ProjectDetail, MasterReport, ProjectSubmission } from '@/stores/admin'
@@ -100,6 +101,24 @@ const filteredAssignments = computed(() => {
   )
 })
 
+// Submission progress per template
+interface TemplateProgress { template_id: string; submitted_count: number; total_members: number; all_submitted: boolean }
+const templateProgress = ref<TemplateProgress[]>([])
+
+async function loadSubmissionOverview() {
+  try {
+    const data = await api.get<{ templates: TemplateProgress[] }>(
+      `/api/admin/projects/${projectId}/submission-overview`
+    )
+    templateProgress.value = data.templates ?? []
+  } catch { /* non-fatal */ }
+}
+
+function progressForTemplate(templateId: string | null): TemplateProgress | null {
+  if (!templateId) return null
+  return templateProgress.value.find(p => p.template_id === templateId) ?? null
+}
+
 // Subcontractor submissions
 const submissions = ref<ProjectSubmission[]>([])
 const loadingSubmissions = ref(false)
@@ -137,6 +156,7 @@ onMounted(async () => {
       templatesStore.fetchTemplates(),
       loadMasterReports(),
       loadSubmissions(),
+      loadSubmissionOverview(),
     ])
   } finally {
     loading.value = false
@@ -415,7 +435,23 @@ function formatDate(iso: string | null) {
                 <td class="px-5 py-3.5 font-medium text-gray-800">{{ a.template_name ?? a.template_version_id ?? '—' }}</td>
                 <td class="px-5 py-3.5 text-gray-500 text-xs">{{ a.assigned_to_display ?? 'All members' }}</td>
                 <td class="px-5 py-3.5">
-                  <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
+                  <template v-if="progressForTemplate(a.template_id)">
+                    <div class="flex items-center gap-2 min-w-[120px]">
+                      <div class="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
+                        <div
+                          class="h-full rounded-full transition-all duration-500"
+                          :class="progressForTemplate(a.template_id)!.all_submitted ? 'bg-green-500' : 'bg-violet-500'"
+                          :style="{ width: progressForTemplate(a.template_id)!.total_members > 0
+                            ? Math.round((progressForTemplate(a.template_id)!.submitted_count / progressForTemplate(a.template_id)!.total_members) * 100) + '%'
+                            : '0%' }"
+                        />
+                      </div>
+                      <span class="text-xs text-gray-500 whitespace-nowrap shrink-0">
+                        {{ progressForTemplate(a.template_id)!.submitted_count }}/{{ progressForTemplate(a.template_id)!.total_members }}
+                      </span>
+                    </div>
+                  </template>
+                  <span v-else class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
                     :class="{
                       'bg-amber-100 text-amber-700': a.status === 'pending',
                       'bg-green-100 text-green-700': a.status === 'submitted',
