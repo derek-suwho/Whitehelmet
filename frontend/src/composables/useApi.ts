@@ -1,18 +1,13 @@
-import { useAuthStore } from '@/stores/auth'
+// frontend/src/composables/useApi.ts
+import { supabase } from '@/lib/supabase'
 
-const BASE_URL = '' // same-origin; Vite proxy handles /api → backend
+const BASE_URL = ''
 
-let _csrfToken = ''
-export function setCsrfToken(token: string) { _csrfToken = token }
-
-interface RequestOptions {
-  method: string
-  headers: HeadersInit
-  body?: string | FormData
-  credentials: RequestCredentials
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) return {}
+  return { Authorization: `Bearer ${session.access_token}` }
 }
-
-const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 async function request<T = unknown>(
   url: string,
@@ -20,25 +15,13 @@ async function request<T = unknown>(
   body?: unknown,
   isUpload = false,
 ): Promise<T> {
-  const headers: Record<string, string> = {}
-  if (CSRF_METHODS.has(method) && _csrfToken) {
-    headers['X-CSRF-Token'] = _csrfToken
-  }
+  const authHeaders = await getAuthHeader()
+  const headers: Record<string, string> = { ...authHeaders }
 
-  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    const auth = useAuthStore()
-    if (auth.csrfToken) headers['X-CSRF-Token'] = auth.csrfToken
-  }
-
-  const opts: RequestOptions = {
-    method,
-    headers,
-    credentials: 'include',
-  }
+  const opts: RequestInit = { method, headers }
 
   if (body !== undefined) {
     if (isUpload && body instanceof FormData) {
-      // Let browser set Content-Type with boundary
       opts.body = body
     } else {
       headers['Content-Type'] = 'application/json'
@@ -53,46 +36,31 @@ async function request<T = unknown>(
     throw new ApiError(res.status, text)
   }
 
-  // 204 No Content
   if (res.status === 204) return undefined as T
-
   return res.json() as Promise<T>
 }
 
 export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public body: string,
-  ) {
+  constructor(public status: number, public body: string) {
     super(`HTTP ${status}: ${body}`)
     this.name = 'ApiError'
   }
 }
 
 export const api = {
-  get<T = unknown>(url: string): Promise<T> {
-    return request<T>(url, 'GET')
-  },
-
-  post<T = unknown>(url: string, body?: unknown): Promise<T> {
-    return request<T>(url, 'POST', body)
-  },
-
-  patch<T = unknown>(url: string, body?: unknown): Promise<T> {
-    return request<T>(url, 'PATCH', body)
-  },
-
-  delete<T = unknown>(url: string): Promise<T> {
-    return request<T>(url, 'DELETE')
-  },
-
+  get<T = unknown>(url: string): Promise<T> { return request<T>(url, 'GET') },
+  post<T = unknown>(url: string, body?: unknown): Promise<T> { return request<T>(url, 'POST', body) },
+  patch<T = unknown>(url: string, body?: unknown): Promise<T> { return request<T>(url, 'PATCH', body) },
+  delete<T = unknown>(url: string): Promise<T> { return request<T>(url, 'DELETE') },
   upload<T = unknown>(url: string, file: File): Promise<T> {
     const form = new FormData()
     form.append('file', file)
     return request<T>(url, 'POST', form, true)
   },
-
   postForm<T = unknown>(url: string, formData: FormData): Promise<T> {
     return request<T>(url, 'POST', formData, true)
   },
 }
+
+// Kept as no-op for any remaining callers — CSRF is gone
+export function setCsrfToken(_token: string) {}
