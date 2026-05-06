@@ -3,6 +3,16 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import type { Project, ProjectMember, ProjectTemplateAssignment } from '@/types/database'
 
+export interface ProjectSubmission {
+  id: string
+  row_number: number
+  file_name: string
+  submitter_name: string
+  reporting_period: string | null
+  submitted_at: string | null
+  status: string
+}
+
 export interface MasterReport {
   id: string
   template_id: string
@@ -100,6 +110,10 @@ export const useAdminStore = defineStore('admin', () => {
     if (u) u.role = updated.role
   }
 
+  async function fetchProjectSubmissions(projectId: string): Promise<ProjectSubmission[]> {
+    return api.get<ProjectSubmission[]>(`/api/projects/${projectId}/submissions`)
+  }
+
   async function fetchMasterReports(projectId: string): Promise<MasterReport[]> {
     return api.get<MasterReport[]>(`/api/admin/projects/${projectId}/master-reports`)
   }
@@ -129,6 +143,7 @@ export const useAdminStore = defineStore('admin', () => {
     fetchUsers,
     createUser,
     updateUserRole,
+    fetchProjectSubmissions,
     fetchMasterReports,
     renameMasterReport,
     deleteMasterReport,

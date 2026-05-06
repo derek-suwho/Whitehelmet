@@ -298,3 +298,39 @@ def assign_template(
         db.commit()
         db.refresh(a)
         return {"ok": True, "assignment_id": a.id}
+
+
+@router.get("/{project_id}/submissions")
+def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
+    """Return all submissions for a project, enriched with submitter name."""
+    assignment_ids = [
+        a.id for a in db.query(TemplateAssignment)
+        .filter(TemplateAssignment.org_id == project_id)
+        .all()
+    ]
+    if not assignment_ids:
+        return []
+
+    submissions = (
+        db.query(Submission)
+        .filter(Submission.assignment_id.in_(assignment_ids))
+        .order_by(Submission.submitted_at.desc())
+        .all()
+    )
+
+    result = []
+    user_cache: dict[str, str] = {}
+    for idx, s in enumerate(submissions):
+        if s.submitted_by and s.submitted_by not in user_cache:
+            u = db.query(User).filter(User.id == s.submitted_by).first()
+            user_cache[s.submitted_by] = u.display_name if u else "Unknown"
+        result.append({
+            "id": s.id,
+            "row_number": idx + 1,
+            "file_name": s.file_name,
+            "submitter_name": user_cache.get(s.submitted_by or "", "Unknown"),
+            "reporting_period": s.reporting_period,
+            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
+            "status": s.status,
+        })
+    return result

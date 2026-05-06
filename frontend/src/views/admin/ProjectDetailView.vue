@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
-import type { ProjectDetail, MasterReport } from '@/stores/admin'
+import type { ProjectDetail, MasterReport, ProjectSubmission } from '@/stores/admin'
 import type { ProjectMember } from '@/types/database'
 
 const route = useRoute()
@@ -100,14 +100,33 @@ const filteredAssignments = computed(() => {
   )
 })
 
-// Subcontractor search
-const memberSearch = ref('')
-const filteredMembers = computed(() => {
-  const q = memberSearch.value.toLowerCase()
-  if (!q) return project.value?.members ?? []
-  return (project.value?.members ?? []).filter(m =>
-    m.display_name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
+// Subcontractor submissions
+const submissions = ref<ProjectSubmission[]>([])
+const loadingSubmissions = ref(false)
+const submissionSearch = ref('')
+const dateFrom = ref('')
+const dateTo = ref('')
+
+async function loadSubmissions() {
+  loadingSubmissions.value = true
+  try {
+    submissions.value = await adminStore.fetchProjectSubmissions(projectId)
+  } finally {
+    loadingSubmissions.value = false
+  }
+}
+
+const filteredSubmissions = computed(() => {
+  let list = submissions.value
+  const q = submissionSearch.value.toLowerCase()
+  if (q) list = list.filter(s =>
+    s.file_name.toLowerCase().includes(q) ||
+    s.submitter_name.toLowerCase().includes(q) ||
+    (s.reporting_period ?? '').toLowerCase().includes(q)
   )
+  if (dateFrom.value) list = list.filter(s => s.submitted_at && s.submitted_at >= dateFrom.value)
+  if (dateTo.value)   list = list.filter(s => s.submitted_at && s.submitted_at <= dateTo.value + 'T23:59:59')
+  return list
 })
 
 onMounted(async () => {
@@ -117,6 +136,7 @@ onMounted(async () => {
       adminStore.fetchUsers(),
       templatesStore.fetchTemplates(),
       loadMasterReports(),
+      loadSubmissions(),
     ])
   } finally {
     loading.value = false
@@ -445,60 +465,124 @@ function formatDate(iso: string | null) {
       <template v-else-if="activeTab === 'subcontractor'">
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-base font-semibold text-gray-800">
-            Sub-Contractor Records ({{ project?.members?.length ?? 0 }})
+            All Records ({{ filteredSubmissions.length }})
           </h2>
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <!-- Search -->
             <div class="relative">
               <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
               </svg>
               <input
-                v-model="memberSearch"
+                v-model="submissionSearch"
                 placeholder="Search"
-                class="rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                class="rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm w-48 focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
             </div>
+            <!-- Date range -->
+            <div class="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-2">
+              <input
+                v-model="dateFrom"
+                type="date"
+                class="text-sm text-gray-500 bg-transparent focus:outline-none w-32"
+                placeholder="Start Date"
+              />
+              <span class="text-gray-300 mx-1">–</span>
+              <input
+                v-model="dateTo"
+                type="date"
+                class="text-sm text-gray-500 bg-transparent focus:outline-none w-32"
+                placeholder="End Date"
+              />
+              <svg class="h-4 w-4 text-gray-400 ml-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <!-- Filter icon -->
+            <button class="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 bg-white text-gray-500 hover:bg-gray-50">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4h18M7 8h10M11 12h4"/>
+              </svg>
+            </button>
+            <!-- Add -->
             <button
               class="flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
               @click="showMemberModal = true"
             >
-              + Add Sub-Contractor
+              + Add New Record
             </button>
           </div>
         </div>
 
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table class="min-w-full text-sm">
+          <div v-if="loadingSubmissions" class="py-10 text-center text-sm text-gray-400">Loading…</div>
+          <table v-else class="min-w-full text-sm">
             <thead>
               <tr class="border-b border-gray-200 bg-gray-50">
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Name</th>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Email</th>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Role</th>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Submission</th>
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
+                <th class="w-10 px-4 py-3">
+                  <input type="checkbox" class="rounded border-gray-300" />
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">ID</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                  Name
+                  <svg class="inline ml-1 h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+                  </svg>
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Contractor</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Period</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Date Added</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">Last Edit Date</th>
+                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500">
+                  Status
+                  <svg class="inline ml-1 h-3 w-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4"/>
+                  </svg>
+                </th>
+                <th class="w-10 px-4 py-3"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr
-                v-for="m in filteredMembers"
-                :key="m.membership_id"
+                v-for="s in filteredSubmissions"
+                :key="s.id"
                 class="hover:bg-gray-50 transition-colors"
               >
-                <td class="px-5 py-3.5 font-medium text-gray-800">{{ m.display_name }}</td>
-                <td class="px-5 py-3.5 text-gray-500">{{ m.email }}</td>
-                <td class="px-5 py-3.5 text-gray-500 text-xs">{{ (m.role ?? '—').replaceAll('_', ' ') }}</td>
-                <td class="px-5 py-3.5">
-                  <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
-                    :class="m.has_submission ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'">
-                    {{ m.has_submission ? 'submitted' : 'pending' }}
+                <td class="px-4 py-3.5 text-center">
+                  <input type="checkbox" class="rounded border-gray-300" />
+                </td>
+                <td class="px-4 py-3.5 text-gray-500 text-xs font-mono">{{ s.row_number }}</td>
+                <td class="px-4 py-3.5 font-medium text-gray-800 max-w-xs">
+                  <span class="block truncate" :title="s.file_name">{{ s.file_name }}</span>
+                </td>
+                <td class="px-4 py-3.5">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                    {{ s.submitter_name }}
                   </span>
                 </td>
-                <td class="px-5 py-3.5">
-                  <button class="text-xs text-red-400 hover:text-red-600 transition-colors" @click="removeMember(m)">Remove</button>
+                <td class="px-4 py-3.5 text-gray-500 text-xs">{{ s.reporting_period ?? '—' }}</td>
+                <td class="px-4 py-3.5 text-gray-500 text-xs">
+                  {{ s.submitted_at ? new Date(s.submitted_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }}
+                </td>
+                <td class="px-4 py-3.5 text-gray-500 text-xs">
+                  {{ s.submitted_at ? new Date(s.submitted_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }}
+                </td>
+                <td class="px-4 py-3.5">
+                  <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
+                    :class="s.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
+                    {{ s.status.charAt(0).toUpperCase() + s.status.slice(1) }}
+                  </span>
+                </td>
+                <td class="px-4 py-3.5 text-center">
+                  <button class="text-gray-400 hover:text-gray-600 transition-colors">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
                 </td>
               </tr>
-              <tr v-if="!filteredMembers.length">
-                <td colspan="5" class="py-20 text-center">
+              <tr v-if="!filteredSubmissions.length">
+                <td colspan="9" class="py-20 text-center">
                   <div class="flex flex-col items-center gap-3">
                     <svg width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <ellipse cx="60" cy="75" rx="40" ry="6" fill="#EDE9FE"/>
