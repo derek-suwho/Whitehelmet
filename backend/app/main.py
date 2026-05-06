@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import health, auth, ai, records, files, projects, admin, templates, assignments, subcontractor, formulas
+from app.api.routes import health, auth, ai, records, files, projects, admin, templates, assignments, subcontractor, formulas, organizations
 
 settings = get_settings()
 
@@ -34,3 +34,4 @@ app.include_router(templates.router)
 app.include_router(assignments.router)
 app.include_router(subcontractor.router)
 app.include_router(formulas.router)
+app.include_router(organizations.router)

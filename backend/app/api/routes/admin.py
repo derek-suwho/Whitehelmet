@@ -49,7 +49,7 @@ def list_users(db: Session = Depends(get_db)):
     dependencies=[Depends(verify_csrf)],
 )
 def update_user_role(
-    user_id: int, body: UpdateRoleRequest, db: Session = Depends(get_db)
+    user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)
 ):
     user = db.query(Profile).filter(Profile.id == user_id).first()
     if not user:

@@ -16,7 +16,7 @@ class Formula(Base):
     description = Column(Text, nullable=True)
     nl_prompt = Column(Text, nullable=True)
     expression = Column(Text, nullable=False)
-    formula_type = Column(String(50), nullable=False)
+    formula_type = Column(String(50), nullable=False, default="calculation")
     is_library_item = Column(Boolean, nullable=False, default=False)
     created_by = Column(UUID(as_uuid=False), nullable=True, index=True)
     usage_count = Column(Integer, nullable=False, default=0)

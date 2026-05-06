@@ -4,18 +4,16 @@ import pytest
 
 @pytest.fixture
 def pif_admin_client(client, db, test_user):
-    from app.models.session import SessionModel
-    from app.core.security import generate_session_token, session_expiry, generate_csrf_token
+    from app.core.dependencies import get_current_user
     test_user.role = "pif_admin"
     db.commit()
-    token = generate_session_token()
-    session = SessionModel(token=token, user_id=test_user.id, expires_at=session_expiry())
-    db.add(session)
-    db.commit()
-    client.cookies.set("session_id", token)
-    csrf = generate_csrf_token(token)
-    client.headers["X-CSRF-Token"] = csrf
-    return client
+
+    async def override():
+        return test_user
+
+    client.app.dependency_overrides[get_current_user] = override
+    yield client
+    client.app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture

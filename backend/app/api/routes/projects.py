@@ -95,7 +95,6 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                     "membership_id": m.id,
                     "user_id": u.id,
                     "display_name": u.display_name,
-                    "email": u.email,
                     "role": u.role,
                     "added_at": m.added_at.isoformat() if m.added_at else None,
                     "has_submission": str(u.id) in submitter_ids,

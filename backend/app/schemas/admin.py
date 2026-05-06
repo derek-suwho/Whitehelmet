@@ -7,9 +7,7 @@ from pydantic import BaseModel
 
 
 class UserWithOrgResponse(BaseModel):
-    id: int
-    external_id: str
-    email: str
+    id: str
     display_name: str
     role: Optional[str]
     org_id: Optional[str]
