@@ -9,9 +9,9 @@ from typing import Optional
 
 # Role mapping: Keycloak realm roles → our system roles
 _ROLE_MAP = {
-    "Org_Super_Admin": "pif_admin",
-    "Org_Admin": "devco_admin",
-    "Org_Member": "devco_user",
+    "Org_Super_Admin": "org_super_admin",
+    "Org_Admin": "org_admin",
+    "Org_Member": "org_member",
 }
 
 # Internal Keycloak roles to ignore when extracting app roles
@@ -72,7 +72,7 @@ def extract_roles(claims: dict) -> list[str]:
 
 def map_system_role(roles: list[str]) -> Optional[str]:
     """Map Keycloak realm roles to our system role. Returns highest-privilege match."""
-    priority = ["pif_admin", "devco_admin", "devco_user"]
+    priority = ["org_super_admin", "org_admin", "org_member"]
     mapped = {_ROLE_MAP[r] for r in roles if r in _ROLE_MAP}
     for role in priority:
         if role in mapped:

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_pif_admin
+from app.core.rbac import require_org_super_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.project import Project
@@ -57,7 +57,7 @@ def update_user_role(
 @router.get(
     "/templates/{template_id}/consolidation-progress",
     response_model=ConsolidationProgressResponse,
-    dependencies=[Depends(require_pif_admin)],
+    dependencies=[Depends(require_org_super_admin)],
 )
 def get_consolidation_progress(
     template_id: str,
@@ -218,7 +218,7 @@ def get_consolidation_progress(
 
 @router.get(
     "/projects/{project_id}/submission-overview",
-    dependencies=[Depends(require_pif_admin)],
+    dependencies=[Depends(require_org_super_admin)],
 )
 def get_project_submission_overview(project_id: str, db: Session = Depends(get_db)):
     """Return cross-template submission counts for a project.
@@ -299,7 +299,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 
 @router.post(
     "/templates/{template_id}/consolidate-submissions",
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 async def consolidate_submissions(
     template_id: str,

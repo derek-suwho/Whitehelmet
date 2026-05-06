@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status
 from app.core.dependencies import get_current_user
 
 # Role hierarchy: higher index = more privilege
-_ROLE_RANK = {"subcontractor": -1, "devco_user": 0, "devco_admin": 1, "pif_admin": 2}
+_ROLE_RANK = {"subcontractor": -1, "org_member": 0, "org_admin": 1, "org_super_admin": 2}
 
 
 def _check_role(current_user, min_role: str) -> None:
@@ -17,21 +17,21 @@ def _check_role(current_user, min_role: str) -> None:
         )
 
 
-async def require_pif_admin(current_user=Depends(get_current_user)):
-    """Only pif_admin can access this route."""
-    _check_role(current_user, "pif_admin")
+async def require_org_super_admin(current_user=Depends(get_current_user)):
+    """Only org_super_admin can access this route."""
+    _check_role(current_user, "org_super_admin")
     return current_user
 
 
-async def require_devco_admin(current_user=Depends(get_current_user)):
-    """devco_admin or pif_admin can access this route."""
-    _check_role(current_user, "devco_admin")
+async def require_org_admin(current_user=Depends(get_current_user)):
+    """org_admin or org_super_admin can access this route."""
+    _check_role(current_user, "org_admin")
     return current_user
 
 
 async def require_org_member(current_user=Depends(get_current_user)):
     """Any authenticated org member can access this route."""
-    _check_role(current_user, "devco_user")
+    _check_role(current_user, "org_member")
     return current_user
 
 

@@ -89,7 +89,7 @@ def _seed_admin(engine):
                 email="admin@whitehelmet.dev",
                 display_name="Admin",
                 password_hash=hash_password("Admin1234!"),
-                role="pif_admin",
+                role="org_super_admin",
             )
             db.add(admin)
             db.commit()

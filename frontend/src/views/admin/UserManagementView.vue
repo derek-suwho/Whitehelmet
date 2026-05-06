@@ -6,7 +6,7 @@ const adminStore = useAdminStore()
 const showInviteModal = ref(false)
 const email = ref('')
 const displayName = ref('')
-const role = ref<'pif_admin' | 'devco_admin' | 'devco_user'>('devco_user')
+const role = ref<'org_super_admin' | 'org_admin' | 'org_member'>('org_member')
 const saving = ref(false)
 const error = ref('')
 
@@ -16,8 +16,8 @@ onMounted(() => {
 })
 
 function roleBadge(r: string) {
-  if (r === 'pif_admin') return 'bg-purple-100 text-purple-700'
-  if (r === 'devco_admin') return 'bg-blue-100 text-blue-700'
+  if (r === 'org_super_admin') return 'bg-purple-100 text-purple-700'
+  if (r === 'org_admin') return 'bg-blue-100 text-blue-700'
   return 'bg-gray-100 text-gray-600'
 }
 
@@ -33,7 +33,7 @@ async function invite() {
     showInviteModal.value = false
     email.value = ''
     displayName.value = ''
-    role.value = 'devco_user'
+    role.value = 'org_member'
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
   } finally {
@@ -41,7 +41,7 @@ async function invite() {
   }
 }
 
-async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' | 'devco_user') {
+async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admin' | 'org_member') {
   await adminStore.updateUserRole(userId, newRole)
 }
 </script>
@@ -82,11 +82,11 @@ async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' |
               <select
                 :value="user.role ?? ''"
                 class="rounded border border-gray-200 text-xs px-2 py-1"
-                @change="changeRole(user.id, ($event.target as HTMLSelectElement).value as 'pif_admin' | 'devco_admin' | 'devco_user')"
+                @change="changeRole(user.id, ($event.target as HTMLSelectElement).value as 'org_super_admin' | 'org_admin' | 'org_member')"
               >
-                <option value="pif_admin">pif_admin</option>
-                <option value="devco_admin">devco_admin</option>
-                <option value="devco_user">devco_user</option>
+                <option value="org_super_admin">Org Super Admin</option>
+                <option value="org_admin">Org Admin</option>
+                <option value="org_member">Org Member</option>
               </select>
             </td>
           </tr>
@@ -118,9 +118,9 @@ async function changeRole(userId: number, newRole: 'pif_admin' | 'devco_admin' |
           <div>
             <label class="block text-xs text-gray-500 mb-1">Role *</label>
             <select v-model="role" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
-              <option value="pif_admin">PIF Admin</option>
-              <option value="devco_admin">DevCo Admin</option>
-              <option value="devco_user">DevCo User</option>
+              <option value="org_super_admin">Org Super Admin</option>
+              <option value="org_admin">Org Admin</option>
+              <option value="org_member">Org Member</option>
             </select>
           </div>
           <div v-if="error" class="text-sm text-red-600">{{ error }}</div>

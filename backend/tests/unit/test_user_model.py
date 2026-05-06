@@ -11,12 +11,12 @@ def test_user_has_role_and_org_id(db):
         external_id="ext-1",
         email="a@b.com",
         display_name="Test",
-        role="pif_admin",
+        role="org_super_admin",
         org_id="org-uuid-1",
     )
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    assert user.role == "pif_admin"
+    assert user.role == "org_super_admin"
     assert user.org_id == "org-uuid-1"

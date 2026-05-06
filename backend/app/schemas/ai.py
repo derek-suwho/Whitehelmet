@@ -1,7 +1,7 @@
 """AI proxy request/response schemas."""
 
 from __future__ import annotations
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -15,7 +15,7 @@ class ChatRequest(BaseModel):
 
 class FileSchema(BaseModel):
     name: str
-    headers: list[str | None]
+    headers: List[Optional[str]]
     sample_rows: list[list]  # first few rows for AI schema detection only
 
     @field_validator('headers', mode='before')

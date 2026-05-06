@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_pif_admin
+from app.core.rbac import require_org_super_admin
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -40,7 +40,7 @@ def list_projects(db: Session = Depends(get_db)):
     "",
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def create_project(
     body: ProjectCreate,
@@ -156,7 +156,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 @router.post(
     "/{project_id}/members",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def add_member(
     project_id: str,
@@ -196,7 +196,7 @@ def add_member(
 @router.delete(
     "/{project_id}/members/{membership_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def remove_member(
     project_id: str,
@@ -220,7 +220,7 @@ def remove_member(
 @router.patch(
     "/{project_id}/master-template",
     response_model=ProjectDetailResponse,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def set_master_template(
     project_id: str,
@@ -250,7 +250,7 @@ def set_master_template(
 @router.post(
     "/{project_id}/assign-template",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def assign_template(
     project_id: str,

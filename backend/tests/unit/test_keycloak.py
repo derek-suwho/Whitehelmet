@@ -96,7 +96,7 @@ def test_extract_roles():
 
 def test_map_role_to_system_role():
     from app.core.keycloak import map_system_role
-    assert map_system_role(["Org_Super_Admin"]) == "pif_admin"
-    assert map_system_role(["Org_Admin"]) == "devco_admin"
-    assert map_system_role(["Org_Member"]) == "devco_user"
+    assert map_system_role(["Org_Super_Admin"]) == "org_super_admin"
+    assert map_system_role(["Org_Admin"]) == "org_admin"
+    assert map_system_role(["Org_Member"]) == "org_member"
     assert map_system_role(["unknown_role"]) is None

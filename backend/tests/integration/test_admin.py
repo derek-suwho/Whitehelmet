@@ -11,7 +11,7 @@ def test_list_users(auth_client, test_user):
 def test_update_user_role(auth_client, test_user):
     resp = auth_client.patch(
         f"/api/admin/users/{test_user.id}/role",
-        json={"role": "devco_admin"},
+        json={"role": "org_admin"},
     )
     assert resp.status_code == 200
-    assert resp.json()["role"] == "devco_admin"
+    assert resp.json()["role"] == "org_admin"

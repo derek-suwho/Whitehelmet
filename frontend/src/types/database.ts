@@ -35,7 +35,7 @@ export interface ProjectTemplateAssignment {
 export interface Profile {
   id: string
   org_id: string | null
-  role: 'pif_admin' | 'devco_admin' | 'devco_user'
+  role: 'org_super_admin' | 'org_admin' | 'org_member'
   display_name: string
   created_at: string
 }

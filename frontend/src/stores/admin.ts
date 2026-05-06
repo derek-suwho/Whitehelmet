@@ -72,7 +72,7 @@ export const useAdminStore = defineStore('admin', () => {
   async function createUser(
     email: string,
     displayName: string,
-    role: 'pif_admin' | 'devco_admin' | 'devco_user',
+    role: 'org_super_admin' | 'org_admin' | 'org_member',
   ): Promise<void> {
     await api.post('/api/auth/register', { email, password: 'ChangeMe123!', display_name: displayName })
     await fetchUsers()
@@ -83,7 +83,7 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function updateUserRole(
     userId: number,
-    role: 'pif_admin' | 'devco_admin' | 'devco_user',
+    role: 'org_super_admin' | 'org_admin' | 'org_member',
   ): Promise<void> {
     const updated = await api.patch<UserWithProject>(`/api/admin/users/${userId}/role`, { role })
     const u = users.value.find(u => u.id === userId)
