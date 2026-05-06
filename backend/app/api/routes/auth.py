@@ -1,23 +1,15 @@
-"""Auth routes — /me only (Supabase Bearer JWT auth)."""
+"""Auth routes — /me only. Login/register handled by Supabase Auth."""
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request
 
 from app.core.dependencies import get_current_user
 from app.models.profile import Profile
+from app.schemas.auth import UserResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _profile_payload(profile: Profile) -> dict:
-    return {
-        "id": str(profile.id),
-        "display_name": profile.display_name,
-        "role": profile.role,
-        "org_id": str(profile.org_id) if profile.org_id else None,
-    }
-
-
-@router.get("/me")
-async def me(request: Request, current_user: Profile = Depends(get_current_user)):
-    """Return current authenticated user profile."""
-    return {"user": _profile_payload(current_user)}
+@router.get("/me", response_model=UserResponse)
+async def me(profile: Profile = Depends(get_current_user)):
+    """Return the current user's profile (from validated Supabase JWT)."""
+    return profile
