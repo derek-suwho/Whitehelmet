@@ -1,68 +1,37 @@
-"""FastAPI dependencies for auth, DB sessions, rate limiting."""
+"""FastAPI dependencies — ES256 JWT Bearer auth via Supabase JWKS."""
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.jwks import decode_supabase_token
 from app.db.session import get_db
-from app.models.session import SessionModel
-from app.models.user import User
-from datetime import datetime, timezone
+from app.models.profile import Profile
+
+_bearer = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
     request: Request,
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
     db: Session = Depends(get_db),
-) -> User:
-    """Extract and validate session from httpOnly cookie."""
-    session_token = request.cookies.get("session_id")
-    if not session_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
+) -> Profile:
+    """Validate Supabase ES256 JWT and return the caller's Profile row."""
+    if creds is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-    session = (
-        db.query(SessionModel)
-        .filter(
-            SessionModel.token == session_token,
-            SessionModel.expires_at > datetime.now(timezone.utc),
-        )
-        .first()
-    )
-    if not session:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session expired or invalid",
-        )
+    settings = get_settings()
+    claims = decode_supabase_token(creds.credentials, settings.supabase_url)
+    user_id: str = claims.get("sub", "")
 
-    user = db.query(User).filter(User.id == session.user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+    profile = db.query(Profile).filter(Profile.id == user_id).first()
+    if not profile:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Profile not found")
 
-    return user
+    return profile
 
 
 async def verify_csrf(request: Request) -> None:
-    """Verify CSRF token on state-mutating requests."""
-    if request.method in ("GET", "HEAD", "OPTIONS"):
-        return
-
-    from app.core.security import verify_csrf_token
-
-    session_token = request.cookies.get("session_id")
-    csrf_token = request.headers.get("X-CSRF-Token")
-
-    if not session_token or not csrf_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="CSRF validation failed",
-        )
-
-    if not verify_csrf_token(session_token, csrf_token):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="CSRF token mismatch",
-        )
+    """No-op: CSRF not needed with Bearer token auth (no cookies)."""
+    pass

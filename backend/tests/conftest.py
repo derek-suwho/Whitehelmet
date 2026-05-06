@@ -24,14 +24,11 @@ def compile_uuid_sqlite(type_, compiler, **kw):
 from app.main import app
 from app.core.config import Settings, get_settings
 from app.models.profile import Profile
-from app.models.user import User  # shim
-from app.models.session import SessionModel
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
 from app.models.template_assignment import TemplateAssignment
 from app.models.submission import Submission
 from app.models.consolidated_sheet import ConsolidatedSheet
-from app.core.security import generate_session_token, session_expiry
 
 # In-memory SQLite for tests
 TEST_ENGINE = create_engine(
@@ -77,7 +74,7 @@ def client(db):
 
 @pytest.fixture
 def test_user(db):
-    """Create a test profile (replaces old User fixture)."""
+    """Create a test profile."""
     import uuid
     user = Profile(id=str(uuid.uuid4()), role="devco_user", display_name="Test User")
     db.add(user)
@@ -88,18 +85,16 @@ def test_user(db):
 
 @pytest.fixture
 def auth_client(client, db, test_user):
-    """Test client with authenticated session."""
-    token = generate_session_token()
-    session = SessionModel(token=token, user_id=test_user.id, expires_at=session_expiry())
-    db.add(session)
-    db.commit()
+    """Test client with authenticated Bearer token (mocks JWT validation)."""
+    from unittest.mock import patch
+    from app.core.dependencies import get_current_user
 
-    client.cookies.set("session_id", token)
-    # Set CSRF token header for state-mutating requests
-    from app.core.security import generate_csrf_token
-    csrf = generate_csrf_token(token)
-    client.headers["X-CSRF-Token"] = csrf
-    return client
+    async def override_get_current_user():
+        return test_user
+
+    client.app.dependency_overrides[get_current_user] = override_get_current_user
+    yield client
+    client.app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture
