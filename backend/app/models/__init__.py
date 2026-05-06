@@ -3,7 +3,6 @@ from app.models.user import User               # shim for existing imports
 from app.models.record import Record
 from app.models.uploaded_file import UploadedFile
 from app.models.conversation import ConversationMessage
-from app.models.session import SessionModel
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.template import Template
@@ -17,7 +16,7 @@ from app.models.organization import Organization
 
 __all__ = [
     "Profile", "User",
-    "Record", "UploadedFile", "ConversationMessage", "SessionModel",
+    "Record", "UploadedFile", "ConversationMessage",
     "Project", "ProjectMember",
     "Template", "TemplateVersion", "TemplateAssignment",
     "Submission", "ConsolidatedSheet",
