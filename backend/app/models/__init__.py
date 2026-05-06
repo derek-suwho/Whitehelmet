@@ -1,4 +1,5 @@
-from app.models.user import User
+from app.models.profile import Profile
+from app.models.user import User               # shim for existing imports
 from app.models.record import Record
 from app.models.uploaded_file import UploadedFile
 from app.models.conversation import ConversationMessage
@@ -12,9 +13,14 @@ from app.models.submission import Submission
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.formula import Formula
 from app.models.template_formula import TemplateFormula
+from app.models.organization import Organization
 
 __all__ = [
-    "User", "Record", "UploadedFile", "ConversationMessage", "SessionModel",
-    "Project", "ProjectMember", "Template", "TemplateVersion", "TemplateAssignment",
-    "Submission", "ConsolidatedSheet", "Formula", "TemplateFormula",
+    "Profile", "User",
+    "Record", "UploadedFile", "ConversationMessage", "SessionModel",
+    "Project", "ProjectMember",
+    "Template", "TemplateVersion", "TemplateAssignment",
+    "Submission", "ConsolidatedSheet",
+    "Formula", "TemplateFormula",
+    "Organization",
 ]
