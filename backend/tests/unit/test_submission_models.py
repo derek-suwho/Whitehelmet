@@ -49,8 +49,11 @@ def test_submission_processed_file_path(db):
 
 def test_template_formula_model(db):
     from app.models.template_formula import TemplateFormula
+    # UUID columns require valid UUID strings (SQLAlchemy 2.0 validates on reload)
+    FRM_UUID = "00000000-0000-0000-0000-000000000011"
+    VER_UUID = "00000000-0000-0000-0000-000000000010"
     f = TemplateFormula(
-        id="frm-1", template_version_id="ver-1", name="TRIR",
+        id=FRM_UUID, template_version_id=VER_UUID, name="TRIR",
         target_column="E", formula_type="column", expression="=O{row}/N{row}",
         weight=0.2, benchmark=0.95,
         scoring_rules='[{"min": null, "max": 0.01, "score": 100}]'

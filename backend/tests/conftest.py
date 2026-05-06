@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, String
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import BigInteger
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.compiler import compiles
 
@@ -21,6 +22,12 @@ from app.db.session import Base, get_db
 @compiles(PG_UUID, "sqlite")
 def compile_uuid_sqlite(type_, compiler, **kw):
     return "VARCHAR(36)"
+
+
+# Make BigInteger compile as INTEGER in SQLite so autoincrement/RETURNING works
+@compiles(BigInteger, "sqlite")
+def compile_bigint_sqlite(type_, compiler, **kw):
+    return "INTEGER"
 from app.main import app
 from app.core.config import Settings, get_settings
 from app.models.profile import Profile

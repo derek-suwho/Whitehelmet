@@ -24,13 +24,13 @@ class ProjectResponse(BaseModel):
 
 
 class AddMemberRequest(BaseModel):
-    user_id: int
+    user_id: str
 
 
 class AssignTemplateRequest(BaseModel):
     template_version_id: str
     deadline: Optional[str] = None
-    member_user_ids: Optional[list[int]] = None  # if set, create per-member assignments
+    member_user_ids: Optional[list[str]] = None  # if set, create per-member assignments
 
 
 class AssignMasterTemplateRequest(BaseModel):

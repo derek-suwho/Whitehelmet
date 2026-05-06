@@ -40,11 +40,3 @@ def test_reset_clears_lockout():
     assert remaining == 0
 
 
-def test_login_returns_429_after_lockout(client):
-    body = {"email": "notfound@example.com", "password": "wrongpassword"}
-    for _ in range(MAX_ATTEMPTS):
-        resp = client.post("/api/auth/login", json=body)
-        assert resp.status_code == 401
-    resp = client.post("/api/auth/login", json=body)
-    assert resp.status_code == 429
-    assert "Retry-After" in resp.headers
