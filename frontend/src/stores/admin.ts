@@ -3,6 +3,16 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import type { Project, ProjectMember, ProjectTemplateAssignment } from '@/types/database'
 
+export interface MasterReport {
+  id: string
+  template_id: string
+  project_id: string | null
+  name: string | null
+  period: string | null
+  generated_by: string | null
+  generated_at: string
+}
+
 export interface UserWithProject {
   id: number
   external_id: string
@@ -90,6 +100,22 @@ export const useAdminStore = defineStore('admin', () => {
     if (u) u.role = updated.role
   }
 
+  async function fetchMasterReports(projectId: string): Promise<MasterReport[]> {
+    return api.get<MasterReport[]>(`/api/admin/projects/${projectId}/master-reports`)
+  }
+
+  async function renameMasterReport(sheetId: string, name: string): Promise<MasterReport> {
+    return api.patch<MasterReport>(`/api/admin/consolidated-sheets/${sheetId}/rename`, { name })
+  }
+
+  async function deleteMasterReport(sheetId: string): Promise<void> {
+    await api.delete(`/api/admin/consolidated-sheets/${sheetId}`)
+  }
+
+  function downloadMasterReport(sheetId: string): void {
+    window.open(`/api/admin/consolidated-sheets/${sheetId}/download`, '_blank')
+  }
+
   return {
     projects,
     users,
@@ -103,5 +129,9 @@ export const useAdminStore = defineStore('admin', () => {
     fetchUsers,
     createUser,
     updateUserRole,
+    fetchMasterReports,
+    renameMasterReport,
+    deleteMasterReport,
+    downloadMasterReport,
   }
 })

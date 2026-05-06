@@ -4,10 +4,13 @@ import io
 import json
 import openpyxl
 import uuid as _uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -313,6 +316,8 @@ async def consolidate_submissions(
     settings = get_settings()
     project_id: Optional[str] = body.get("project_id")
     submission_ids: Optional[list] = body.get("submission_ids")
+    report_name: Optional[str] = body.get("name")
+    report_period: Optional[str] = body.get("period")
 
     if submission_ids:
         submissions = db.query(Submission).filter(Submission.id.in_(submission_ids)).all()
@@ -519,9 +524,13 @@ async def consolidate_submissions(
     out_path = out_dir / f"{sheet_id}.xlsx"
     wb_out.save(out_path)
 
+    auto_name = report_name or f"Consolidation – {datetime.utcnow().strftime('%b %d, %Y')}"
     sheet = ConsolidatedSheet(
         id=sheet_id,
         template_id=template_id,
+        project_id=project_id,
+        name=auto_name,
+        period=report_period,
         file_path=str(out_path),
         generated_by=str(user.id),
     )
@@ -533,4 +542,97 @@ async def consolidate_submissions(
         "file_path": str(out_path),
         "template_count": len(all_file_data),
         "freeform_count": 0,
+        "name": auto_name,
+        "period": report_period,
     }
+
+
+# ── Master report management ──────────────────────────────────────────────────
+
+class ConsolidatedSheetResponse(BaseModel):
+    id: str
+    template_id: str
+    project_id: Optional[str]
+    name: Optional[str]
+    period: Optional[str]
+    generated_by: Optional[str]
+    generated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RenameReportRequest(BaseModel):
+    name: str
+
+
+@router.get(
+    "/projects/{project_id}/master-reports",
+    response_model=list[ConsolidatedSheetResponse],
+    dependencies=[Depends(require_org_super_admin)],
+)
+def list_master_reports(project_id: str, db: Session = Depends(get_db)):
+    """List all consolidated master reports for a project, newest first."""
+    return (
+        db.query(ConsolidatedSheet)
+        .filter(ConsolidatedSheet.project_id == project_id)
+        .order_by(ConsolidatedSheet.generated_at.desc())
+        .all()
+    )
+
+
+@router.patch(
+    "/consolidated-sheets/{sheet_id}/rename",
+    response_model=ConsolidatedSheetResponse,
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+)
+def rename_master_report(
+    sheet_id: str,
+    body: RenameReportRequest,
+    db: Session = Depends(get_db),
+):
+    """Rename a consolidated master report."""
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Report not found")
+    sheet.name = body.name
+    db.commit()
+    db.refresh(sheet)
+    return sheet
+
+
+@router.delete(
+    "/consolidated-sheets/{sheet_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+)
+def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
+    """Delete a consolidated master report record and its file from disk."""
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Report not found")
+    try:
+        Path(sheet.file_path).unlink(missing_ok=True)
+    except Exception:
+        pass
+    db.delete(sheet)
+    db.commit()
+
+
+@router.get(
+    "/consolidated-sheets/{sheet_id}/download",
+    dependencies=[Depends(require_org_super_admin)],
+)
+def download_master_report(sheet_id: str, db: Session = Depends(get_db)):
+    """Download the xlsx file for a consolidated master report."""
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Report not found")
+    path = Path(sheet.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    filename = f"{sheet.name or sheet_id}.xlsx".replace("/", "-")
+    return FileResponse(
+        str(path),
+        filename=filename,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )

@@ -17,3 +17,4 @@ class Submission(Base):
     status = Column(String(10), nullable=False, default="submitted")  # submitted | locked
     submitted_at = Column(DateTime, server_default=func.now(), nullable=False)
     submitted_by = Column(String(36), nullable=True)
+    reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"

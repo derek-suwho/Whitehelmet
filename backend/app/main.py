@@ -65,6 +65,11 @@ def _migrate_columns(engine):
     from sqlalchemy import text
     migrations = [
         "ALTER TABLE projects ADD COLUMN master_template_id VARCHAR(36) NULL",
+        "ALTER TABLE consolidated_sheets ADD COLUMN project_id VARCHAR(36) NULL",
+        "ALTER TABLE consolidated_sheets ADD COLUMN name VARCHAR(255) NULL",
+        "ALTER TABLE consolidated_sheets ADD COLUMN period VARCHAR(50) NULL",
+        "ALTER TABLE template_assignments ADD COLUMN reporting_period VARCHAR(50) NULL",
+        "ALTER TABLE submissions ADD COLUMN reporting_period VARCHAR(50) NULL",
     ]
     with engine.connect() as conn:
         for sql in migrations:

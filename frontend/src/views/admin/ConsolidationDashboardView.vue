@@ -58,9 +58,13 @@ const consolidationResult = ref<{
   file_path: string
   freeform_count: number
   template_count: number
+  name: string | null
+  period: string | null
 } | null>(null)
 const consolidationError = ref('')
 const showStatusModal = ref(false)
+const reportName = ref('')
+const reportPeriod = ref('')
 
 const canConsolidate = computed(() => {
   if (consolidating.value) return false
@@ -130,7 +134,12 @@ async function consolidate() {
 
     const data = await api.post<typeof consolidationResult.value>(
       `/api/admin/templates/${templateId}/consolidate-submissions`,
-      { project_id: projectId ?? null, submission_ids: submissionIds },
+      {
+        project_id: projectId ?? null,
+        submission_ids: submissionIds,
+        name: reportName.value.trim() || null,
+        period: reportPeriod.value.trim() || null,
+      },
     )
 
     consolidationResult.value = data
@@ -174,14 +183,26 @@ async function download() {
           {{ selectedSubmissionIds.length > 0 ? `${selectedSubmissionIds.length} selected.` : 'Select rows to consolidate a subset, or consolidate all.' }}
         </p>
       </div>
-      <button
-        :disabled="!canConsolidate"
-        class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-        :title="!canConsolidate && !consolidating ? 'No submitted files to consolidate' : ''"
-        @click="consolidate"
-      >
-        {{ consolidateLabel }}
-      </button>
+      <div class="flex items-center gap-2">
+        <input
+          v-model="reportPeriod"
+          placeholder="Period (e.g. 2026-07)"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <input
+          v-model="reportName"
+          placeholder="Report name (optional)"
+          class="rounded-lg border border-gray-300 px-3 py-2 text-sm w-52 focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <button
+          :disabled="!canConsolidate"
+          class="bg-green-600 text-white px-5 py-2 rounded-lg font-medium hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+          :title="!canConsolidate && !consolidating ? 'No submitted files to consolidate' : ''"
+          @click="consolidate"
+        >
+          {{ consolidateLabel }}
+        </button>
+      </div>
     </div>
 
     <!-- Overall cross-template progress (project scope only) -->

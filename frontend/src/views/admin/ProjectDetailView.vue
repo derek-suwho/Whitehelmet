@@ -3,7 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
-import type { ProjectDetail } from '@/stores/admin'
+import type { ProjectDetail, MasterReport } from '@/stores/admin'
 import type { ProjectMember } from '@/types/database'
 
 const route = useRoute()
@@ -50,6 +50,46 @@ const masterTemplates = computed(() =>
   templatesStore.templates.filter(t => t.template_type === 'master')
 )
 
+// Master reports list
+const masterReports = ref<MasterReport[]>([])
+const loadingReports = ref(false)
+const renamingId = ref<string | null>(null)
+const renameValue = ref('')
+
+async function loadMasterReports() {
+  loadingReports.value = true
+  try {
+    masterReports.value = await adminStore.fetchMasterReports(projectId)
+  } finally {
+    loadingReports.value = false
+  }
+}
+
+function startRename(r: MasterReport) {
+  renamingId.value = r.id
+  renameValue.value = r.name ?? ''
+}
+
+async function saveRename(r: MasterReport) {
+  if (!renameValue.value.trim()) { renamingId.value = null; return }
+  await adminStore.renameMasterReport(r.id, renameValue.value.trim())
+  renamingId.value = null
+  await loadMasterReports()
+}
+
+async function deleteReport(r: MasterReport) {
+  if (!confirm(`Delete "${r.name ?? r.id}"? This cannot be undone.`)) return
+  await adminStore.deleteMasterReport(r.id)
+  await loadMasterReports()
+}
+
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString(undefined, {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 // Template search
 const templateSearch = ref('')
 const filteredAssignments = computed(() => {
@@ -76,6 +116,7 @@ onMounted(async () => {
       loadProject(),
       adminStore.fetchUsers(),
       templatesStore.fetchTemplates(),
+      loadMasterReports(),
     ])
   } finally {
     loading.value = false
@@ -526,9 +567,11 @@ function formatDate(iso: string | null) {
           </div>
         </div>
 
-        <!-- Consolidated sheets list -->
+        <!-- Master reports list -->
         <div class="flex items-center justify-between mb-5">
-          <h2 class="text-base font-semibold text-gray-800">Auto-Consolidated Records</h2>
+          <h2 class="text-base font-semibold text-gray-800">
+            Auto-Consolidated Records ({{ masterReports.length }})
+          </h2>
           <RouterLink
             v-if="project?.master_template_id"
             :to="`/admin/consolidations/${project.master_template_id}?project_id=${project.id}`"
@@ -539,17 +582,61 @@ function formatDate(iso: string | null) {
         </div>
 
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table class="min-w-full text-sm">
+          <div v-if="loadingReports" class="py-10 text-center text-sm text-gray-400">Loading…</div>
+          <table v-else class="min-w-full text-sm">
             <thead>
               <tr class="border-b border-gray-200 bg-gray-50">
-                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Record</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Report Name</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Period</th>
                 <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Generated</th>
                 <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td colspan="3" class="py-20 text-center">
+            <tbody class="divide-y divide-gray-100">
+              <tr
+                v-for="r in masterReports"
+                :key="r.id"
+                class="hover:bg-gray-50 transition-colors"
+              >
+                <!-- Name (inline rename) -->
+                <td class="px-5 py-3.5 font-medium text-gray-800">
+                  <div v-if="renamingId === r.id" class="flex items-center gap-2">
+                    <input
+                      v-model="renameValue"
+                      class="rounded border border-violet-400 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 w-48"
+                      @keydown.enter="saveRename(r)"
+                      @keydown.esc="renamingId = null"
+                    />
+                    <button class="text-xs text-violet-600 hover:underline" @click="saveRename(r)">Save</button>
+                    <button class="text-xs text-gray-400 hover:underline" @click="renamingId = null">Cancel</button>
+                  </div>
+                  <span v-else>{{ r.name ?? r.id }}</span>
+                </td>
+                <td class="px-5 py-3.5 text-gray-500 text-xs">{{ r.period ?? '—' }}</td>
+                <td class="px-5 py-3.5 text-gray-500 text-xs">{{ formatDateTime(r.generated_at) }}</td>
+                <td class="px-5 py-3.5">
+                  <div class="flex items-center gap-3">
+                    <RouterLink
+                      :to="`/admin/master-sheets/${r.id}`"
+                      class="text-xs text-violet-600 hover:underline"
+                    >View</RouterLink>
+                    <button
+                      class="text-xs text-blue-600 hover:underline"
+                      @click="adminStore.downloadMasterReport(r.id)"
+                    >Download</button>
+                    <button
+                      class="text-xs text-gray-500 hover:underline"
+                      @click="startRename(r)"
+                    >Rename</button>
+                    <button
+                      class="text-xs text-red-400 hover:text-red-600 transition-colors"
+                      @click="deleteReport(r)"
+                    >Delete</button>
+                  </div>
+                </td>
+              </tr>
+              <tr v-if="!masterReports.length">
+                <td colspan="4" class="py-20 text-center">
                   <div class="flex flex-col items-center gap-3">
                     <svg width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <ellipse cx="60" cy="75" rx="40" ry="6" fill="#EDE9FE"/>
@@ -565,7 +652,9 @@ function formatDate(iso: string | null) {
                       <circle cx="18" cy="48" r="3" fill="#EDE9FE"/>
                     </svg>
                     <p class="text-sm text-gray-400">No Data to Show</p>
-                    <p v-if="!project?.master_template_id" class="text-xs text-gray-400">Assign a master template above to enable consolidation.</p>
+                    <p v-if="!project?.master_template_id" class="text-xs text-gray-400">
+                      Assign a master template above to enable consolidation.
+                    </p>
                   </div>
                 </td>
               </tr>

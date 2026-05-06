@@ -21,3 +21,4 @@ class TemplateAssignment(Base):
     upload_token_expires_at = Column(DateTime, nullable=True)
     assigned_at = Column(DateTime, server_default=func.now(), nullable=False)
     assigned_to_user_id = Column(String(36), nullable=True, index=True)
+    reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"
