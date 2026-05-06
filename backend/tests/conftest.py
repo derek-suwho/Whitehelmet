@@ -8,14 +8,23 @@ os.environ["ENVIRONMENT"] = "test"
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, String
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.ext.compiler import compiles
 
 from app.db.session import Base, get_db
+
+
+# Make PostgreSQL UUID compile as VARCHAR in SQLite test engine
+@compiles(PG_UUID, "sqlite")
+def compile_uuid_sqlite(type_, compiler, **kw):
+    return "VARCHAR(36)"
 from app.main import app
 from app.core.config import Settings, get_settings
-from app.models.user import User
+from app.models.profile import Profile
+from app.models.user import User  # shim
 from app.models.session import SessionModel
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
@@ -68,8 +77,9 @@ def client(db):
 
 @pytest.fixture
 def test_user(db):
-    """Create a test user."""
-    user = User(external_id="test-ext-1", email="test@whitehelmet.com", display_name="Test User")
+    """Create a test profile (replaces old User fixture)."""
+    import uuid
+    user = Profile(id=str(uuid.uuid4()), role="devco_user", display_name="Test User")
     db.add(user)
     db.commit()
     db.refresh(user)
