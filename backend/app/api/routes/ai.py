@@ -21,7 +21,7 @@ from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest, CommandRequest, CommandResponse
 from sqlalchemy.orm import Session
 
@@ -466,7 +466,7 @@ async def parse_template(file: UploadFile = File(...)):
 @router.post("/import-template")
 async def import_template(
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """

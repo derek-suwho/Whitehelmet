@@ -16,7 +16,7 @@ class FormulaCreate(BaseModel):
 
 
 class FormulaResponse(BaseModel):
-    id: int
+    id: str
     name: str
     expression: str
     description: Optional[str]

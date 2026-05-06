@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, verify_csrf
 from app.db.session import get_db
 from app.models.template_assignment import TemplateAssignment
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.admin import AssignmentCreate, AssignmentResponse
 
 router = APIRouter(
@@ -21,7 +21,7 @@ router = APIRouter(
 @router.post("", response_model=list[AssignmentResponse], status_code=status.HTTP_201_CREATED)
 def create_assignments(
     body: AssignmentCreate,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     results = []

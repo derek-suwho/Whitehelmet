@@ -24,7 +24,7 @@ from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.admin import UserWithOrgResponse, UpdateRoleRequest
 from app.schemas.subcontractor import ConsolidationProgressResponse, OrgSubmissionStatus
 from app.schemas.template_formula import (
@@ -40,7 +40,7 @@ router = APIRouter(
 
 @router.get("/users", response_model=list[UserWithOrgResponse])
 def list_users(db: Session = Depends(get_db)):
-    return db.query(User).order_by(User.display_name).all()
+    return db.query(Profile).order_by(Profile.display_name).all()
 
 
 @router.patch(
@@ -51,7 +51,7 @@ def list_users(db: Session = Depends(get_db)):
 def update_user_role(
     user_id: int, body: UpdateRoleRequest, db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(Profile).filter(Profile.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.role = body.role
@@ -98,7 +98,7 @@ def get_consolidation_progress(
         member_count = 0
 
         for m in members:
-            user = db.query(User).filter(User.id == m.user_id).first()
+            user = db.query(Profile).filter(Profile.id == m.user_id).first()
             if not user:
                 continue
             member_count += 1
@@ -186,7 +186,7 @@ def get_consolidation_progress(
             # One row per submitter so every file is visible and selectable
             for sub in subs:
                 submitted_count += 1
-                submitter = db.query(User).filter(User.id == sub.submitted_by).first()
+                submitter = db.query(Profile).filter(Profile.id == sub.submitted_by).first()
                 display = submitter.display_name if submitter else (project.name if project else a.org_id)
                 org_rows.append(
                     OrgSubmissionStatus(
@@ -238,7 +238,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
     member_users = [
-        db.query(User).filter(User.id == m.user_id).first() for m in members
+        db.query(Profile).filter(Profile.id == m.user_id).first() for m in members
     ]
     member_users = [u for u in member_users if u]
     total_members = len(member_users)
@@ -310,7 +310,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 async def consolidate_submissions(
     template_id: str,
     body: dict,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Load project submission files, run AI schema unification, save ConsolidatedSheet."""
@@ -556,7 +556,7 @@ class AssignmentLockResponse(BaseModel):
 @router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
 def lock_assignment(
     assignment_id: str,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     """Lock a submission — no further uploads accepted from the DevCo."""
@@ -576,7 +576,7 @@ def lock_assignment(
 @router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
 def unlock_assignment(
     assignment_id: str,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     """Unlock a submission — allows DevCo to resubmit."""
@@ -599,7 +599,7 @@ def unlock_assignment(
 )
 def list_formulas(
     version_id: str,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     return db.query(TemplateFormula).filter(
@@ -615,7 +615,7 @@ def list_formulas(
 def create_formula(
     version_id: str,
     body: TemplateFormulaCreate,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     import uuid as _u
@@ -641,7 +641,7 @@ def create_formula(
 def update_formula(
     formula_id: str,
     body: TemplateFormulaUpdate,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -659,7 +659,7 @@ def update_formula(
 @router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_formula(
     formula_id: str,
-    user: User = Depends(require_pif_admin),
+    user: Profile = Depends(require_pif_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()

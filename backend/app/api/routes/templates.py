@@ -12,7 +12,7 @@ from app.db.session import get_db
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
 from app.models.consolidated_sheet import ConsolidatedSheet
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.templates import (
     TemplateCreate, TemplateResponse,
     TemplateVersionCreate, TemplateVersionResponse,
@@ -50,7 +50,7 @@ def list_master_templates(db: Session = Depends(get_db)):
 
 @router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED,
              dependencies=[Depends(verify_csrf)])
-def create_template(body: TemplateCreate, user: User = Depends(get_current_user),
+def create_template(body: TemplateCreate, user: Profile = Depends(get_current_user),
                     db: Session = Depends(get_db)):
     tmpl = Template(
         id=str(uuid.uuid4()),
@@ -117,7 +117,7 @@ def list_versions(template_id: str, db: Session = Depends(get_db)):
 @router.post("/{template_id}/versions", response_model=TemplateVersionResponse,
              status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 def save_version(template_id: str, body: TemplateVersionCreate,
-                 user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+                 user: Profile = Depends(get_current_user), db: Session = Depends(get_db)):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
     if not tmpl:
         raise HTTPException(status_code=404, detail="Template not found")

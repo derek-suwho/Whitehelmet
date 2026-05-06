@@ -12,7 +12,7 @@ from app.core.dependencies import get_current_user, verify_csrf
 from app.core.security import hash_file
 from app.db.session import get_db
 from app.models.uploaded_file import UploadedFile
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.files import FileResponse, FileListResponse
 
 router = APIRouter(
@@ -30,7 +30,7 @@ ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 
 @router.get("", response_model=FileListResponse)
 async def list_files(
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List all files for the authenticated user."""
@@ -49,7 +49,7 @@ async def list_files(
 @router.get("/{file_id}", response_model=FileResponse)
 async def get_file(
     file_id: int,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Get file metadata (user-scoped)."""
@@ -66,7 +66,7 @@ async def get_file(
 @router.get("/{file_id}/download")
 async def download_file(
     file_id: int,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Download file content (user-scoped)."""
@@ -92,7 +92,7 @@ async def download_file(
 @router.post("/upload", status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
 async def upload_file(
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Upload and validate an xlsx file."""
@@ -150,7 +150,7 @@ async def upload_file(
 @router.delete("/{file_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
 async def delete_file(
     file_id: int,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Delete a file (user-scoped). Removes both DB record and stored file."""

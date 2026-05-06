@@ -22,7 +22,7 @@ from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.subcontractor import AssignmentForSubcontractor, SubmissionResponse
 from app.services.formula_executor import FormulaExecutor
 
@@ -34,7 +34,7 @@ router = APIRouter(
     dependencies=[Depends(require_subcontractor)],
 )
 
-def _assignment_filter(user: User):
+def _assignment_filter(user: Profile):
     """Return an OR filter matching project-wide assignments OR user-targeted ones."""
     return or_(
         (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id == None),
@@ -46,7 +46,7 @@ def _assignment_filter(user: User):
 
 @router.get("/assignments", response_model=list[AssignmentForSubcontractor])
 def list_my_assignments(
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return template assignments for this user — project-wide or directly targeted."""
@@ -110,7 +110,7 @@ def list_my_assignments(
 @router.get("/assignments/{assignment_id}/template-download")
 def download_template(
     assignment_id: str,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Generate and serve an xlsx template from the PM's template schema."""
@@ -170,7 +170,7 @@ def download_template(
 async def submit_file(
     assignment_id: str,
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Upload an xlsx against an assignment. Resubmission replaces the prior file."""
@@ -257,7 +257,7 @@ async def submit_file(
 
 @router.get("/submissions", response_model=list[SubmissionResponse])
 def list_my_submissions(
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return all submissions made by this user, newest first."""

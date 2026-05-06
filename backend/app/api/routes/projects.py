@@ -14,7 +14,7 @@ from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_version import TemplateVersion
-from app.models.user import User
+from app.models.profile import Profile
 from app.schemas.projects import (
     AddMemberRequest,
     AssignMasterTemplateRequest,
@@ -44,7 +44,7 @@ def list_projects(db: Session = Depends(get_db)):
 )
 def create_project(
     body: ProjectCreate,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     p = Project(
@@ -88,7 +88,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     # Re-build members list now that we have submitter info
     members = []
     for m in members_q:
-        u = db.query(User).filter(User.id == m.user_id).first()
+        u = db.query(Profile).filter(Profile.id == m.user_id).first()
         if u:
             members.append(
                 {
@@ -118,7 +118,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                 template_name = tmpl.name if tmpl else None
         assigned_to_display = None
         if a.assigned_to_user_id:
-            target = db.query(User).filter(User.id == a.assigned_to_user_id).first()
+            target = db.query(Profile).filter(Profile.id == a.assigned_to_user_id).first()
             assigned_to_display = target.display_name if target else None
 
         template_assignments.append(
@@ -167,7 +167,7 @@ def add_member(
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    user = db.query(User).filter(User.id == body.user_id).first()
+    user = db.query(Profile).filter(Profile.id == body.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -255,7 +255,7 @@ def set_master_template(
 def assign_template(
     project_id: str,
     body: AssignTemplateRequest,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     p = db.query(Project).filter(Project.id == project_id).first()
