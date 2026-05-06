@@ -19,7 +19,7 @@ const error = ref('')
 const tabs = [
   { key: 'workpackage',   label: 'Work Package' },
   { key: 'document',      label: 'Document Management' },
-  { key: 'template',      label: 'Template' },
+  { key: 'template',      label: 'Subcontractor Templates' },
   { key: 'subcontractor', label: 'Sub-Contractor Record' },
   { key: 'consolidated',  label: 'Auto-Consolidated Master Records' },
   { key: 'notifications', label: 'Notifications' },
@@ -393,7 +393,7 @@ function formatDate(iso: string | null) {
       <template v-else-if="activeTab === 'template'">
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-base font-semibold text-gray-800">
-            Templates ({{ project?.template_assignments?.length ?? 0 }})
+            Subcontractor Templates ({{ project?.template_assignments?.length ?? 0 }})
           </h2>
           <div class="flex items-center gap-3">
             <div class="relative">
