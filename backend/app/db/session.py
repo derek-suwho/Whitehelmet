@@ -1,4 +1,4 @@
-"""Database session management with connection pooling."""
+"""Database session — PostgreSQL via Supabase."""
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
@@ -7,12 +7,9 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+# SQLite supported for local unit tests; production uses Supabase PostgreSQL
 _sqlite = settings.database_url.startswith("sqlite")
-_connect_args: dict = {}
-if _sqlite:
-    _connect_args = {"check_same_thread": False}
-elif settings.database_url.startswith("mysql") and settings.db_ssl_ca:
-    _connect_args = {"ssl_ca": settings.db_ssl_ca}
+_connect_args = {"check_same_thread": False} if _sqlite else {}
 
 engine = create_engine(
     settings.database_url,
@@ -22,7 +19,6 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 Base = declarative_base()
 
 
