@@ -26,8 +26,12 @@ class Settings(BaseSettings):
     csrf_secret: str = ""
     session_expiry_hours: int = 24
 
+    # Supabase (required when auth_mode=supabase)
+    # JWKS URL derived as: {supabase_url}/auth/v1/.well-known/jwks.json
+    supabase_url: str = ""          # e.g. https://[ref].supabase.co
+
     # Keycloak (required when auth_mode=keycloak)
-    auth_mode: str = "local"        # "local" | "keycloak"
+    auth_mode: str = "local"        # "local" | "keycloak" | "supabase"
     keycloak_url: str = ""          # e.g. https://auth.client.com
     keycloak_realm: str = ""        # e.g. pif
     keycloak_client_id: str = "whitehelmet"
