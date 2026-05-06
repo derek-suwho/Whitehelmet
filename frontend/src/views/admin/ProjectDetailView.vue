@@ -152,7 +152,7 @@ function formatDate(iso: string | null) {
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-6 space-y-6 overflow-y-auto h-full">
     <!-- Header -->
     <div>
       <RouterLink to="/admin/projects" class="text-gray-400 hover:text-gray-600 text-sm">← Projects</RouterLink>
@@ -245,6 +245,20 @@ function formatDate(iso: string | null) {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Formula Library section -->
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-100">
+        <h2 class="text-sm font-semibold text-gray-700">Formula Library</h2>
+        <p class="text-xs text-gray-400 mt-0.5">PIF-owned calculation formulas applied to submissions in this project.</p>
+      </div>
+      <div class="flex items-center justify-center py-12">
+        <div class="text-center">
+          <div class="text-4xl mb-3">∑</div>
+          <p class="text-sm text-gray-400"><code class="font-mono text-xs">@/components/formula/FormulaLibraryPanel.vue</code> will render here.</p>
+        </div>
+      </div>
     </div>
 
     <!-- Members section -->

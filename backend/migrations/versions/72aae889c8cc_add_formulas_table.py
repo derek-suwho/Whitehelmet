@@ -15,21 +15,22 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'formulas',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('user_id', sa.Integer(), nullable=False),
-        sa.Column('name', sa.String(200), nullable=False),
-        sa.Column('description', sa.String(500), nullable=True),
-        sa.Column('expression', sa.String(1000), nullable=False),
-        sa.Column('nl_prompt', sa.String(500), nullable=True),
-        sa.Column('formula_type', sa.String(50), nullable=True),
-        sa.Column('created_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), server_default=sa.text('now()'), nullable=False),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id'),
-    )
-    op.create_index('ix_formulas_user_id', 'formulas', ['user_id'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS formulas (
+            id SERIAL NOT NULL,
+            user_id INTEGER NOT NULL,
+            name VARCHAR(200) NOT NULL,
+            description VARCHAR(500),
+            expression VARCHAR(1000) NOT NULL,
+            nl_prompt VARCHAR(500),
+            formula_type VARCHAR(50),
+            created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL,
+            updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now() NOT NULL,
+            PRIMARY KEY (id),
+            FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_formulas_user_id ON formulas (user_id)")
 
 
 def downgrade() -> None:

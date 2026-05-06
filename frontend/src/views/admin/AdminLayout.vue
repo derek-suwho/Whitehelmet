@@ -11,8 +11,7 @@ const navLinks = [
   { label: 'Subcontractor Templates', to: '/admin/templates' },
   { label: 'Projects', to: '/admin/projects' },
   { label: 'Users', to: '/admin/users' },
-  { label: 'Formula Library', to: '/admin/formulas' },
-  { label: 'File Uploads', to: '/admin/freeform-uploads' },
+{ label: 'File Uploads', to: '/admin/freeform-uploads' },
   { label: 'Consolidate Files', to: '/', exact: true },
 ]
 
