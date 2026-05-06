@@ -47,6 +47,7 @@ interface ProjectOverview {
 
 const templateId = route.params.templateId as string
 const projectId = route.query.project_id as string | undefined
+const selectedTemplateId = ref(templateId)
 
 const allSubmitted = ref(false)
 const progressData = ref<ProgressData | null>(null)
@@ -94,12 +95,21 @@ onMounted(() => {
 
 async function fetchProgress() {
   try {
+    const tid = selectedTemplateId.value
     const url = projectId
-      ? `/api/admin/templates/${templateId}/consolidation-progress?project_id=${projectId}`
-      : `/api/admin/templates/${templateId}/consolidation-progress`
+      ? `/api/admin/templates/${tid}/consolidation-progress?project_id=${projectId}`
+      : `/api/admin/templates/${tid}/consolidation-progress`
     progressData.value = await api.get<ProgressData>(url)
     if (progressData.value?.all_submitted) allSubmitted.value = true
   } catch { /* non-fatal */ }
+}
+
+async function selectTemplate(id: string) {
+  if (selectedTemplateId.value === id) return
+  selectedTemplateId.value = id
+  selectedSubmissionIds.value = []
+  progressData.value = null
+  await fetchProgress()
 }
 
 async function fetchProjectOverview() {
@@ -133,7 +143,7 @@ async function consolidate() {
     }
 
     const data = await api.post<typeof consolidationResult.value>(
-      `/api/admin/templates/${templateId}/consolidate-submissions`,
+      `/api/admin/templates/${selectedTemplateId.value}/consolidate-submissions`,
       {
         project_id: projectId ?? null,
         submission_ids: submissionIds,
@@ -153,7 +163,7 @@ async function consolidate() {
 function openMasterSheet() {
   if (!consolidationResult.value) return
   const sheetId = consolidationResult.value.consolidated_sheet_id
-  const query: Record<string, string> = { template_id: templateId }
+  const query: Record<string, string> = { template_id: selectedTemplateId.value }
   if (projectId) query.project_id = projectId
   if (selectedSubmissionIds.value.length > 0) {
     query.submission_ids = selectedSubmissionIds.value.join(',')
@@ -233,32 +243,39 @@ async function download() {
         <span class="text-sm font-semibold text-gray-700">Templates</span>
       </div>
       <div class="divide-y divide-gray-100">
-        <div
+        <button
           v-for="t in projectOverview.templates"
           :key="t.template_id"
-          class="flex items-center gap-4 px-5 py-3"
+          class="w-full flex items-center gap-4 px-5 py-3.5 text-left transition-colors hover:bg-gray-50"
+          :class="selectedTemplateId === t.template_id ? 'bg-gray-50' : ''"
+          @click="selectTemplate(t.template_id)"
         >
-          <!-- Status icon -->
+          <!-- Radio / checkmark -->
           <div class="shrink-0">
-            <svg v-if="t.all_submitted" class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg v-if="t.all_submitted && selectedTemplateId === t.template_id"
+              class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
             </svg>
-            <div v-else class="w-4 h-4 rounded-full border-2 border-gray-300" />
+            <svg v-else-if="t.all_submitted"
+              class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+            </svg>
+            <div v-else
+              class="w-4 h-4 rounded-full border-2 transition-colors"
+              :class="selectedTemplateId === t.template_id ? 'border-violet-500' : 'border-gray-300'"
+            />
           </div>
           <!-- Name -->
-          <span
-            class="text-sm font-medium flex-1 truncate"
-            :class="t.template_id === templateId ? 'text-blue-600' : 'text-gray-700'"
-          >
+          <span class="text-sm font-medium flex-1 truncate"
+            :class="selectedTemplateId === t.template_id ? 'text-gray-900' : 'text-gray-600'">
             {{ t.template_name }}
-            <span v-if="t.template_id === templateId" class="ml-1 text-xs text-blue-400 font-normal">(current)</span>
           </span>
-          <!-- Mini bar -->
-          <div class="w-32 shrink-0">
+          <!-- Mini bar + count -->
+          <div class="w-36 shrink-0">
             <div class="flex items-center gap-2">
               <div class="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                 <div
-                  class="h-full rounded-full"
+                  class="h-full rounded-full transition-all duration-500"
                   :class="t.all_submitted ? 'bg-green-500' : 'bg-blue-400'"
                   :style="{ width: t.total_members > 0 ? Math.round((t.submitted_count / t.total_members) * 100) + '%' : '0%' }"
                 />
@@ -266,7 +283,7 @@ async function download() {
               <span class="text-xs text-gray-400 whitespace-nowrap shrink-0">{{ t.submitted_count }}/{{ t.total_members }}</span>
             </div>
           </div>
-        </div>
+        </button>
       </div>
     </div>
 
