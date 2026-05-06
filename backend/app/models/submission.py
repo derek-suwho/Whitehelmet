@@ -18,3 +18,4 @@ class Submission(Base):
     submitted_at = Column(DateTime, server_default=func.now(), nullable=False)
     submitted_by = Column(String(36), nullable=True)
     processed_file_path = Column(String(500), nullable=True)
+    reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"

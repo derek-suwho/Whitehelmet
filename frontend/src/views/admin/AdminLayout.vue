@@ -7,8 +7,6 @@ const router = useRouter()
 
 const navLinks = [
   { label: 'Overview', to: '/admin/dashboard' },
-  { label: 'Master Template', to: '/admin/master-template' },
-  { label: 'Subcontractor Templates', to: '/admin/templates' },
   { label: 'Projects', to: '/admin/projects' },
   { label: 'Users', to: '/admin/users' },
   { label: 'Formula Library', to: '/admin/formulas' },

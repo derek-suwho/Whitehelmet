@@ -23,3 +23,4 @@ class TemplateAssignment(Base):
     assigned_to_user_id = Column(String(36), nullable=True, index=True)
     locked_at = Column(DateTime, nullable=True)
     locked_by = Column(String(36), nullable=True)
+    reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"

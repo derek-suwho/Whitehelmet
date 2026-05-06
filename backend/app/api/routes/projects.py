@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_pif_admin
+from app.core.rbac import require_org_super_admin
 from app.db.session import get_db
 from app.models.project import Project
 from app.models.project_member import ProjectMember
@@ -40,7 +40,7 @@ def list_projects(db: Session = Depends(get_db)):
     "",
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def create_project(
     body: ProjectCreate,
@@ -155,7 +155,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 @router.post(
     "/{project_id}/members",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def add_member(
     project_id: str,
@@ -195,7 +195,7 @@ def add_member(
 @router.delete(
     "/{project_id}/members/{membership_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def remove_member(
     project_id: str,
@@ -219,7 +219,7 @@ def remove_member(
 @router.patch(
     "/{project_id}/master-template",
     response_model=ProjectDetailResponse,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def set_master_template(
     project_id: str,
@@ -249,7 +249,7 @@ def set_master_template(
 @router.post(
     "/{project_id}/assign-template",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_pif_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def assign_template(
     project_id: str,
@@ -297,3 +297,39 @@ def assign_template(
         db.commit()
         db.refresh(a)
         return {"ok": True, "assignment_id": a.id}
+
+
+@router.get("/{project_id}/submissions")
+def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
+    """Return all submissions for a project, enriched with submitter name."""
+    assignment_ids = [
+        a.id for a in db.query(TemplateAssignment)
+        .filter(TemplateAssignment.org_id == project_id)
+        .all()
+    ]
+    if not assignment_ids:
+        return []
+
+    submissions = (
+        db.query(Submission)
+        .filter(Submission.assignment_id.in_(assignment_ids))
+        .order_by(Submission.submitted_at.desc())
+        .all()
+    )
+
+    result = []
+    user_cache: dict[str, str] = {}
+    for idx, s in enumerate(submissions):
+        if s.submitted_by and s.submitted_by not in user_cache:
+            u = db.query(User).filter(User.id == s.submitted_by).first()
+            user_cache[s.submitted_by] = u.display_name if u else "Unknown"
+        result.append({
+            "id": s.id,
+            "row_number": idx + 1,
+            "file_name": s.file_name,
+            "submitter_name": user_cache.get(s.submitted_by or "", "Unknown"),
+            "reporting_period": s.reporting_period,
+            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
+            "status": s.status,
+        })
+    return result

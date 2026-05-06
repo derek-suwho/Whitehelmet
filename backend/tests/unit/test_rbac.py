@@ -10,43 +10,43 @@ def _make_user(role: str):
     return SimpleNamespace(role=role)
 
 
-def test_require_pif_admin_passes():
-    from app.core.rbac import require_pif_admin
+def test_require_org_super_admin_passes():
+    from app.core.rbac import require_org_super_admin
     import asyncio
-    user = _make_user("pif_admin")
-    asyncio.get_event_loop().run_until_complete(require_pif_admin(current_user=user))
+    user = _make_user("org_super_admin")
+    asyncio.get_event_loop().run_until_complete(require_org_super_admin(current_user=user))
 
 
-def test_require_pif_admin_denies_devco_admin():
-    from app.core.rbac import require_pif_admin
+def test_require_org_super_admin_denies_org_admin():
+    from app.core.rbac import require_org_super_admin
     import asyncio
-    user = _make_user("devco_admin")
+    user = _make_user("org_admin")
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.get_event_loop().run_until_complete(require_pif_admin(current_user=user))
+        asyncio.get_event_loop().run_until_complete(require_org_super_admin(current_user=user))
     assert exc_info.value.status_code == 403
 
 
-def test_require_devco_admin_passes_devco_admin():
-    from app.core.rbac import require_devco_admin
+def test_require_org_admin_passes():
+    from app.core.rbac import require_org_admin
     import asyncio
-    for role in ("pif_admin", "devco_admin"):
+    for role in ("org_super_admin", "org_admin"):
         user = _make_user(role)
-        asyncio.get_event_loop().run_until_complete(require_devco_admin(current_user=user))
+        asyncio.get_event_loop().run_until_complete(require_org_admin(current_user=user))
 
 
-def test_require_devco_admin_denies_devco_user():
-    from app.core.rbac import require_devco_admin
+def test_require_org_admin_denies_org_member():
+    from app.core.rbac import require_org_admin
     import asyncio
-    user = _make_user("devco_user")
+    user = _make_user("org_member")
     with pytest.raises(HTTPException) as exc_info:
-        asyncio.get_event_loop().run_until_complete(require_devco_admin(current_user=user))
+        asyncio.get_event_loop().run_until_complete(require_org_admin(current_user=user))
     assert exc_info.value.status_code == 403
 
 
 def test_require_org_member_passes_any_role():
     from app.core.rbac import require_org_member
     import asyncio
-    for role in ("pif_admin", "devco_admin", "devco_user"):
+    for role in ("org_super_admin", "org_admin", "org_member"):
         user = _make_user(role)
         asyncio.get_event_loop().run_until_complete(require_org_member(current_user=user))
 

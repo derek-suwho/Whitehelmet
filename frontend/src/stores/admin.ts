@@ -3,6 +3,26 @@ import { ref } from 'vue'
 import { api } from '@/composables/useApi'
 import type { Project, ProjectMember, ProjectTemplateAssignment } from '@/types/database'
 
+export interface ProjectSubmission {
+  id: string
+  row_number: number
+  file_name: string
+  submitter_name: string
+  reporting_period: string | null
+  submitted_at: string | null
+  status: string
+}
+
+export interface MasterReport {
+  id: string
+  template_id: string
+  project_id: string | null
+  name: string | null
+  period: string | null
+  generated_by: string | null
+  generated_at: string
+}
+
 export interface UserWithProject {
   id: number
   external_id: string
@@ -72,7 +92,7 @@ export const useAdminStore = defineStore('admin', () => {
   async function createUser(
     email: string,
     displayName: string,
-    role: 'pif_admin' | 'devco_admin' | 'devco_user',
+    role: 'org_super_admin' | 'org_admin' | 'org_member',
   ): Promise<void> {
     await api.post('/api/auth/register', { email, password: 'ChangeMe123!', display_name: displayName })
     await fetchUsers()
@@ -83,11 +103,31 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function updateUserRole(
     userId: number,
-    role: 'pif_admin' | 'devco_admin' | 'devco_user',
+    role: 'org_super_admin' | 'org_admin' | 'org_member',
   ): Promise<void> {
     const updated = await api.patch<UserWithProject>(`/api/admin/users/${userId}/role`, { role })
     const u = users.value.find(u => u.id === userId)
     if (u) u.role = updated.role
+  }
+
+  async function fetchProjectSubmissions(projectId: string): Promise<ProjectSubmission[]> {
+    return api.get<ProjectSubmission[]>(`/api/projects/${projectId}/submissions`)
+  }
+
+  async function fetchMasterReports(projectId: string): Promise<MasterReport[]> {
+    return api.get<MasterReport[]>(`/api/admin/projects/${projectId}/master-reports`)
+  }
+
+  async function renameMasterReport(sheetId: string, name: string): Promise<MasterReport> {
+    return api.patch<MasterReport>(`/api/admin/consolidated-sheets/${sheetId}/rename`, { name })
+  }
+
+  async function deleteMasterReport(sheetId: string): Promise<void> {
+    await api.delete(`/api/admin/consolidated-sheets/${sheetId}`)
+  }
+
+  function downloadMasterReport(sheetId: string): void {
+    window.open(`/api/admin/consolidated-sheets/${sheetId}/download`, '_blank')
   }
 
   return {
@@ -103,5 +143,10 @@ export const useAdminStore = defineStore('admin', () => {
     fetchUsers,
     createUser,
     updateUserRole,
+    fetchProjectSubmissions,
+    fetchMasterReports,
+    renameMasterReport,
+    deleteMasterReport,
+    downloadMasterReport,
   }
 })
