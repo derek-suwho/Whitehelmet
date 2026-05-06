@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
@@ -9,12 +9,12 @@ FAKE_CLAIMS = {"sub": FAKE_UID, "role": "authenticated", "aud": "authenticated"}
 
 @pytest.mark.asyncio
 async def test_valid_token_returns_profile():
-    fake_profile = MagicMock(id=FAKE_UID, role="devco_user")
+    fake_profile = MagicMock(id=FAKE_UID, role="org_member")
     fake_db = MagicMock()
     fake_db.query.return_value.filter.return_value.first.return_value = fake_profile
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake.jwt.token")
 
-    with patch("app.core.dependencies.decode_supabase_token", return_value=FAKE_CLAIMS), \
+    with patch("app.core.dependencies.decode_supabase_token", new_callable=AsyncMock, return_value=FAKE_CLAIMS), \
          patch("app.core.dependencies.get_settings") as ms:
         ms.return_value.supabase_url = "https://fake.supabase.co"
         from app.core.dependencies import get_current_user
@@ -36,7 +36,7 @@ async def test_profile_not_found_raises_401():
     fake_db.query.return_value.filter.return_value.first.return_value = None
     creds = HTTPAuthorizationCredentials(scheme="Bearer", credentials="fake.jwt.token")
 
-    with patch("app.core.dependencies.decode_supabase_token", return_value=FAKE_CLAIMS), \
+    with patch("app.core.dependencies.decode_supabase_token", new_callable=AsyncMock, return_value=FAKE_CLAIMS), \
          patch("app.core.dependencies.get_settings") as ms:
         ms.return_value.supabase_url = "https://fake.supabase.co"
         from app.core.dependencies import get_current_user

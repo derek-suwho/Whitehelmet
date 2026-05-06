@@ -40,7 +40,7 @@ OTHER_ORG_ID = "00000000-0000-0000-0000-000000000002"
 def devco_user(db) -> Profile:
     user = Profile(
         id=str(uuid.uuid4()),
-        role="devco_user",
+        role="org_member",
         display_name="DevCo User",
         org_id=ORG_ID,
     )
@@ -103,7 +103,7 @@ def _make_assignment(db, org_id=ORG_ID, assigned_to_user_id=None, status="pendin
 
 def test_list_assignments_no_org(db):
     """User with no org_id → 400."""
-    user = Profile(id=str(uuid.uuid4()), role="devco_user", display_name="No Org")
+    user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="No Org")
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -279,7 +279,7 @@ def test_download_template_no_org(client, db):
     from app.core.dependencies import get_current_user
     from app.models.profile import Profile
     import uuid
-    user = Profile(id=str(uuid.uuid4()), role="devco_user", display_name="NoOrg")
+    user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="NoOrg")
     db.add(user); db.commit()
     async def override(): return user
     client.app.dependency_overrides[get_current_user] = override

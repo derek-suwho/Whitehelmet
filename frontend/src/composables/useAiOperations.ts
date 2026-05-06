@@ -99,7 +99,7 @@ async function buildSourceSnapshot(): Promise<string | null> {
     files.map(async (file) => {
       try {
         const buf = await file.arrayBuffer()
-        const wb = XLSX.read(buf, { type: 'array' })
+        const wb = XLSX.read(buf, { type: 'array', cellStyles: true })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' })
         const headers = ((aoa[0] ?? []) as unknown[]).map(String).filter((h) => h.trim())

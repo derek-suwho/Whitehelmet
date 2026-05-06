@@ -12,7 +12,7 @@ _FRM_ID_3 = "00000000-0000-0000-0000-000000000013"
 @pytest.fixture
 def pif_admin_client(client, db, test_user):
     from app.core.dependencies import get_current_user
-    test_user.role = "pif_admin"
+    test_user.role = "org_super_admin"
     db.commit()
 
     async def override():

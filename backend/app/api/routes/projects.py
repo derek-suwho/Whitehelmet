@@ -86,9 +86,30 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         submitter_ids = {r[0] for r in rows if r[0] is not None}
 
     # Re-build members list now that we have submitter info
+    # Batch-fetch all related objects needed by the two loops below
+    _member_ids = [m.user_id for m in members_q]
+    _member_profiles = {
+        p.id: p for p in db.query(Profile).filter(Profile.id.in_(_member_ids)).all()
+    } if _member_ids else {}
+
+    _version_ids = [a.template_version_id for a in assignments_q if a.template_version_id]
+    _versions = {
+        v.id: v for v in db.query(TemplateVersion).filter(TemplateVersion.id.in_(_version_ids)).all()
+    } if _version_ids else {}
+
+    _template_ids = list({v.template_id for v in _versions.values()})
+    _templates = {
+        t.id: t for t in db.query(Template).filter(Template.id.in_(_template_ids)).all()
+    } if _template_ids else {}
+
+    _assigned_user_ids = [a.assigned_to_user_id for a in assignments_q if a.assigned_to_user_id]
+    _assigned_profiles = {
+        p.id: p for p in db.query(Profile).filter(Profile.id.in_(_assigned_user_ids)).all()
+    } if _assigned_user_ids else {}
+
     members = []
     for m in members_q:
-        u = db.query(Profile).filter(Profile.id == m.user_id).first()
+        u = _member_profiles.get(m.user_id)
         if u:
             members.append(
                 {
@@ -106,18 +127,14 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         template_name = None
         template_id = None
         if a.template_version_id:
-            ver = (
-                db.query(TemplateVersion)
-                .filter(TemplateVersion.id == a.template_version_id)
-                .first()
-            )
+            ver = _versions.get(a.template_version_id)
             if ver:
                 template_id = ver.template_id
-                tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
+                tmpl = _templates.get(ver.template_id)
                 template_name = tmpl.name if tmpl else None
         assigned_to_display = None
         if a.assigned_to_user_id:
-            target = db.query(Profile).filter(Profile.id == a.assigned_to_user_id).first()
+            target = _assigned_profiles.get(a.assigned_to_user_id)
             assigned_to_display = target.display_name if target else None
 
         template_assignments.append(
@@ -187,7 +204,6 @@ def add_member(
         user_id=body.user_id,
     )
     db.add(member)
-    user.org_id = project_id
     db.commit()
     return {"ok": True}
 

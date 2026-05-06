@@ -537,4 +537,3 @@ const handled = await handleAgentCommand(text)
 
 1. OpenRouter tool use format: does `finish_reason: "tool_calls"` work as expected for Anthropic models through OpenRouter? (may need to test; fallback: check if `tool_calls` array is non-empty regardless of finish_reason)
 2. Multi-step ops (consolidate, suggest template) currently use JSSpreadsheet API (`jss.setValueFromCoords`, `jss.loadData`) — these are also broken. Fix them as part of this task or separately?
-

@@ -3,6 +3,7 @@ import uuid
 import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from typing import Optional
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.orm import Session
@@ -138,7 +139,11 @@ def save_version(template_id: str, body: TemplateVersionCreate,
         created_by=str(user.id),
     )
     db.add(ver)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Version conflict — please retry")
     db.refresh(ver)
     return ver
 

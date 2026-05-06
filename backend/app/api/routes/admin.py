@@ -4,7 +4,7 @@ import io
 import json
 import openpyxl
 import uuid as _uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +39,8 @@ router = APIRouter(
 )
 
 
-@router.get("/users", response_model=list[UserWithOrgResponse])
+@router.get("/users", response_model=list[UserWithOrgResponse],
+            dependencies=[Depends(require_org_super_admin)])
 def list_users(db: Session = Depends(get_db)):
     return db.query(Profile).order_by(Profile.display_name).all()
 
@@ -47,7 +48,7 @@ def list_users(db: Session = Depends(get_db)):
 @router.patch(
     "/users/{user_id}/role",
     response_model=UserWithOrgResponse,
-    dependencies=[Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
 def update_user_role(
     user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)
@@ -94,12 +95,17 @@ def get_consolidation_progress(
             .all()
         ]
 
+        _proj_member_ids = [m.user_id for m in members]
+        _proj_profiles = {
+            p.id: p for p in db.query(Profile).filter(Profile.id.in_(_proj_member_ids)).all()
+        } if _proj_member_ids else {}
+
         org_rows: list[OrgSubmissionStatus] = []
         submitted_count = 0
         member_count = 0
 
         for m in members:
-            user = db.query(Profile).filter(Profile.id == m.user_id).first()
+            user = _proj_profiles.get(m.user_id)
             if not user:
                 continue
             member_count += 1
@@ -238,10 +244,11 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Project not found")
 
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
-    member_users = [
-        db.query(Profile).filter(Profile.id == m.user_id).first() for m in members
-    ]
-    member_users = [u for u in member_users if u]
+    _member_ids = [m.user_id for m in members]
+    member_users = (
+        db.query(Profile).filter(Profile.id.in_(_member_ids)).all()
+        if _member_ids else []
+    )
     total_members = len(member_users)
 
     # All template version assignments for this project (project-wide org_id assignments)
@@ -403,14 +410,25 @@ async def consolidate_submissions(
     # Parse each xlsx
     file_schemas = []
     all_file_data = []
+    failed_files: list[str] = []
     for sub in submissions:
         path = Path(sub.processed_file_path or sub.file_path)
         if not path.exists():
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "consolidate_submissions: file missing for submission %s: %s", sub.id, path
+            )
+            failed_files.append(sub.file_name)
             continue
         try:
             wb = openpyxl.load_workbook(path, data_only=True)
             picked = _pick_sheet(wb)
             if not picked:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    "consolidate_submissions: no usable sheet in submission %s (%s)", sub.id, sub.file_name
+                )
+                failed_files.append(sub.file_name)
                 continue
             _, rows, header_idx, header_row, _ = picked
 
@@ -453,7 +471,12 @@ async def consolidate_submissions(
 
             file_schemas.append({"name": sub.file_name, "headers": headers, "sample_rows": data_rows[:5]})
             all_file_data.append({"name": sub.file_name, "headers": headers, "all_rows": data_rows})
-        except Exception:
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "consolidate_submissions: failed to parse %s (sub %s): %s", sub.file_name, sub.id, exc
+            )
+            failed_files.append(sub.file_name)
             continue
 
     if not all_file_data:
@@ -548,6 +571,7 @@ async def consolidate_submissions(
         "freeform_count": 0,
         "name": auto_name,
         "period": report_period,
+        "failed_files": failed_files,
     }
 
 
@@ -579,7 +603,7 @@ class ConsolidatedSheetResponse(BaseModel):
 @router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
 def lock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     """Lock a submission — no further uploads accepted from the DevCo."""
@@ -589,7 +613,7 @@ def lock_assignment(
     if a.status == "locked":
         raise HTTPException(status_code=409, detail="Assignment already locked")
     a.status = "locked"
-    a.locked_at = datetime.utcnow()
+    a.locked_at = datetime.now(timezone.utc)
     a.locked_by = str(user.id)
     db.commit()
     db.refresh(a)
@@ -599,7 +623,7 @@ def lock_assignment(
 @router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
 def unlock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     """Unlock a submission — allows DevCo to resubmit."""
@@ -622,7 +646,7 @@ def unlock_assignment(
 )
 def list_formulas(
     version_id: str,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     return db.query(TemplateFormula).filter(
@@ -638,7 +662,7 @@ def list_formulas(
 def create_formula(
     version_id: str,
     body: TemplateFormulaCreate,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     import uuid as _u
@@ -664,7 +688,7 @@ def create_formula(
 def update_formula(
     formula_id: str,
     body: TemplateFormulaUpdate,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -682,7 +706,7 @@ def update_formula(
 @router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_formula(
     formula_id: str,
-    user: Profile = Depends(require_pif_admin),
+    user: Profile = Depends(require_org_super_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()

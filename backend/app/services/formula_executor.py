@@ -132,6 +132,7 @@ class FormulaExecutor:
             scoring_rules = json.loads(formula.scoring_rules) if formula.scoring_rules else []
 
             if formula.formula_type == "column":
+                formula_scores: list[float] = []
                 for row in range(data_start, data_end + 1):
                     cell_addr = f"{sheet_name}!{_col_index_to_letter(target_col_idx)}{row}"
                     try:
@@ -151,9 +152,12 @@ class FormulaExecutor:
                         else:
                             score_col_idx = header_to_col[score_header]
                         ws.cell(row=row, column=score_col_idx, value=score)
+                        formula_scores.append(score or 0)
 
-                        if formula.weight and row == data_start:
-                            weighted.append((formula.weight, score or 0))
+                # Average scores across all rows, then apply weight once per formula
+                if formula.weight and formula_scores:
+                    avg_score = sum(formula_scores) / len(formula_scores)
+                    weighted.append((formula.weight, avg_score))
 
             else:
                 # single_cell

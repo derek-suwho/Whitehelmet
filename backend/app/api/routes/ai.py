@@ -666,14 +666,16 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     new_data = result.get("data", data_rows)
     message = result.get("message", "Changes applied.")
 
-    # Write modified data back to the same file
+    # Write to a temp file then atomically replace the original to avoid corruption on error
     new_wb = openpyxl.Workbook()
     new_ws = new_wb.active
     new_ws.title = sheet_title
     new_ws.append(new_headers)
     for row in new_data:
         new_ws.append([v for v in row])
-    new_wb.save(path)
+    tmp_path = path.with_suffix(".tmp")
+    new_wb.save(tmp_path)
+    tmp_path.replace(path)
 
     return {"message": message}
 

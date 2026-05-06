@@ -9,25 +9,26 @@ _cache: dict = {"keys": [], "fetched_at": 0.0}
 _TTL = 3600  # refresh keys every hour
 
 
-def _fetch_jwks(supabase_url: str) -> list[dict]:
+async def _fetch_jwks(supabase_url: str) -> list[dict]:
     url = f"{supabase_url}/auth/v1/.well-known/jwks.json"
-    r = httpx.get(url, timeout=10)
+    async with httpx.AsyncClient(timeout=10) as client:
+        r = await client.get(url)
     r.raise_for_status()
     return r.json()["keys"]
 
 
-def get_public_keys(supabase_url: str) -> list[dict]:
+async def get_public_keys(supabase_url: str) -> list[dict]:
     """Return cached JWKS keys, refreshing if stale."""
     now = time.time()
     if now - _cache["fetched_at"] > _TTL or not _cache["keys"]:
-        _cache["keys"] = _fetch_jwks(supabase_url)
+        _cache["keys"] = await _fetch_jwks(supabase_url)
         _cache["fetched_at"] = now
     return _cache["keys"]
 
 
-def decode_supabase_token(token: str, supabase_url: str) -> dict:
+async def decode_supabase_token(token: str, supabase_url: str) -> dict:
     """Validate a Supabase-issued JWT (ES256) and return claims."""
-    keys = get_public_keys(supabase_url)
+    keys = await get_public_keys(supabase_url)
     try:
         header = jwt.get_unverified_header(token)
     except JWTError as exc:

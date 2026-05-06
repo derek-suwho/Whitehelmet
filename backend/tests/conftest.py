@@ -83,7 +83,7 @@ def client(db):
 def test_user(db):
     """Create a test profile."""
     import uuid
-    user = Profile(id=str(uuid.uuid4()), role="devco_user", display_name="Test User")
+    user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="Test User")
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -93,11 +93,34 @@ def test_user(db):
 @pytest.fixture
 def auth_client(client, db, test_user):
     """Test client with authenticated Bearer token (mocks JWT validation)."""
-    from unittest.mock import patch
     from app.core.dependencies import get_current_user
 
     async def override_get_current_user():
         return test_user
+
+    client.app.dependency_overrides[get_current_user] = override_get_current_user
+    yield client
+    client.app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def pif_admin_user(db):
+    """Create a pif_admin test profile."""
+    import uuid
+    user = Profile(id=str(uuid.uuid4()), role="org_super_admin", display_name="PIF Admin")
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def pif_admin_client(client, db, pif_admin_user):
+    """Test client authenticated as pif_admin."""
+    from app.core.dependencies import get_current_user
+
+    async def override_get_current_user():
+        return pif_admin_user
 
     client.app.dependency_overrides[get_current_user] = override_get_current_user
     yield client

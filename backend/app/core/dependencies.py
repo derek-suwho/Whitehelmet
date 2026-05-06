@@ -22,7 +22,7 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     settings = get_settings()
-    claims = decode_supabase_token(creds.credentials, settings.supabase_url)
+    claims = await decode_supabase_token(creds.credentials, settings.supabase_url)
     user_id: str = claims.get("sub", "")
 
     profile = db.query(Profile).filter(Profile.id == user_id).first()

@@ -11,6 +11,7 @@ class Profile(Base):
 
     # id mirrors auth.users.id — set by Supabase Auth, never generated here
     id = Column(UUID(as_uuid=False), primary_key=True)
+    email = Column(String(255), nullable=True, unique=True)
     org_id = Column(UUID(as_uuid=False), nullable=True, index=True)
     role = Column(String(50), nullable=False)      # pif_admin | devco_admin | devco_user
     display_name = Column(String(255), nullable=False)

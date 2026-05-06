@@ -115,11 +115,16 @@ async def upload_file(
             detail=f"File exceeds {settings.max_upload_size_mb}MB limit",
         )
 
-    # Validate xlsx magic bytes (PK zip header)
-    if content[:4] != b"PK\x03\x04":
+    # Validate file magic bytes (.xlsx = ZIP/PK, .xls = OLE2)
+    _xlsx_magic = b"PK\x03\x04"
+    _xls_magic = b"\xD0\xCF\x11\xE0"
+    if not (
+        (ext == ".xlsx" and content[:4] == _xlsx_magic)
+        or (ext == ".xls" and content[:4] == _xls_magic)
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File does not appear to be a valid xlsx",
+            detail="File does not appear to be a valid spreadsheet",
         )
 
     # Store file outside webroot

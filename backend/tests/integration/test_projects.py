@@ -25,7 +25,7 @@ ADMIN_USER_ID = "00000000-0000-0000-0000-000000000099"
 # ---------------------------------------------------------------------------
 
 def _make_pif_admin(user_id: str = ADMIN_USER_ID) -> Profile:
-    return Profile(id=user_id, role="pif_admin", display_name="PIF Admin")
+    return Profile(id=user_id, role="org_super_admin", display_name="PIF Admin")
 
 
 def _override_pif_admin(client, user_id: str = ADMIN_USER_ID):
@@ -48,7 +48,7 @@ def _seed_project(db, project_id: str = PROJECT_ID, name: str = "Test Project") 
 
 
 def _seed_member_profile(db, user_id: str = MEMBER_USER_ID) -> Profile:
-    u = Profile(id=user_id, role="devco_user", display_name="Member User")
+    u = Profile(id=user_id, role="org_member", display_name="Member User")
     db.add(u)
     db.commit()
     db.refresh(u)
@@ -165,7 +165,7 @@ def test_add_member_duplicate(client, db):
 def test_add_member_project_not_found(client, db):
     _override_pif_admin(client)
     numeric_uid = "3"
-    u = Profile(id=numeric_uid, role="devco_user", display_name="Orphan")
+    u = Profile(id=numeric_uid, role="org_member", display_name="Orphan")
     db.add(u)
     db.commit()
 

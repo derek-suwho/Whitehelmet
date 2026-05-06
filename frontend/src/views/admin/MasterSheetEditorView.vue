@@ -35,7 +35,7 @@ onMounted(async () => {
     const resp = await fetch(`/api/templates/consolidations/${sheetId}/download`, { credentials: 'include' })
     if (!resp.ok) throw new Error('Failed to load consolidated sheet')
     const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
     spreadsheetStore.loadWorkbook(wb, 'master.xlsx', buffer)
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Failed to load sheet'
@@ -70,7 +70,7 @@ async function reloadAfterFinetune() {
     const resp = await fetch(`/api/templates/consolidations/${sheetId}/download`, { credentials: 'include' })
     if (!resp.ok) return
     const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
     spreadsheetStore.loadWorkbook(wb, 'master.xlsx', buffer)
   } catch { /* non-fatal */ }
 }

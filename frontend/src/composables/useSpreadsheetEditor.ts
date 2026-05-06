@@ -9,6 +9,7 @@ let _currentSheetIdx = 0
 let _allSheetFormats: Record<string, Record<string, any>>[] = []
 let _allSheetMerges: any[][] = []
 let _allSheetColWidths: number[][] = []
+let _allSheetRowHeights: number[][] = []
 let _sheetsData: any[][][] = []
 let _sheetNames: string[] = []
 let _zoomLevel = 1.0
@@ -102,6 +103,48 @@ function _argbToCss(argb: string): string | null {
   const s = String(argb).replace('#', '')
   if (s.length === 8) return '#' + s.slice(2)
   if (s.length === 6) return '#' + s
+  return null
+}
+
+// Standard Excel 64-color indexed palette
+const _INDEXED_COLORS: string[] = [
+  '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+  '#000000', '#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF', '#00FFFF',
+  '#800000', '#008000', '#000080', '#808000', '#800080', '#008080', '#C0C0C0', '#808080',
+  '#9999FF', '#993366', '#FFFFCC', '#CCFFFF', '#660066', '#FF8080', '#0066CC', '#CCCCFF',
+  '#000080', '#FF00FF', '#FFFF00', '#00FFFF', '#800080', '#800000', '#008080', '#0000FF',
+  '#00CCFF', '#CCFFFF', '#CCFFCC', '#FFFF99', '#99CCFF', '#FF99CC', '#CC99FF', '#FFCC99',
+  '#3366FF', '#33CCCC', '#99CC00', '#FFCC00', '#FF9900', '#FF6600', '#666699', '#969696',
+  '#003366', '#339966', '#003300', '#333300', '#993300', '#993366', '#333399', '#333333',
+]
+
+// Default Office theme base colors (Office 2016 default)
+const _THEME_COLORS: string[] = [
+  '#000000', '#FFFFFF', '#44546A', '#E7E6E6',
+  '#4472C4', '#ED7D31', '#A9D18E', '#FF0000',
+  '#FFC000', '#70AD47', '#0563C1', '#954F72',
+]
+
+function _applyTint(hex: string, tint: number): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  const apply = (c: number) => tint > 0 ? Math.round(c + (255 - c) * tint) : Math.round(c * (1 + tint))
+  const clamp = (c: number) => Math.max(0, Math.min(255, c))
+  return `#${clamp(apply(r)).toString(16).padStart(2, '0')}${clamp(apply(g)).toString(16).padStart(2, '0')}${clamp(apply(b)).toString(16).padStart(2, '0')}`
+}
+
+function _resolveXlsxColor(fgColor: any): string | null {
+  if (!fgColor) return null
+  if (fgColor.rgb) return _argbToCss(fgColor.rgb)
+  if (typeof fgColor.indexed === 'number' && fgColor.indexed < _INDEXED_COLORS.length)
+    return _INDEXED_COLORS[fgColor.indexed]
+  if (typeof fgColor.theme === 'number') {
+    const base = _THEME_COLORS[fgColor.theme]
+    if (!base) return null
+    const tint = typeof fgColor.tint === 'number' ? fgColor.tint : 0
+    return tint !== 0 ? _applyTint(base, tint) : base
+  }
   return null
 }
 
@@ -252,6 +295,7 @@ export function useSpreadsheetEditor() {
     _allSheetFormats = []
     _allSheetMerges = []
     _allSheetColWidths = []
+    _allSheetRowHeights = []
     _sheetsData = []
     _sheetNames = wb.SheetNames.slice()
     _zoomLevel = 1.0
@@ -324,13 +368,11 @@ export function useSpreadsheetEditor() {
             if (s.font.bold) fmt.bold = true
             if (s.font.italic) fmt.italic = true
             if (s.font.underline) fmt.underline = true
-            if (s.font.color?.rgb) {
-              const fc = _argbToCss(s.font.color.rgb)
-              if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
-            }
+            const fc = _resolveXlsxColor(s.font.color)
+            if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
           }
-          if (s.fill?.fgColor?.rgb) {
-            const bg = _argbToCss(s.fill.fgColor.rgb)
+          if (s.fill) {
+            const bg = _resolveXlsxColor(s.fill.fgColor)
             if (bg && bg.toUpperCase() !== '#FFFFFF') fmt.bgColor = bg
           }
           if (s.alignment) {
@@ -366,6 +408,17 @@ export function useSpreadsheetEditor() {
         else widths.push(100)
       }
       _allSheetColWidths.push(widths)
+
+      // Row heights
+      const rowDefs = ws['!rows'] || []
+      const heights: number[] = []
+      for (let RH = 0; RH < Math.max(maxRows, 50); RH++) {
+        const ri = rowDefs[RH]
+        if (ri?.hpx) heights.push(Math.max(18, ri.hpx))
+        else if (ri?.hpt) heights.push(Math.max(18, Math.round(ri.hpt * 1.33)))
+        else heights.push(23)
+      }
+      _allSheetRowHeights.push(heights)
     })
 
     sheetNames.value = _sheetNames.slice()
@@ -384,6 +437,7 @@ export function useSpreadsheetEditor() {
       theme: 'ht-theme-main',
       formulas: { engine: HyperFormula, licenseKey: 'non-commercial-and-evaluation' } as any,
       colWidths: _allSheetColWidths[0] ?? 100,
+      rowHeights: _allSheetRowHeights[0] ?? 23,
       manualColumnResize: true,
       manualRowResize: true,
       contextMenu: true,
@@ -461,6 +515,7 @@ export function useSpreadsheetEditor() {
     _currentInstance.updateSettings({
       mergeCells: _allSheetMerges[idx] ?? [],
       colWidths: _allSheetColWidths[idx] ?? 100,
+      rowHeights: _allSheetRowHeights[idx] ?? 23,
     })
     _currentInstance.loadData(_sheetsData[idx])
   }

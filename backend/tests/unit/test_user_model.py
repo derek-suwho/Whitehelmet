@@ -17,7 +17,7 @@ def test_profile_has_role_and_org_id(db):
 
     profile = Profile(
         id=str(uuid.uuid4()),
-        role="pif_admin",
+        role="org_super_admin",
         org_id=str(uuid.uuid4()),
         display_name="Test",
     )
@@ -25,5 +25,5 @@ def test_profile_has_role_and_org_id(db):
     db.commit()
     db.refresh(profile)
 
-    assert profile.role == "pif_admin"
+    assert profile.role == "org_super_admin"
     assert profile.org_id is not None

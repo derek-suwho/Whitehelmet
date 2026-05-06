@@ -195,8 +195,13 @@ async def submit_file(
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_size_mb} MB limit")
-    if content[:4] != b"PK\x03\x04":
-        raise HTTPException(status_code=400, detail="File does not appear to be a valid xlsx")
+    _xlsx_magic = b"PK\x03\x04"
+    _xls_magic = b"\xD0\xCF\x11\xE0"
+    if not (
+        (ext == ".xlsx" and content[:4] == _xlsx_magic)
+        or (ext == ".xls" and content[:4] == _xls_magic)
+    ):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid spreadsheet")
 
     sha = hash_file(content)
     org_dir = Path(settings.upload_dir) / "submissions" / str(user.org_id)

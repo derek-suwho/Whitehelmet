@@ -1,126 +1,143 @@
 import JSZip from 'jszip'
 
-const THEME_SLOTS = ['dk1','lt1','dk2','lt2','accent1','accent2','accent3','accent4','accent5','accent6','hlink','folHlink']
+/** Fallback when theme1.xml is missing or unparsable (Office default order). */
+const DEFAULT_THEME_COLORS = [
+  '#000000',
+  '#FFFFFF',
+  '#44546A',
+  '#E7E6E6',
+  '#5B9BD5',
+  '#ED7D31',
+  '#A5A5A5',
+  '#FFC000',
+  '#4472C4',
+  '#70AD47',
+  '#0563C1',
+  '#954F72',
+]
 
-async function loadThemePalette(zip: JSZip): Promise<string[]> {
-  const xml = await zip.file('xl/theme/theme1.xml')?.async('text') ?? ''
-  return THEME_SLOTS.map(slot => {
-    const m = xml.match(new RegExp(`<a:${slot}[^>]*>.*?<a:srgbClr val="([0-9A-Fa-f]{6})"`, 's'))
-              ?? xml.match(new RegExp(`<a:${slot}[^>]*>.*?lastClr="([0-9A-Fa-f]{6})"`, 's'))
-    return m ? m[1].toUpperCase() : '808080'
-  })
+function decodeXmlAttr(s: string): string {
+  return s
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
 }
 
-function applyTint(hex: string, tint: number): string {
-  let r = parseInt(hex.slice(0, 2), 16)
-  let g = parseInt(hex.slice(2, 4), 16)
-  let b = parseInt(hex.slice(4, 6), 16)
-  // Convert to HLS, apply tint to luminance, convert back
-  const rn = r / 255, gn = g / 255, bn = b / 255
-  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn)
-  let h = 0, s = 0
-  let l = (max + min) / 2
-  if (max !== min) {
-    const d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-    if (max === rn) h = ((gn - bn) / d + (gn < bn ? 6 : 0)) / 6
-    else if (max === gn) h = ((bn - rn) / d + 2) / 6
-    else h = ((rn - gn) / d + 4) / 6
+function parseThemeColors(themeXml: string): string[] {
+  const schemeMatch = themeXml.match(/<a:clrScheme[^>]*>([\s\S]*?)<\/a:clrScheme>/i)
+  if (!schemeMatch) return [...DEFAULT_THEME_COLORS]
+  const body = schemeMatch[1]
+  const colors: string[] = []
+  const childRegex = /<a:(\w+)>([\s\S]*?)<\/a:\1>/gi
+  let m: RegExpExecArray | null
+  while ((m = childRegex.exec(body)) !== null) {
+    const inner = m[2]
+    const srgb = /<a:srgbClr[^>]*val="([0-9A-Fa-f]{6})"/i.exec(inner)
+    const sys = /<a:sysClr[^>]*lastClr="([0-9A-Fa-f]{6})"/i.exec(inner)
+    if (srgb) colors.push('#' + srgb[1].toUpperCase())
+    else if (sys) colors.push('#' + sys[1].toUpperCase())
+    else colors.push('#A6A6A6')
   }
-  l = tint > 0 ? l + (1 - l) * tint : l * (1 + tint)
-  l = Math.min(1, Math.max(0, l))
-  const hue2rgb = (p: number, q: number, t: number) => {
-    if (t < 0) t += 1; if (t > 1) t -= 1
-    if (t < 1/6) return p + (q - p) * 6 * t
-    if (t < 1/2) return q
-    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6
-    return p
-  }
-  if (s === 0) { r = g = b = Math.round(l * 255) }
-  else {
-    const q = l < 0.5 ? l * (1 + s) : l + s - l * s
-    const p = 2 * l - q
-    r = Math.round(hue2rgb(p, q, h + 1/3) * 255)
-    g = Math.round(hue2rgb(p, q, h) * 255)
-    b = Math.round(hue2rgb(p, q, h - 1/3) * 255)
-  }
-  return r.toString(16).padStart(2,'0') + g.toString(16).padStart(2,'0') + b.toString(16).padStart(2,'0')
+  return colors.length ? colors : [...DEFAULT_THEME_COLORS]
 }
 
-function resolveZipPath(target: string): string {
-  // targets may be absolute (/xl/worksheets/sheet1.xml) or relative (worksheets/sheet1.xml)
-  const clean = target.startsWith('/') ? target.slice(1) : target
-  return clean.startsWith('xl/') ? clean : `xl/${clean}`
+function argbToCss(argb: string): string {
+  const s = argb.replace(/^#/, '')
+  const hex = s.length >= 8 ? s.slice(2) : s
+  return '#' + hex.slice(-6).toUpperCase()
+}
+
+function parseTabColorTag(tag: string, themeColors: string[]): string | null {
+  const rgb = /\brgb="([0-9A-Fa-f]+)"/i.exec(tag)?.[1]
+  if (rgb) return argbToCss(rgb)
+  const themeStr = /\btheme="(\d+)"/i.exec(tag)?.[1]
+  if (themeStr != null) {
+    const idx = parseInt(themeStr, 10)
+    const base = themeColors[idx]
+    if (base) return base
+  }
+  return null
+}
+
+function parseWorksheetTabColor(wsXml: string, themeColors: string[]): string | null {
+  const sheetPrMatch = wsXml.match(/<sheetPr\b[^>]*>([\s\S]*?)<\/sheetPr>/i)
+  const block = sheetPrMatch ? sheetPrMatch[1] : wsXml.slice(0, 8000)
+  const tabMatch = block.match(/<tabColor\b[^>]*\/?>/i)
+  if (!tabMatch) return null
+  return parseTabColorTag(tabMatch[0], themeColors)
+}
+
+/** Readable text on a solid #RRGGBB background (Excel-style tabs). */
+export function pickContrastText(bgHex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(bgHex.trim())
+  if (!m) return '#1a1a1a'
+  const n = parseInt(m[1], 16)
+  const r = (n >> 16) & 255
+  const g = (n >> 8) & 255
+  const b = n & 255
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000
+  return yiq >= 186 ? '#1a1a1a' : '#ffffff'
 }
 
 /**
- * Extracts sheet tab colors from raw xlsx bytes.
- * Returns one entry per sheet in workbook order; null means no custom color.
- * Colors are returned as #RRGGBB hex strings.
+ * Read per-sheet tab colors from an .xlsx (OOXML) file.
+ * Order matches workbook.xml / SheetJS SheetNames. Non-zip formats are not supported.
  */
-export async function extractSheetTabColorsFromXlsx(
-  raw: ArrayBuffer,
-): Promise<(string | null)[]> {
-  const zip = await JSZip.loadAsync(raw)
+export async function extractSheetTabColorsFromXlsx(data: ArrayBuffer): Promise<(string | null)[]> {
+  const zip = await JSZip.loadAsync(data)
+  const wbStr = await zip.file('xl/workbook.xml')?.async('string')
+  if (!wbStr) return []
 
-  const wbXml = await zip.file('xl/workbook.xml')?.async('text') ?? ''
-  const sheetMatches = [...wbXml.matchAll(/<sheet\b[^>]*\br:id="([^"]+)"[^>]*\/?>/g)]
-  const rIds = sheetMatches.map(m => m[1])
-
-  const relsXml = await zip.file('xl/_rels/workbook.xml.rels')?.async('text') ?? ''
-  const relMap: Record<string, string> = {}
-  for (const m of relsXml.matchAll(/<Relationship\b[^>]*\bId="([^"]+)"[^>]*\bTarget="([^"]+)"/g)) {
-    relMap[m[1]] = m[2]
+  const relsStr = await zip.file('xl/_rels/workbook.xml.rels')?.async('string')
+  const ridToTarget = new Map<string, string>()
+  if (relsStr) {
+    for (const m of relsStr.matchAll(/<Relationship\b[^>]*>/gi)) {
+      const tag = m[0]
+      const id = /\bId="([^"]+)"/i.exec(tag)?.[1]
+      const target = /\bTarget="([^"]+)"/i.exec(tag)?.[1]
+      if (id && target) {
+        let t = target.replace(/^\//, '').replace(/^\.\//, '')
+        if (!t.startsWith('xl/')) t = 'xl/' + t
+        ridToTarget.set(id, t)
+      }
+    }
   }
 
-  let palette: string[] | null = null
+  let themeColors = [...DEFAULT_THEME_COLORS]
+  const themeFile = zip.file('xl/theme/theme1.xml')
+  if (themeFile) {
+    try {
+      const themeXml = await themeFile.async('string')
+      themeColors = parseThemeColors(themeXml)
+    } catch {
+      /* keep default */
+    }
+  }
+
+  const sheets: { rid: string }[] = []
+  for (const m of wbStr.matchAll(/<sheet\b[^>]*\/?>/gi)) {
+    const tag = m[0]
+    const rid = /\br:id="([^"]+)"/i.exec(tag)?.[1]
+    if (rid) sheets.push({ rid })
+  }
 
   const colors: (string | null)[] = []
-  for (const rId of rIds) {
-    const target = relMap[rId]
-    if (!target) { colors.push(null); continue }
-
-    const sheetXml = await zip.file(resolveZipPath(target))?.async('text') ?? ''
-    const tabMatch = sheetXml.match(/<tabColor\b([^/]*)\/>/s)
-    if (!tabMatch) { colors.push(null); continue }
-
-    const attrs = tabMatch[1]
-    const rgbMatch = attrs.match(/\brgb="([0-9A-Fa-f]{8})"/)
-    if (rgbMatch) {
-      colors.push('#' + rgbMatch[1].slice(2).toUpperCase())
+  for (const s of sheets) {
+    const path = ridToTarget.get(s.rid)
+    if (!path) {
+      colors.push(null)
       continue
     }
-
-    const themeMatch = attrs.match(/\btheme="(\d+)"/)
-    if (themeMatch) {
-      if (!palette) palette = await loadThemePalette(zip)
-      const baseHex = palette[parseInt(themeMatch[1])] ?? '808080'
-      const tintMatch = attrs.match(/\btint="([^"]+)"/)
-      const tint = tintMatch ? parseFloat(tintMatch[1]) : 0
-      const hex = tint !== 0 ? applyTint(baseHex, tint) : baseHex
-      colors.push('#' + hex.toUpperCase())
+    const wsFile = zip.file(path)
+    if (!wsFile) {
+      colors.push(null)
       continue
     }
-
-    colors.push(null)
+    const wsXml = await wsFile.async('string')
+    colors.push(parseWorksheetTabColor(wsXml, themeColors))
   }
 
   return colors
-}
-
-/**
- * Returns '#000000' or '#ffffff' — whichever contrasts better with the given
- * background hex color (#RRGGBB).
- */
-export function pickContrastText(hex: string): string {
-  const h = hex.replace('#', '')
-  const r = parseInt(h.slice(0, 2), 16)
-  const g = parseInt(h.slice(2, 4), 16)
-  const b = parseInt(h.slice(4, 6), 16)
-  const lum = (c: number) => {
-    const s = c / 255
-    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
-  }
-  const L = 0.2126 * lum(r) + 0.7152 * lum(g) + 0.0722 * lum(b)
-  return L > 0.179 ? '#000000' : '#ffffff'
 }
