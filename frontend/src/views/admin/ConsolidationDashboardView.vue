@@ -105,11 +105,16 @@ async function fetchProgress() {
 }
 
 async function selectTemplate(id: string) {
-  if (selectedTemplateId.value === id) return
   selectedTemplateId.value = id
   selectedSubmissionIds.value = []
   progressData.value = null
   await fetchProgress()
+  // Auto-select all submissions for the chosen template
+  if (progressData.value) {
+    selectedSubmissionIds.value = progressData.value.orgs
+      .map(o => o.submission_id)
+      .filter((sid): sid is string => sid !== null)
+  }
 }
 
 async function fetchProjectOverview() {
