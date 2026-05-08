@@ -8,22 +8,30 @@ import io
 import json
 import re
 import uuid
-import openpyxl
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+
+import httpx
+import openpyxl
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-import httpx
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
+from app.models.profile import Profile
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
-from app.models.profile import Profile
-from app.schemas.ai import ChatRequest, ConsolidateRequest, ConsolidateResponse, AgentRequest, CommandRequest, CommandResponse
-from sqlalchemy.orm import Session
+from app.schemas.ai import (
+    AgentRequest,
+    ChatRequest,
+    CommandRequest,
+    CommandResponse,
+    ConsolidateRequest,
+    ConsolidateResponse,
+)
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
 
@@ -85,9 +93,7 @@ async def _anthropic_post(payload: dict) -> dict:
 
     # Normalise to OpenRouter/OpenAI response shape so callers don't care which backend was used
     content = data.get("content", [{}])[0].get("text", "")
-    return {
-        "choices": [{"message": {"role": "assistant", "content": content}}]
-    }
+    return {"choices": [{"message": {"role": "assistant", "content": content}}]}
 
 
 async def _openrouter_post(payload: dict) -> dict:
@@ -105,10 +111,7 @@ async def _openrouter_post(payload: dict) -> dict:
             json=payload,
         )
         if not resp.is_success:
-            raise HTTPException(
-                status_code=resp.status_code,
-                detail=f"OpenRouter error: {resp.text}"
-            )
+            raise HTTPException(status_code=resp.status_code, detail=f"OpenRouter error: {resp.text}")
         return resp.json()
 
 
@@ -177,9 +180,7 @@ async def chat(body: ChatRequest):
                             # Translate Anthropic delta events → OpenAI SSE format
                             if evt.get("type") == "content_block_delta":
                                 delta_text = evt.get("delta", {}).get("text", "")
-                                chunk = json.dumps({
-                                    "choices": [{"delta": {"content": delta_text}}]
-                                })
+                                chunk = json.dumps({"choices": [{"delta": {"content": delta_text}}]})
                                 yield f"data: {chunk}\n\n"
                             elif evt.get("type") == "message_stop":
                                 yield "data: [DONE]\n\n"
@@ -219,24 +220,28 @@ async def consolidate(body: ConsolidateRequest):
         '{"unified_headers":["Source File","<col>",...],'
         '"mappings":[{"file":"<name>","column_map":{"<src>":"<unified>"}}]}\n\n'
         "Rules:\n"
-        "- Always include \"Source File\" as the first unified header.\n"
+        '- Always include "Source File" as the first unified header.\n'
         "- Merge columns that represent the same concept under one standard name "
-        "(e.g. \"Invoice Amt\", \"Invoice Amount\", \"Inv. Amount\" → \"Invoice Amount\").\n"
+        '(e.g. "Invoice Amt", "Invoice Amount", "Inv. Amount" → "Invoice Amount").\n'
         "- Include every column that appears in at least one file.\n"
         "- column_map must cover every source column in that file."
     )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": json.dumps([
-            {"name": f.name, "headers": f.headers, "sample_rows": f.sample_rows}
-            for f in body.files_schema
-        ])},
+        {
+            "role": "user",
+            "content": json.dumps(
+                [{"name": f.name, "headers": f.headers, "sample_rows": f.sample_rows} for f in body.files_schema]
+            ),
+        },
     ]
-    data = await _ai_post({
-        "model": body.model,
-        "max_tokens": 2048,
-        "messages": messages,
-    })
+    data = await _ai_post(
+        {
+            "model": body.model,
+            "max_tokens": 2048,
+            "messages": messages,
+        }
+    )
     raw = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
     # Strip markdown fences if present
     raw = raw.strip()
@@ -267,7 +272,7 @@ Supported operations (return exactly one):
 {"op":"aggregate","column":"<header>","func":"sum|average|count|min|max"}
 {"op":"find_duplicates","column":"<header>"}
 {"op":"add_row","count":<number>,"position":<0-based or null for end>}
-{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"color":"#hex","bgColor":"#hex","align":"left|center|right"}}
+{"op":"format_cells","column":"<header or null>","row":<1-based or null>,"props":{"bold":true,"italic":true,"color":"#hex","bgColor":"#hex","align":"left|center|right"}}  # noqa: E501
 {"op":"highlight_column","column":"<header>","bgColor":"#hex"}
 {"op":"conditional_format","column":"<header>","operator":">|<|>=|<=|=|!=|contains","value":"<val>","props":{"bgColor":"#hex","color":"#hex","bold":true}}
 {"op":"clear_format","column":"<header or null>"}
@@ -277,7 +282,7 @@ Supported operations (return exactly one):
 {"op":null}
 
 Formula rules (CRITICAL — read carefully):
-- apply_formula: ALWAYS use {row} as the row placeholder. Column letters map to their position: A=first column, B=second, etc.
+- apply_formula: ALWAYS use {row} as the row placeholder. Column letters map to their position: A=first column, B=second, etc.  # noqa: E501
 - {row} is replaced with the actual Excel row number at runtime (row 2 for first data row, row 3 for second, etc.)
 - NEVER use absolute references like =A1*B1 — always use {row} so each row gets its own formula
 - apply_saved_formula: use when the user mentions a formula by name that appears in the saved formula library.
@@ -299,7 +304,7 @@ FORMULA_SYSTEM_PROMPT = """\
 You are an Excel formula expert. Given a list of column headers and a user request, \
 return ONLY a JSON object with no markdown or extra text.
 
-Format: {"expression":"=<formula using {row} placeholder>","name":"<short descriptive name>","description":"<one sentence>","formula_type":"calculation|aggregation|lookup|transformation"}
+Format: {"expression":"=<formula using {row} placeholder>","name":"<short descriptive name>","description":"<one sentence>","formula_type":"calculation|aggregation|lookup|transformation"}  # noqa: E501
 
 Rules:
 - Use {row} as a placeholder for the row number (e.g. =A{row}*B{row})
@@ -323,6 +328,7 @@ def _expand_merged(ws) -> list[list]:
         rows.append([merged_vals.get((cell.row, cell.column), cell.value) for cell in row])
     return rows
 
+
 @router.post("/command", response_model=CommandResponse)
 async def command(body: CommandRequest):
     """Parse NL spreadsheet command via Anthropic or OpenRouter."""
@@ -333,14 +339,16 @@ async def command(body: CommandRequest):
         context_parts.append(f"Column headers: {json.dumps(body.headers)}")
     context_parts.append(f"User command: {body.message}")
 
-    data = await _ai_post({
-        "model": body.model,
-        "max_tokens": 512,
-        "messages": [
-            {"role": "system", "content": COMMAND_SYSTEM_PROMPT},
-            {"role": "user", "content": "\n\n".join(context_parts)},
-        ],
-    })
+    data = await _ai_post(
+        {
+            "model": body.model,
+            "max_tokens": 512,
+            "messages": [
+                {"role": "system", "content": COMMAND_SYSTEM_PROMPT},
+                {"role": "user", "content": "\n\n".join(context_parts)},
+            ],
+        }
+    )
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
     try:
         parsed = json.loads(content.strip())
@@ -388,10 +396,7 @@ def _infer_type(samples: list[str]) -> str:
     if num == len(samples):
         return "number"
     # Rough date check
-    date_hits = sum(
-        1 for s in samples
-        if any(sep in s for sep in ("/", "-", ".")) and any(c.isdigit() for c in s)
-    )
+    date_hits = sum(1 for s in samples if any(sep in s for sep in ("/", "-", ".")) and any(c.isdigit() for c in s))
     if date_hits >= len(samples) * 0.7:
         return "date"
     return "text"
@@ -431,14 +436,16 @@ async def parse_template(file: UploadFile = File(...)):
         if len(useful_headers) < 2:
             continue
 
-        data_rows = rows[header_idx + 1: header_idx + 6]
-        candidates.append({
-            "sheet": sheet_name,
-            "header_idx": header_idx,
-            "header_row": header_row,
-            "data_rows": data_rows,
-            "useful_count": len(useful_headers),
-        })
+        data_rows = rows[header_idx + 1 : header_idx + 6]
+        candidates.append(
+            {
+                "sheet": sheet_name,
+                "header_idx": header_idx,
+                "header_row": header_row,
+                "data_rows": data_rows,
+                "useful_count": len(useful_headers),
+            }
+        )
 
     if not candidates:
         return {"columns": [], "sheet": None}
@@ -450,15 +457,14 @@ async def parse_template(file: UploadFile = File(...)):
         name_str = str(name).strip() if name is not None else ""
         if not name_str:
             continue
-        samples = [
-            str(row[col_i]) for row in best["data_rows"]
-            if col_i < len(row) and row[col_i] is not None
-        ]
-        columns.append({
-            "name": name_str,
-            "inferred_type": _infer_type(samples),
-            "sample_values": samples[:3],
-        })
+        samples = [str(row[col_i]) for row in best["data_rows"] if col_i < len(row) and row[col_i] is not None]
+        columns.append(
+            {
+                "name": name_str,
+                "inferred_type": _infer_type(samples),
+                "sample_values": samples[:3],
+            }
+        )
 
     return {"columns": columns, "sheet": best["sheet"]}
 
@@ -488,13 +494,15 @@ async def import_template(
         useful = [v for v in header_row if v is not None and str(v).strip()]
         if len(useful) < 2:
             continue
-        data_rows = rows[header_idx + 1: header_idx + 6]
-        candidates.append({
-            "sheet": sheet_name,
-            "header_row": header_row,
-            "data_rows": data_rows,
-            "useful_count": len(useful),
-        })
+        data_rows = rows[header_idx + 1 : header_idx + 6]
+        candidates.append(
+            {
+                "sheet": sheet_name,
+                "header_row": header_row,
+                "data_rows": data_rows,
+                "useful_count": len(useful),
+            }
+        )
 
     if not candidates:
         raise HTTPException(status_code=422, detail="No usable data table found in this file.")
@@ -506,15 +514,14 @@ async def import_template(
         name_str = str(name).strip() if name is not None else ""
         if not name_str:
             continue
-        samples = [
-            str(row[col_i]) for row in best["data_rows"]
-            if col_i < len(row) and row[col_i] is not None
-        ]
-        schema_columns.append({
-            "id": str(uuid.uuid4()),
-            "name": name_str,
-            "type": _infer_type(samples),
-        })
+        samples = [str(row[col_i]) for row in best["data_rows"] if col_i < len(row) and row[col_i] is not None]
+        schema_columns.append(
+            {
+                "id": str(uuid.uuid4()),
+                "name": name_str,
+                "type": _infer_type(samples),
+            }
+        )
 
     template_name = (file.filename or "Imported Template").replace(".xlsx", "").replace(".xls", "")
 
@@ -555,10 +562,7 @@ async def template_generate(body: dict):
 
     existing_context = ""
     if existing_columns:
-        col_list = ", ".join(
-            f'"{c.get("name", "")}" ({c.get("type", "text")})'
-            for c in existing_columns
-        )
+        col_list = ", ".join(f'"{c.get("name", "")}" ({c.get("type", "text")})' for c in existing_columns)
         existing_context = (
             f"\n\nThe template currently has {len(existing_columns)} column(s): {col_list}. "
             "When the user asks to ADD or INSERT a column, return ALL existing columns PLUS the new one(s). "
@@ -577,29 +581,30 @@ async def template_generate(body: dict):
         "- Top bar: Save Draft / Publish buttons; Publish makes the template available to DevCos\n\n"
         "If the user asks you to CREATE, GENERATE, MAKE, ADD, REMOVE, RENAME, or UPDATE a template or its columns, "
         "respond with ONLY this JSON (no markdown, no extra text):\n"
-        '{"schema_json": {"columns": [{"id": "<uuid4>", "name": "<col name>", "type": "text|number|date|percentage", "description": "<optional>"}]}}\n\n'
+        '{"schema_json": {"columns": [{"id": "<uuid4>", "name": "<col name>", "type": "text|number|date|percentage", "description": "<optional>"}]}}\n\n'  # noqa: E501
         "For ALL other messages (questions, guidance requests, conversation), respond with ONLY:\n"
         '{"message": "<your helpful answer>"}\n\n'
-        "No markdown. No extra text outside the JSON object."
-        + existing_context
+        "No markdown. No extra text outside the JSON object." + existing_context
     )
     api_messages = [{"role": "system", "content": system}]
     for m in messages_history:
         api_messages.append({"role": m["role"], "content": m["content"]})
     api_messages.append({"role": "user", "content": prompt})
 
-    data = await _ai_post({
-        "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 1024,
-        "messages": api_messages,
-    })
+    data = await _ai_post(
+        {
+            "model": "anthropic/claude-sonnet-4-5",
+            "max_tokens": 1024,
+            "messages": api_messages,
+        }
+    )
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}").strip()
     if content.startswith("```"):
         content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="AI returned invalid JSON")
+        raise HTTPException(status_code=500, detail="AI returned invalid JSON") from None
 
 
 @router.post("/finetune")
@@ -639,28 +644,35 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
         "- Return ONLY the JSON object, no markdown fences or extra text"
     )
 
-    ai_data = await _ai_post({
-        "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 8192,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": json.dumps({
-                "headers": headers,
-                "data": data_rows,
-                "instruction": prompt,
-            })},
-        ],
-    })
+    ai_data = await _ai_post(
+        {
+            "model": "anthropic/claude-sonnet-4-5",
+            "max_tokens": 8192,
+            "messages": [
+                {"role": "system", "content": system},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "headers": headers,
+                            "data": data_rows,
+                            "instruction": prompt,
+                        }
+                    ),
+                },
+            ],
+        }
+    )
 
     content = ai_data.get("choices", [{}])[0].get("message", {}).get("content", "")
     try:
         result = json.loads(content.strip())
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', content, re.DOTALL)
+        match = re.search(r"\{.*\}", content, re.DOTALL)
         if match:
             result = json.loads(match.group())
         else:
-            raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {content[:200]}")
+            raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {content[:200]}") from None
 
     new_headers = result.get("headers", headers)
     new_data = result.get("data", data_rows)
@@ -672,7 +684,7 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     new_ws.title = sheet_title
     new_ws.append(new_headers)
     for row in new_data:
-        new_ws.append([v for v in row])
+        new_ws.append(list(row))
     tmp_path = path.with_suffix(".tmp")
     new_wb.save(tmp_path)
     tmp_path.replace(path)
@@ -698,23 +710,25 @@ async def generate_formula(body: FormulaRequest):
     """Generate an Excel formula from a natural language request."""
     header_context = (
         f"Column headers (A={body.column_headers[0] if body.column_headers else '?'}): "
-        + ", ".join(f"{chr(65+i)}={h}" for i, h in enumerate(body.column_headers))
+        + ", ".join(f"{chr(65 + i)}={h}" for i, h in enumerate(body.column_headers))
         if body.column_headers
         else "No headers provided."
     )
-    data = await _ai_post({
-        "model": body.model,
-        "max_tokens": 256,
-        "messages": [
-            {"role": "system", "content": FORMULA_SYSTEM_PROMPT},
-            {"role": "user", "content": f"{header_context}\n\nRequest: {body.nl_request}"},
-        ],
-    })
+    data = await _ai_post(
+        {
+            "model": body.model,
+            "max_tokens": 256,
+            "messages": [
+                {"role": "system", "content": FORMULA_SYSTEM_PROMPT},
+                {"role": "user", "content": f"{header_context}\n\nRequest: {body.nl_request}"},
+            ],
+        }
+    )
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
     try:
         parsed = json.loads(content.strip())
     except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="AI returned invalid formula JSON")
+        raise HTTPException(status_code=422, detail="AI returned invalid formula JSON") from None
     return FormulaAiResponse(
         expression=parsed.get("expression", ""),
         name=parsed.get("name", "Custom Formula"),
@@ -726,82 +740,145 @@ async def generate_formula(body: FormulaRequest):
 # ── Agentic spreadsheet editing ───────────────────────────────────────────────
 
 AGENT_TOOLS = [
-    {"type": "function", "function": {
-        "name": "get_spreadsheet_data",
-        "description": "Re-read current spreadsheet state (headers + all data rows). Use after writes to verify results.",
-        "parameters": {"type": "object", "properties": {}, "required": []}
-    }},
-    {"type": "function", "function": {
-        "name": "add_column",
-        "description": "Add a new column. position is 0-based index; null = append at end.",
-        "parameters": {"type": "object", "properties": {
-            "name": {"type": "string"},
-            "position": {"type": ["integer", "null"]}
-        }, "required": ["name"]}
-    }},
-    {"type": "function", "function": {
-        "name": "remove_column",
-        "description": "Remove column by name.",
-        "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
-    }},
-    {"type": "function", "function": {
-        "name": "rename_column",
-        "description": "Rename a column.",
-        "parameters": {"type": "object", "properties": {
-            "old_name": {"type": "string"}, "new_name": {"type": "string"}
-        }, "required": ["old_name", "new_name"]}
-    }},
-    {"type": "function", "function": {
-        "name": "write_column",
-        "description": "Write values to every data row of a column. values list length must match row count.",
-        "parameters": {"type": "object", "properties": {
-            "column_name": {"type": "string"},
-            "values": {"type": "array", "items": {"type": ["string", "number", "null"]}}
-        }, "required": ["column_name", "values"]}
-    }},
-    {"type": "function", "function": {
-        "name": "write_cells",
-        "description": "Write specific cells. row and col are 0-based data indices (excluding header row).",
-        "parameters": {"type": "object", "properties": {
-            "updates": {"type": "array", "items": {"type": "object", "properties": {
-                "row": {"type": "integer"}, "col": {"type": "integer"}, "value": {"type": ["string", "number", "null"]}
-            }, "required": ["row", "col", "value"]}}
-        }, "required": ["updates"]}
-    }},
-    {"type": "function", "function": {
-        "name": "sort",
-        "description": "Sort data rows by a column.",
-        "parameters": {"type": "object", "properties": {
-            "column": {"type": "string"}, "order": {"type": "string", "enum": ["asc", "desc"]}
-        }, "required": ["column", "order"]}
-    }},
-    {"type": "function", "function": {
-        "name": "filter",
-        "description": "Filter rows; hides non-matching rows.",
-        "parameters": {"type": "object", "properties": {
-            "column": {"type": "string"},
-            "operator": {"type": "string", "enum": [">", "<", ">=", "<=", "=", "!=", "contains"]},
-            "value": {"type": "string"}
-        }, "required": ["column", "operator", "value"]}
-    }},
-    {"type": "function", "function": {
-        "name": "show_all_rows",
-        "description": "Clear active filter, show all rows.",
-        "parameters": {"type": "object", "properties": {}, "required": []}
-    }},
-    {"type": "function", "function": {
-        "name": "remove_empty_rows",
-        "description": "Remove all rows where every cell is empty.",
-        "parameters": {"type": "object", "properties": {}, "required": []}
-    }},
-    {"type": "function", "function": {
-        "name": "aggregate",
-        "description": "Compute sum/avg/count/min/max of a column. Returns text result — no grid change.",
-        "parameters": {"type": "object", "properties": {
-            "column": {"type": "string"},
-            "func": {"type": "string", "enum": ["sum", "avg", "count", "min", "max"]}
-        }, "required": ["column", "func"]}
-    }},
+    {
+        "type": "function",
+        "function": {
+            "name": "get_spreadsheet_data",
+            "description": "Re-read current spreadsheet state (headers + all data rows). Use after writes to verify results.",  # noqa: E501
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "add_column",
+            "description": "Add a new column. position is 0-based index; null = append at end.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "position": {"type": ["integer", "null"]}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_column",
+            "description": "Remove column by name.",
+            "parameters": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "rename_column",
+            "description": "Rename a column.",
+            "parameters": {
+                "type": "object",
+                "properties": {"old_name": {"type": "string"}, "new_name": {"type": "string"}},
+                "required": ["old_name", "new_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_column",
+            "description": "Write values to every data row of a column. values list length must match row count.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column_name": {"type": "string"},
+                    "values": {"type": "array", "items": {"type": ["string", "number", "null"]}},
+                },
+                "required": ["column_name", "values"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_cells",
+            "description": "Write specific cells. row and col are 0-based data indices (excluding header row).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "updates": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "row": {"type": "integer"},
+                                "col": {"type": "integer"},
+                                "value": {"type": ["string", "number", "null"]},
+                            },
+                            "required": ["row", "col", "value"],
+                        },
+                    }
+                },
+                "required": ["updates"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "sort",
+            "description": "Sort data rows by a column.",
+            "parameters": {
+                "type": "object",
+                "properties": {"column": {"type": "string"}, "order": {"type": "string", "enum": ["asc", "desc"]}},
+                "required": ["column", "order"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "filter",
+            "description": "Filter rows; hides non-matching rows.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "operator": {"type": "string", "enum": [">", "<", ">=", "<=", "=", "!=", "contains"]},
+                    "value": {"type": "string"},
+                },
+                "required": ["column", "operator", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "show_all_rows",
+            "description": "Clear active filter, show all rows.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remove_empty_rows",
+            "description": "Remove all rows where every cell is empty.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "aggregate",
+            "description": "Compute sum/avg/count/min/max of a column. Returns text result — no grid change.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "column": {"type": "string"},
+                    "func": {"type": "string", "enum": ["sum", "avg", "count", "min", "max"]},
+                },
+                "required": ["column", "func"],
+            },
+        },
+    },
 ]
 
 
@@ -852,12 +929,14 @@ def execute_tool(state: SpreadsheetState, name: str, params: dict) -> str:
     elif name == "sort":
         idx = state.col_idx(params["column"])
         reverse = params["order"] == "desc"
+
         def key(row):
             v = row[idx] if idx < len(row) else ""
             try:
                 return (0, float(str(v)))
             except Exception:
                 return (1, str(v).lower())
+
         state.data.sort(key=key, reverse=reverse)
         return f"Sorted by '{params['column']}' {params['order']}."
     elif name == "filter":
@@ -911,20 +990,27 @@ async def agent(body: AgentRequest):
     state = SpreadsheetState(body.headers, body.data)
 
     async def sse_stream():
-        messages = [{"role": "user", "content": (
-            f"Spreadsheet: {len(state.headers)} columns, {len(state.data)} rows. "
-            f"Headers: {state.headers}\n\nRequest: {body.message}"
-        )}]
+        messages = [
+            {
+                "role": "user",
+                "content": (
+                    f"Spreadsheet: {len(state.headers)} columns, {len(state.data)} rows. "
+                    f"Headers: {state.headers}\n\nRequest: {body.message}"
+                ),
+            }
+        ]
         tool_calls_made = 0
 
         try:
             while tool_calls_made < 20:
-                data = await _openrouter_post({
-                    "model": body.model,
-                    "max_tokens": 4096,
-                    "messages": [{"role": "system", "content": AGENT_SYSTEM_PROMPT}] + messages,
-                    "tools": AGENT_TOOLS,
-                })
+                data = await _openrouter_post(
+                    {
+                        "model": body.model,
+                        "max_tokens": 4096,
+                        "messages": [{"role": "system", "content": AGENT_SYSTEM_PROMPT}] + messages,
+                        "tools": AGENT_TOOLS,
+                    }
+                )
                 msg = data.get("choices", [{}])[0].get("message", {})
                 content = msg.get("content") or ""
                 tool_calls = msg.get("tool_calls") or []
@@ -954,7 +1040,7 @@ async def agent(body: AgentRequest):
                         result = str(e)
                         error = True
 
-                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': result, 'error': error})}\n\n"
+                    yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': result, 'error': error})}\n\n"  # noqa: E501
                     tool_results.append({"role": "tool", "tool_call_id": tc_id, "content": result})
                     tool_calls_made += 1
 

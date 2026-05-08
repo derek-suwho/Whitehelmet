@@ -9,7 +9,7 @@ import re
 from typing import Any
 
 import openpyxl
-from xlcalculator import ModelCompiler, Evaluator
+from xlcalculator import Evaluator, ModelCompiler
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def _col_index_to_letter(index: int) -> str:
     result = ""
     while index > 0:
         index, remainder = divmod(index - 1, 26)
-        result = chr(ord('A') + remainder) + result
+        result = chr(ord("A") + remainder) + result
     return result
 
 
@@ -29,17 +29,14 @@ def _translate_formula_columns(expression: str, header_to_col: dict[str, int]) -
     "O" and "N" are header names). This translates them to the actual column
     letters based on the header row position.
     """
-    name_to_letter = {
-        name: _col_index_to_letter(col_idx)
-        for name, col_idx in header_to_col.items()
-    }
+    name_to_letter = {name: _col_index_to_letter(col_idx) for name, col_idx in header_to_col.items()}
 
     def replace(m: re.Match) -> str:
         col_name = m.group(1)
         row_part = m.group(2)
         return name_to_letter.get(col_name, col_name) + row_part
 
-    return re.sub(r'([A-Z]+)(\{row\}|\d+)', replace, expression)
+    return re.sub(r"([A-Z]+)(\{row\}|\d+)", replace, expression)
 
 
 def _apply_scoring(value: float, rules: list[dict]) -> int | None:
@@ -55,7 +52,6 @@ def _apply_scoring(value: float, rules: list[dict]) -> int | None:
 
 
 class FormulaExecutor:
-
     @staticmethod
     def execute(xlsx_bytes: bytes, formulas: list[Any]) -> bytes:
         """
@@ -172,10 +168,7 @@ class FormulaExecutor:
         # ── Append weighted score summary ─────────────────────────────────────
         if weighted:
             total_weight = sum(w for w, _ in weighted)
-            weighted_score = (
-                sum(w * s for w, s in weighted) / total_weight
-                if total_weight > 0 else 0
-            )
+            weighted_score = sum(w * s for w, s in weighted) / total_weight if total_weight > 0 else 0
             summary_row = data_end + 2
             ws.cell(row=summary_row, column=1, value="Weighted Score")
             ws.cell(row=summary_row, column=2, value=round(weighted_score, 2))

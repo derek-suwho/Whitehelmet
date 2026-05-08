@@ -1,7 +1,8 @@
 """TemplateFormula — Excel-style formula attached to a template version, applied on submission."""
 
 import uuid
-from sqlalchemy import Column, String, Float, Text, DateTime, func
+
+from sqlalchemy import Column, DateTime, Float, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base

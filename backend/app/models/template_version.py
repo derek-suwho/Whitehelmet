@@ -1,7 +1,8 @@
 """TemplateVersion — immutable snapshots of a template's column schema."""
 
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, Text, func, UniqueConstraint
+
+from sqlalchemy import Column, DateTime, Integer, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base

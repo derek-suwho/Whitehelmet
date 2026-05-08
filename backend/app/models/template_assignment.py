@@ -1,7 +1,8 @@
 """TemplateAssignment — links a template version to a DevCo org for a submission period."""
 
 import uuid
-from sqlalchemy import Column, String, DateTime, Text, func
+
+from sqlalchemy import Column, DateTime, String, Text, func
 
 from app.db.session import Base
 

@@ -1,6 +1,6 @@
 """Master record model — persisted consolidation results."""
 
-from sqlalchemy import Column, BigInteger, String, Integer, DateTime, LargeBinary, func
+from sqlalchemy import BigInteger, Column, DateTime, Integer, LargeBinary, String, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base

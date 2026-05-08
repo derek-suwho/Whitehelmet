@@ -1,6 +1,6 @@
 """Uploaded file metadata — tracks xlsx uploads with integrity checksums."""
 
-from sqlalchemy import Column, BigInteger, String, DateTime, func
+from sqlalchemy import BigInteger, Column, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base

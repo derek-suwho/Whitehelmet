@@ -1,7 +1,7 @@
 """Database session — PostgreSQL via Supabase."""
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.core.config import get_settings
 
@@ -13,7 +13,7 @@ _connect_args = {"check_same_thread": False} if _sqlite else {}
 
 engine = create_engine(
     settings.database_url,
-    **({} if _sqlite else dict(pool_size=10, max_overflow=20, pool_recycle=3600)),
+    **({} if _sqlite else {"pool_size": 10, "max_overflow": 20, "pool_recycle": 3600}),
     pool_pre_ping=True,
     connect_args=_connect_args,
 )

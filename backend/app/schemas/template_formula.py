@@ -1,29 +1,31 @@
 """Pydantic schemas for TemplateFormula CRUD."""
 
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
+
 from pydantic import BaseModel
 
 
 class TemplateFormulaCreate(BaseModel):
     name: str
-    target_column: str                    # e.g. "E"
-    formula_type: str = "column"          # "column" | "single_cell"
-    expression: str                       # e.g. "=O{row}/N{row}"
-    weight: Optional[float] = None
-    benchmark: Optional[float] = None
-    scoring_rules: Optional[Any] = None   # list of {min, max, score} dicts
+    target_column: str  # e.g. "E"
+    formula_type: str = "column"  # "column" | "single_cell"
+    expression: str  # e.g. "=O{row}/N{row}"
+    weight: float | None = None
+    benchmark: float | None = None
+    scoring_rules: Any | None = None  # list of {min, max, score} dicts
 
 
 class TemplateFormulaUpdate(BaseModel):
-    name: Optional[str] = None
-    target_column: Optional[str] = None
-    formula_type: Optional[str] = None
-    expression: Optional[str] = None
-    weight: Optional[float] = None
-    benchmark: Optional[float] = None
-    scoring_rules: Optional[Any] = None
+    name: str | None = None
+    target_column: str | None = None
+    formula_type: str | None = None
+    expression: str | None = None
+    weight: float | None = None
+    benchmark: float | None = None
+    scoring_rules: Any | None = None
 
 
 class TemplateFormulaResponse(BaseModel):
@@ -33,10 +35,10 @@ class TemplateFormulaResponse(BaseModel):
     target_column: str
     formula_type: str
     expression: str
-    weight: Optional[float]
-    benchmark: Optional[float]
-    scoring_rules: Optional[Any]
-    created_by: Optional[str]
+    weight: float | None
+    benchmark: float | None
+    scoring_rules: Any | None
+    created_by: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}

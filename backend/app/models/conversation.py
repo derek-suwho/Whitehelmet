@@ -1,7 +1,6 @@
 """Conversation history — persists chat context for reopening saved records."""
 
-from sqlalchemy import Column, BigInteger, Text, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import BigInteger, Column, DateTime, Text, func
 
 from app.db.session import Base
 

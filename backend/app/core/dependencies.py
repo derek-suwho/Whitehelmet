@@ -1,7 +1,7 @@
 """FastAPI dependencies — ES256 JWT Bearer auth via Supabase JWKS."""
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings

@@ -1,6 +1,6 @@
 """Auth routes — /me only. Login/register handled by Supabase Auth."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 
 from app.core.dependencies import get_current_user
 from app.models.profile import Profile

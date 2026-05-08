@@ -9,7 +9,20 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "S", "B", "A", "C4", "UP"]
-ignore = ["S101"]  # Allow assert in tests
+ignore = [
+  "S101",   # assert in tests
+  "B008",   # Depends()/File() in defaults — FastAPI pattern
+  "N806",   # uppercase names in functions (test mocks, constants)
+  "S106",   # hardcoded passwords in test fixtures
+  "S108",   # temp file usage
+  "S110",   # try/except/pass
+  "S112",   # try/except/continue
+  "E402",   # module-level import not at top (conditional imports)
+  "A002",   # function arg shadowing builtin (type param in FastAPI)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/api/routes/ai.py" = ["E501"]  # long AI prompt strings
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,9 +1,8 @@
 """File routes — upload, list, download, delete (user-scoped)."""
 
-import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.orm import Session
 
@@ -11,9 +10,9 @@ from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
 from app.core.security import hash_file
 from app.db.session import get_db
-from app.models.uploaded_file import UploadedFile
 from app.models.profile import Profile
-from app.schemas.files import FileResponse, FileListResponse
+from app.models.uploaded_file import UploadedFile
+from app.schemas.files import FileListResponse, FileResponse
 
 router = APIRouter(
     prefix="/api/files",
@@ -35,10 +34,7 @@ async def list_files(
 ):
     """List all files for the authenticated user."""
     files = (
-        db.query(UploadedFile)
-        .filter(UploadedFile.user_id == user.id)
-        .order_by(UploadedFile.created_at.desc())
-        .all()
+        db.query(UploadedFile).filter(UploadedFile.user_id == user.id).order_by(UploadedFile.created_at.desc()).all()
     )
     return FileListResponse(
         files=[FileResponse.model_validate(f) for f in files],
@@ -53,11 +49,7 @@ async def get_file(
     db: Session = Depends(get_db),
 ):
     """Get file metadata (user-scoped)."""
-    f = (
-        db.query(UploadedFile)
-        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
-        .first()
-    )
+    f = db.query(UploadedFile).filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
     return f
@@ -70,11 +62,7 @@ async def download_file(
     db: Session = Depends(get_db),
 ):
     """Download file content (user-scoped)."""
-    f = (
-        db.query(UploadedFile)
-        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
-        .first()
-    )
+    f = db.query(UploadedFile).filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -117,11 +105,8 @@ async def upload_file(
 
     # Validate file magic bytes (.xlsx = ZIP/PK, .xls = OLE2)
     _xlsx_magic = b"PK\x03\x04"
-    _xls_magic = b"\xD0\xCF\x11\xE0"
-    if not (
-        (ext == ".xlsx" and content[:4] == _xlsx_magic)
-        or (ext == ".xls" and content[:4] == _xls_magic)
-    ):
+    _xls_magic = b"\xd0\xcf\x11\xe0"
+    if not ((ext == ".xlsx" and content[:4] == _xlsx_magic) or (ext == ".xls" and content[:4] == _xls_magic)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File does not appear to be a valid spreadsheet",
@@ -159,11 +144,7 @@ async def delete_file(
     db: Session = Depends(get_db),
 ):
     """Delete a file (user-scoped). Removes both DB record and stored file."""
-    f = (
-        db.query(UploadedFile)
-        .filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id)
-        .first()
-    )
+    f = db.query(UploadedFile).filter(UploadedFile.id == file_id, UploadedFile.user_id == user.id).first()
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
 

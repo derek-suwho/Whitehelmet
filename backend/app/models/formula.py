@@ -2,7 +2,8 @@
 """Formula library — PIF-owned reusable calculation formulas."""
 
 import uuid
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, func
+
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base

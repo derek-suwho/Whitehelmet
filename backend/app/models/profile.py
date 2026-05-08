@@ -1,6 +1,6 @@
 """Profile model — synced from Supabase auth.users via Supabase Auth."""
 
-from sqlalchemy import Column, String, DateTime, func
+from sqlalchemy import Column, DateTime, String, func
 from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
@@ -13,6 +13,6 @@ class Profile(Base):
     id = Column(UUID(as_uuid=False), primary_key=True)
     email = Column(String(255), nullable=True, unique=True)
     org_id = Column(UUID(as_uuid=False), nullable=True, index=True)
-    role = Column(String(50), nullable=False)      # pif_admin | devco_admin | devco_user
+    role = Column(String(50), nullable=False)  # pif_admin | devco_admin | devco_user
     display_name = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

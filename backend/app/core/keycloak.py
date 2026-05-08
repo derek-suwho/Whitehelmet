@@ -2,10 +2,9 @@
 """Keycloak JWT validation — fetch JWKS, decode tokens, extract roles."""
 
 import time
-import httpx
-from jose import jwt, JWTError
-from typing import Optional
 
+import httpx
+from jose import JWTError, jwt
 
 # Role mapping: Keycloak realm roles → our system roles
 _ROLE_MAP = {
@@ -38,7 +37,7 @@ def _fetch_jwks(jwks_url: str) -> dict:
     return jwks
 
 
-def decode_token(token: str, *, issuer: str, audience: str, jwks_url: Optional[str] = None) -> dict:
+def decode_token(token: str, *, issuer: str, audience: str, jwks_url: str | None = None) -> dict:
     """Validate and decode a Keycloak JWT. Raises TokenError on any failure."""
     if jwks_url is None:
         # Derive JWKS URL from issuer: {issuer}/protocol/openid-connect/certs
@@ -70,7 +69,7 @@ def extract_roles(claims: dict) -> list[str]:
     return [r for r in realm_roles if r not in _INTERNAL_ROLES]
 
 
-def map_system_role(roles: list[str]) -> Optional[str]:
+def map_system_role(roles: list[str]) -> str | None:
     """Map Keycloak realm roles to our system role. Returns highest-privilege match."""
     priority = ["org_super_admin", "org_admin", "org_member"]
     mapped = {_ROLE_MAP[r] for r in roles if r in _ROLE_MAP}

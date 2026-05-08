@@ -3,19 +3,18 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel
 
 
 class AssignmentForSubcontractor(BaseModel):
     id: str
-    template_version_id: Optional[str]
-    deadline: Optional[datetime]
-    instructions: Optional[str]
+    template_version_id: str | None
+    deadline: datetime | None
+    instructions: str | None
     status: str
     assigned_at: datetime
-    template_name: Optional[str]
+    template_name: str | None
     has_submission: bool
 
 
@@ -26,8 +25,8 @@ class SubmissionResponse(BaseModel):
     file_name: str
     status: str
     submitted_at: datetime
-    submitted_by: Optional[str]
-    processed_file_path: Optional[str] = None
+    submitted_by: str | None
+    processed_file_path: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -35,16 +34,16 @@ class SubmissionResponse(BaseModel):
 class OrgSubmissionStatus(BaseModel):
     org_id: str
     org_name: str
-    assignment_id: Optional[str]
+    assignment_id: str | None
     assignment_status: str
-    submission_id: Optional[str]
-    submitted_at: Optional[datetime]
-    file_name: Optional[str]
+    submission_id: str | None
+    submitted_at: datetime | None
+    file_name: str | None
 
 
 class ConsolidationProgressResponse(BaseModel):
     template_id: str
-    template_version_id: Optional[str]
+    template_version_id: str | None
     total_orgs: int
     submitted_count: int
     all_submitted: bool

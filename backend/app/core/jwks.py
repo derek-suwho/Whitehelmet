@@ -1,9 +1,10 @@
 """JWKS cache — fetches and caches Supabase public keys for ES256 validation."""
 
 import time
+
 import httpx
-from jose import jwt, JWTError
 from fastapi import HTTPException, status
+from jose import JWTError, jwt
 
 _cache: dict = {"keys": [], "fetched_at": 0.0}
 _TTL = 3600  # refresh keys every hour
@@ -32,7 +33,7 @@ async def decode_supabase_token(token: str, supabase_url: str) -> dict:
     try:
         header = jwt.get_unverified_header(token)
     except JWTError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Malformed token: {exc}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Malformed token: {exc}") from exc
 
     kid = header.get("kid")
     matching = [k for k in keys if k.get("kid") == kid] if kid else keys

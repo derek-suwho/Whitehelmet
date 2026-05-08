@@ -1,6 +1,7 @@
 """ProjectMember — links a user (subcontractor) to a project."""
 
 import uuid
+
 from sqlalchemy import Column, DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 
