@@ -25,3 +25,11 @@ mind-map/
 
 # Local dev SQLite DB
 backend/whitehelmet_dev.db
+
+# Sensitive project documents
+Project Documents/*.ovpn
+Project Documents/*.tar
+Project Documents/*.zip
+Project Documents/KPI/
+backend/.venv_test/
+supabase/.temp/
