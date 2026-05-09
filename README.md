@@ -101,32 +101,40 @@ AI keys (`ANTHROPIC_API_KEY`) live server-side only — never exposed to the fro
 
 ## Quick Start
 
-### Option A — docker-compose (recommended)
+### Prerequisites
+
+- Python 3.11+
+- Node 18+
+- Git
+- Docker (only for docker-compose option)
+
+### 1. Clone and configure
 
 ```bash
+git clone <repo-url> && cd whitehelmet
 cp backend/.env.example backend/.env
-# Fill in ANTHROPIC_API_KEY and SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
-
-cd deploy/docker
-docker compose up --build
 ```
 
-- Frontend: http://localhost
-- Backend: http://localhost:8000
+Get the filled `.env` file from a team member — it contains Supabase credentials and API keys that are not committed to the repo.
 
-### Option B — local dev (hot reload)
+### Required env vars
 
-Requires Python 3.11+, Node 18+.
+| Var | Description |
+|---|---|
+| `DATABASE_URL` | Supabase PostgreSQL connection string |
+| `SUPABASE_URL` | Supabase project URL (used for JWKS) |
+| `ANTHROPIC_API_KEY` | Anthropic API key (server-side only) |
+
+Optional: `OPENROUTER_API_KEY`, `CORS_ORIGINS`, `MAX_UPLOAD_SIZE_MB`, `UPLOAD_DIR`. See `backend/.env.example` for all options.
+
+### 2a. Local dev (hot reload)
 
 ```bash
-cp backend/.env.example backend/.env
-# Set SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY
-
 # Backend
 cd backend
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-alembic upgrade head
+alembic upgrade head          # apply database migrations
 uvicorn app.main:app --reload
 
 # Frontend (separate terminal)
@@ -138,30 +146,29 @@ npm run dev
 - Backend: http://localhost:8000
 - Frontend: http://localhost:5173
 
-### Required env vars
-
-| Var | Description |
-|---|---|
-| `SUPABASE_URL` | Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (bypasses RLS) |
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `KEYCLOAK_JWKS_URL` | Keycloak JWKS endpoint for JWT validation |
-| `SESSION_SECRET` | Random 64-char string |
-| `CSRF_SECRET` | Different random 64-char string |
-
-All vars documented in `backend/.env.example`.
-
-## Database Migrations
-
-Supabase schema migrations live in `supabase/migrations/` and run in timestamp order. Backend-owned tables use Alembic (`backend/migrations/`).
+### 2b. Docker-compose
 
 ```bash
-# Apply Supabase migrations (local Supabase instance)
-supabase db push
-
-# Apply Alembic migrations
-cd backend && alembic upgrade head
+cd deploy/docker
+docker compose up --build
 ```
+
+- Frontend: http://localhost
+- Backend: http://localhost:8000
+
+### Database migrations
+
+Supabase schema migrations live in `supabase/migrations/` and are applied to the shared Supabase instance. Backend-owned tables use Alembic (`backend/migrations/`).
+
+```bash
+# Alembic (run after pulling new changes)
+cd backend && alembic upgrade head
+
+# Supabase (only if running a local Supabase instance)
+supabase db push
+```
+
+> **Note:** If you're connecting to the shared Supabase project (most devs), schema migrations are already applied — you only need to run `alembic upgrade head`.
 
 ## Kubernetes
 
