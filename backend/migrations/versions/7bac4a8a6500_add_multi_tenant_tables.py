@@ -20,6 +20,11 @@ def upgrade() -> None:
     op.drop_index('ix_org_memberships_user_id', table_name='org_memberships')
     op.drop_table('org_memberships')
     op.add_column('organizations', sa.Column('type', sa.String(length=10), nullable=False))
+    op.drop_index('ix_organizations_external_id', table_name='organizations')
+    op.drop_index('ix_organizations_slug', table_name='organizations')
+    op.drop_constraint('organizations_parent_org_id_fkey', 'organizations', type_='foreignkey')
+    op.drop_constraint('records_org_id_fkey', 'records', type_='foreignkey')
+    op.drop_constraint('uploaded_files_org_id_fkey', 'uploaded_files', type_='foreignkey')
     op.alter_column('organizations', 'id',
                existing_type=sa.INTEGER(),
                type_=sa.String(length=36),
@@ -28,16 +33,23 @@ def upgrade() -> None:
                existing_type=sa.INTEGER(),
                type_=sa.String(length=36),
                existing_nullable=True)
-    op.drop_index('ix_organizations_external_id', table_name='organizations')
-    op.drop_index('ix_organizations_slug', table_name='organizations')
-    op.drop_constraint('organizations_parent_org_id_fkey', 'organizations', type_='foreignkey')
     op.drop_column('organizations', 'slug')
     op.drop_column('organizations', 'is_active')
     op.drop_column('organizations', 'external_id')
+    op.alter_column('records', 'org_id',
+               existing_type=sa.INTEGER(),
+               type_=sa.String(length=36),
+               existing_nullable=True)
+    op.create_foreign_key('records_org_id_fkey', 'records', 'organizations', ['org_id'], ['id'], ondelete='SET NULL')
+    op.alter_column('uploaded_files', 'org_id',
+               existing_type=sa.INTEGER(),
+               type_=sa.String(length=36),
+               existing_nullable=True)
+    op.create_foreign_key('uploaded_files_org_id_fkey', 'uploaded_files', 'organizations', ['org_id'], ['id'], ondelete='SET NULL')
     op.drop_column('uploaded_files', 'folder_name')
-    op.add_column('users', sa.Column('role', sa.String(length=50), nullable=True))
-    op.add_column('users', sa.Column('org_id', sa.String(length=36), nullable=True))
-    op.create_index(op.f('ix_users_org_id'), 'users', ['org_id'], unique=False)
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50)")
+    op.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS org_id VARCHAR(36)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_users_org_id ON users (org_id)")
     # ### end Alembic commands ###
 
 

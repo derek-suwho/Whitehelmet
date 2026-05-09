@@ -11,9 +11,10 @@ from app.models.template_assignment import TemplateAssignment
 from app.models.submission import Submission
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.formula import Formula
+from app.models.organization import Organization
 
 __all__ = [
     "User", "Record", "UploadedFile", "ConversationMessage", "SessionModel",
     "Project", "ProjectMember", "Template", "TemplateVersion", "TemplateAssignment",
-    "Submission", "ConsolidatedSheet", "Formula",
+    "Submission", "ConsolidatedSheet", "Formula", "Organization",
 ]

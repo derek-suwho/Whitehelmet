@@ -15,8 +15,7 @@ depends_on = None
 
 
 def upgrade():
-    with op.batch_alter_table('template_assignments') as batch_op:
-        batch_op.add_column(sa.Column('assigned_to_user_id', sa.String(36), nullable=True))
+    op.execute("ALTER TABLE template_assignments ADD COLUMN IF NOT EXISTS assigned_to_user_id VARCHAR(36)")
 
 
 def downgrade():
