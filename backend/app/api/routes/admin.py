@@ -234,11 +234,8 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Project not found")
 
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
-    member_users = [
-        db.query(User).filter(User.id == m.user_id).first() for m in members
-    ]
-    member_users = [u for u in member_users if u]
-    total_members = len(member_users)
+    total_members = len(members)
+    member_ids = [str(m.user_id) for m in members]
 
     # All template version assignments for this project (project-wide org_id assignments)
     project_assignments = (
@@ -273,10 +270,10 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
         ]
 
         submitted_count = sum(
-            1 for u in member_users
+            1 for uid in member_ids
             if db.query(Submission).filter(
                 Submission.assignment_id.in_(t_assignment_ids),
-                Submission.submitted_by == str(u.id),
+                Submission.submitted_by == uid,
             ).first()
         )
 
