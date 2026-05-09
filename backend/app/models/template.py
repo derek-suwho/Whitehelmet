@@ -1,7 +1,8 @@
 """Template model — versioned KPI template definitions owned by PIF."""
 
 import uuid
-from sqlalchemy import Column, String, DateTime, Text, func
+
+from sqlalchemy import Column, DateTime, String, Text, func
 
 from app.db.session import Base
 

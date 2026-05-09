@@ -1,11 +1,10 @@
+// frontend/src/stores/auth.ts
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { api, setCsrfToken } from '@/composables/useApi'
+import { supabase } from '@/lib/supabase'
 
 export interface AuthUser {
-  id: number
-  external_id: string
-  email: string
+  id: string          // UUID (was number)
   display_name: string
   role?: string
   org_id?: string
@@ -13,7 +12,6 @@ export interface AuthUser {
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
-  const csrfToken = ref('')
   const checked = ref(false)
 
   const isAdmin = computed(() => user.value?.role === 'org_super_admin')
@@ -21,10 +19,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function checkSession() {
     try {
-      const resp = await api.get<{ user: AuthUser; csrf_token: string }>('/api/auth/me')
-      user.value = resp.user
-      csrfToken.value = resp.csrf_token
-      setCsrfToken(resp.csrf_token)
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        await _loadProfile(session.access_token)
+      } else {
+        user.value = null
+      }
     } catch {
       user.value = null
     } finally {
@@ -33,27 +33,24 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string) {
-    const resp = await api.post<{ user: AuthUser; csrf_token: string }>('/api/auth/login', { email, password })
-    user.value = resp.user
-    csrfToken.value = resp.csrf_token
-    setCsrfToken(resp.csrf_token)
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) throw new Error(error.message)
+    await _loadProfile(data.session.access_token)
     checked.value = true
   }
 
-  async function register(email: string, password: string, displayName: string) {
-    await api.post('/api/auth/register', {
-      email,
-      password,
-      display_name: displayName,
-    })
-  }
-
   async function logout() {
-    await api.post('/api/auth/logout')
+    await supabase.auth.signOut()
     user.value = null
-    csrfToken.value = ''
-    setCsrfToken('')
   }
 
-  return { user, csrfToken, checked, isAdmin, orgId, checkSession, login, register, logout }
+  async function _loadProfile(accessToken: string) {
+    const resp = await fetch('/api/auth/me', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!resp.ok) throw new Error('Profile not found')
+    user.value = await resp.json()
+  }
+
+  return { user, checked, isAdmin, orgId, checkSession, login, logout }
 })

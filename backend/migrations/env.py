@@ -1,8 +1,9 @@
 """Alembic migration environment."""
 
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 if config.config_file_name is not None:
@@ -12,9 +13,19 @@ if config.config_file_name is not None:
 from app.core.config import get_settings
 from app.db.session import Base
 from app.models import (  # noqa: F401
-    User, Record, UploadedFile, ConversationMessage, SessionModel,
-    Project, ProjectMember, Template, TemplateVersion, TemplateAssignment,
-    Submission, ConsolidatedSheet, Formula,
+    ConsolidatedSheet,
+    ConversationMessage,
+    Formula,
+    Project,
+    ProjectMember,
+    Record,
+    SessionModel,
+    Submission,
+    Template,
+    TemplateAssignment,
+    TemplateVersion,
+    UploadedFile,
+    User,
 )
 
 target_metadata = Base.metadata

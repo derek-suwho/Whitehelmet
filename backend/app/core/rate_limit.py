@@ -1,7 +1,7 @@
 """In-memory rate limiting for login endpoint."""
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 MAX_ATTEMPTS = 5
 LOCKOUT_SECONDS = 15 * 60  # 15 minutes

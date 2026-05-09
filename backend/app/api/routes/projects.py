@@ -1,4 +1,5 @@
 """Project routes — CRUD, template assignment, member management."""
+
 import uuid
 from datetime import datetime
 
@@ -8,13 +9,13 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user, verify_csrf
 from app.core.rbac import require_org_super_admin
 from app.db.session import get_db
+from app.models.profile import Profile
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_version import TemplateVersion
-from app.models.user import User
 from app.schemas.projects import (
     AddMemberRequest,
     AssignMasterTemplateRequest,
@@ -44,7 +45,7 @@ def list_projects(db: Session = Depends(get_db)):
 )
 def create_project(
     body: ProjectCreate,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     p = Project(
@@ -78,24 +79,44 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     # Which users have submitted against any assignment in this project
     submitter_ids: set[str] = set()
     if assignment_ids:
-        rows = (
-            db.query(Submission.submitted_by)
-            .filter(Submission.assignment_id.in_(assignment_ids))
-            .all()
-        )
+        rows = db.query(Submission.submitted_by).filter(Submission.assignment_id.in_(assignment_ids)).all()
         submitter_ids = {r[0] for r in rows if r[0] is not None}
 
     # Re-build members list now that we have submitter info
+    # Batch-fetch all related objects needed by the two loops below
+    _member_ids = [m.user_id for m in members_q]
+    _member_profiles = (
+        {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_member_ids)).all()} if _member_ids else {}
+    )
+
+    _version_ids = [a.template_version_id for a in assignments_q if a.template_version_id]
+    _versions = (
+        {v.id: v for v in db.query(TemplateVersion).filter(TemplateVersion.id.in_(_version_ids)).all()}
+        if _version_ids
+        else {}
+    )
+
+    _template_ids = list({v.template_id for v in _versions.values()})
+    _templates = (
+        {t.id: t for t in db.query(Template).filter(Template.id.in_(_template_ids)).all()} if _template_ids else {}
+    )
+
+    _assigned_user_ids = [a.assigned_to_user_id for a in assignments_q if a.assigned_to_user_id]
+    _assigned_profiles = (
+        {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_assigned_user_ids)).all()}
+        if _assigned_user_ids
+        else {}
+    )
+
     members = []
     for m in members_q:
-        u = db.query(User).filter(User.id == m.user_id).first()
+        u = _member_profiles.get(m.user_id)
         if u:
             members.append(
                 {
                     "membership_id": m.id,
                     "user_id": u.id,
                     "display_name": u.display_name,
-                    "email": u.email,
                     "role": u.role,
                     "added_at": m.added_at.isoformat() if m.added_at else None,
                     "has_submission": str(u.id) in submitter_ids,
@@ -107,18 +128,14 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         template_name = None
         template_id = None
         if a.template_version_id:
-            ver = (
-                db.query(TemplateVersion)
-                .filter(TemplateVersion.id == a.template_version_id)
-                .first()
-            )
+            ver = _versions.get(a.template_version_id)
             if ver:
                 template_id = ver.template_id
-                tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
+                tmpl = _templates.get(ver.template_id)
                 template_name = tmpl.name if tmpl else None
         assigned_to_display = None
         if a.assigned_to_user_id:
-            target = db.query(User).filter(User.id == a.assigned_to_user_id).first()
+            target = _assigned_profiles.get(a.assigned_to_user_id)
             assigned_to_display = target.display_name if target else None
 
         template_assignments.append(
@@ -167,7 +184,7 @@ def add_member(
     if not p:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    user = db.query(User).filter(User.id == body.user_id).first()
+    user = db.query(Profile).filter(Profile.id == body.user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -188,7 +205,6 @@ def add_member(
         user_id=body.user_id,
     )
     db.add(member)
-    user.org_id = project_id
     db.commit()
     return {"ok": True}
 
@@ -232,10 +248,14 @@ def set_master_template(
         raise HTTPException(status_code=404, detail="Project not found")
 
     if body.master_template_id:
-        tmpl = db.query(Template).filter(
-            Template.id == body.master_template_id,
-            Template.template_type == "master",
-        ).first()
+        tmpl = (
+            db.query(Template)
+            .filter(
+                Template.id == body.master_template_id,
+                Template.template_type == "master",
+            )
+            .first()
+        )
         if not tmpl:
             raise HTTPException(status_code=404, detail="Master template not found")
         p.master_template_id = body.master_template_id
@@ -255,7 +275,7 @@ def set_master_template(
 def assign_template(
     project_id: str,
     body: AssignTemplateRequest,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     p = db.query(Project).filter(Project.id == project_id).first()
@@ -303,11 +323,7 @@ def assign_template(
 @router.get("/{project_id}/submissions")
 def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
     """Return all submissions for a project, enriched with submitter name."""
-    assignment_ids = [
-        a.id for a in db.query(TemplateAssignment)
-        .filter(TemplateAssignment.org_id == project_id)
-        .all()
-    ]
+    assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()]
     if not assignment_ids:
         return []
 
@@ -322,15 +338,17 @@ def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
     user_cache: dict[str, str] = {}
     for idx, s in enumerate(submissions):
         if s.submitted_by and s.submitted_by not in user_cache:
-            u = db.query(User).filter(User.id == s.submitted_by).first()
+            u = db.query(Profile).filter(Profile.id == s.submitted_by).first()
             user_cache[s.submitted_by] = u.display_name if u else "Unknown"
-        result.append({
-            "id": s.id,
-            "row_number": idx + 1,
-            "file_name": s.file_name,
-            "submitter_name": user_cache.get(s.submitted_by or "", "Unknown"),
-            "reporting_period": s.reporting_period,
-            "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
-            "status": s.status,
-        })
+        result.append(
+            {
+                "id": s.id,
+                "row_number": idx + 1,
+                "file_name": s.file_name,
+                "submitter_name": user_cache.get(s.submitted_by or "", "Unknown"),
+                "reporting_period": s.reporting_period,
+                "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
+                "status": s.status,
+            }
+        )
     return result

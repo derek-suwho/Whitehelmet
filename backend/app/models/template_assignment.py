@@ -1,7 +1,8 @@
 """TemplateAssignment — links a template version to a DevCo org for a submission period."""
 
 import uuid
-from sqlalchemy import Column, String, DateTime, Text, func
+
+from sqlalchemy import Column, DateTime, String, Text, func
 
 from app.db.session import Base
 
@@ -21,4 +22,6 @@ class TemplateAssignment(Base):
     upload_token_expires_at = Column(DateTime, nullable=True)
     assigned_at = Column(DateTime, server_default=func.now(), nullable=False)
     assigned_to_user_id = Column(String(36), nullable=True, index=True)
+    locked_at = Column(DateTime, nullable=True)
+    locked_by = Column(String(36), nullable=True)
     reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"

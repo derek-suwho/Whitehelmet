@@ -1,13 +1,11 @@
 """Admin routes — user management and consolidation progress."""
 
-import io
 import json
-import openpyxl
 import uuid as _uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
+import openpyxl
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -18,15 +16,21 @@ from app.core.dependencies import get_current_user, verify_csrf
 from app.core.rbac import require_org_super_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
+from app.models.profile import Profile
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
+from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
-from app.models.user import User
-from app.schemas.admin import UserWithOrgResponse, UpdateRoleRequest
+from app.schemas.admin import UpdateRoleRequest, UserWithOrgResponse
 from app.schemas.subcontractor import ConsolidationProgressResponse, OrgSubmissionStatus
+from app.schemas.template_formula import (
+    TemplateFormulaCreate,
+    TemplateFormulaResponse,
+    TemplateFormulaUpdate,
+)
 
 router = APIRouter(
     prefix="/api/admin",
@@ -35,20 +39,18 @@ router = APIRouter(
 )
 
 
-@router.get("/users", response_model=list[UserWithOrgResponse])
+@router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_org_super_admin)])
 def list_users(db: Session = Depends(get_db)):
-    return db.query(User).order_by(User.display_name).all()
+    return db.query(Profile).order_by(Profile.display_name).all()
 
 
 @router.patch(
     "/users/{user_id}/role",
     response_model=UserWithOrgResponse,
-    dependencies=[Depends(verify_csrf)],
+    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
 )
-def update_user_role(
-    user_id: int, body: UpdateRoleRequest, db: Session = Depends(get_db)
-):
-    user = db.query(User).filter(User.id == user_id).first()
+def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)):
+    user = db.query(Profile).filter(Profile.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.role = body.role
@@ -64,7 +66,7 @@ def update_user_role(
 )
 def get_consolidation_progress(
     template_id: str,
-    project_id: Optional[str] = Query(None),
+    project_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     """Return per-org submission status.
@@ -78,24 +80,25 @@ def get_consolidation_progress(
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
 
-        members = (
-            db.query(ProjectMember)
-            .filter(ProjectMember.project_id == project_id)
-            .all()
-        )
+        members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
         assignment_ids = [
-            a.id for a in db.query(TemplateAssignment)
-            .filter(TemplateAssignment.org_id == project_id)
-            .all()
+            a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()
         ]
+
+        _proj_member_ids = [m.user_id for m in members]
+        _proj_profiles = (
+            {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_proj_member_ids)).all()}
+            if _proj_member_ids
+            else {}
+        )
 
         org_rows: list[OrgSubmissionStatus] = []
         submitted_count = 0
         member_count = 0
 
         for m in members:
-            user = db.query(User).filter(User.id == m.user_id).first()
+            user = _proj_profiles.get(m.user_id)
             if not user:
                 continue
             member_count += 1
@@ -173,17 +176,14 @@ def get_consolidation_progress(
     for a in assignments:
         project = db.query(Project).filter(Project.id == a.org_id).first()
         subs = (
-            db.query(Submission)
-            .filter(Submission.assignment_id == a.id)
-            .order_by(Submission.submitted_at.desc())
-            .all()
+            db.query(Submission).filter(Submission.assignment_id == a.id).order_by(Submission.submitted_at.desc()).all()
         )
 
         if subs:
             # One row per submitter so every file is visible and selectable
             for sub in subs:
                 submitted_count += 1
-                submitter = db.query(User).filter(User.id == sub.submitted_by).first()
+                submitter = db.query(Profile).filter(Profile.id == sub.submitted_by).first()
                 display = submitter.display_name if submitter else (project.name if project else a.org_id)
                 org_rows.append(
                     OrgSubmissionStatus(
@@ -238,11 +238,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
     member_ids = [str(m.user_id) for m in members]
 
     # All template version assignments for this project (project-wide org_id assignments)
-    project_assignments = (
-        db.query(TemplateAssignment)
-        .filter(TemplateAssignment.org_id == project_id)
-        .all()
-    )
+    project_assignments = db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()
 
     # Resolve unique templates via template_version → template
     seen_template_ids: set[str] = set()
@@ -251,9 +247,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
     for assignment in project_assignments:
         if not assignment.template_version_id:
             continue
-        version = db.query(TemplateVersion).filter(
-            TemplateVersion.id == assignment.template_version_id
-        ).first()
+        version = db.query(TemplateVersion).filter(TemplateVersion.id == assignment.template_version_id).first()
         if not version:
             continue
         template = db.query(Template).filter(Template.id == version.template_id).first()
@@ -263,10 +257,13 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 
         # All assignment IDs for this template in this project
         t_assignment_ids = [
-            a.id for a in db.query(TemplateAssignment).filter(
+            a.id
+            for a in db.query(TemplateAssignment)
+            .filter(
                 TemplateAssignment.org_id == project_id,
                 TemplateAssignment.template_version_id == version.id,
-            ).all()
+            )
+            .all()
         ]
 
         submitted_count = sum(
@@ -277,13 +274,15 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
             ).first()
         )
 
-        templates_progress.append({
-            "template_id": template.id,
-            "template_name": template.name,
-            "total_members": total_members,
-            "submitted_count": submitted_count,
-            "all_submitted": submitted_count == total_members and total_members > 0,
-        })
+        templates_progress.append(
+            {
+                "template_id": template.id,
+                "template_name": template.name,
+                "total_members": total_members,
+                "submitted_count": submitted_count,
+                "all_submitted": submitted_count == total_members and total_members > 0,
+            }
+        )
 
     total_expected = total_members * len(templates_progress)
     total_submitted = sum(t["submitted_count"] for t in templates_progress)
@@ -304,30 +303,23 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 async def consolidate_submissions(
     template_id: str,
     body: dict,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Load project submission files, run AI schema unification, save ConsolidatedSheet."""
     from app.api.routes.ai import _ai_post
 
     settings = get_settings()
-    project_id: Optional[str] = body.get("project_id")
-    submission_ids: Optional[list] = body.get("submission_ids")
-    report_name: Optional[str] = body.get("name")
-    report_period: Optional[str] = body.get("period")
+    project_id: str | None = body.get("project_id")
+    submission_ids: list | None = body.get("submission_ids")
+    report_name: str | None = body.get("name")
+    report_period: str | None = body.get("period")
 
     if submission_ids:
         submissions = db.query(Submission).filter(Submission.id.in_(submission_ids)).all()
     elif project_id:
-        aids = [
-            a.id for a in db.query(TemplateAssignment)
-            .filter(TemplateAssignment.org_id == project_id)
-            .all()
-        ]
-        submissions = (
-            db.query(Submission).filter(Submission.assignment_id.in_(aids)).all()
-            if aids else []
-        )
+        aids = [a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()]
+        submissions = db.query(Submission).filter(Submission.assignment_id.in_(aids)).all() if aids else []
     else:
         raise HTTPException(status_code=400, detail="project_id or submission_ids required")
 
@@ -338,11 +330,27 @@ async def consolidate_submissions(
 
     # Sheets to always skip (utility / formula / metadata sheets)
     _SKIP_SHEETS = (
-        "dropdown", "instruction", "readme", "legend", "lookup", "ref", "notes",
-        "calculation sheet", "calculation", "formula", "sheet1",
-        "company infomation", "company information", "company info",
-        "wbs", "contracts", "construction cost", "milestones",
-        "progress", "assets", "observations",
+        "dropdown",
+        "instruction",
+        "readme",
+        "legend",
+        "lookup",
+        "ref",
+        "notes",
+        "calculation sheet",
+        "calculation",
+        "formula",
+        "sheet1",
+        "company infomation",
+        "company information",
+        "company info",
+        "wbs",
+        "contracts",
+        "construction cost",
+        "milestones",
+        "progress",
+        "assets",
+        "observations",
     )
     # Preferred DevCo input sheet names — checked in order; first match wins
     _PREFERRED = ("ard", "quality", "data", "input", "kpi", "hse", "safety", "metrics")
@@ -354,12 +362,11 @@ async def consolidate_submissions(
         average string length — column names (e.g. '#', 'Level 1') are short,
         description/preamble rows use full sentences, so the column-names row
         wins even when both rows have the same number of distinct strings."""
-        best_idx, best_row, best_count, best_avg = 0, rows[0] if rows else [], 0, float('inf')
+        best_idx, best_row, best_count, best_avg = 0, rows[0] if rows else [], 0, float("inf")
         for idx, row in enumerate(rows[:30]):
-            strings = [str(v).strip() for v in row
-                       if v is not None and isinstance(v, str) and str(v).strip()]
+            strings = [str(v).strip() for v in row if v is not None and isinstance(v, str) and str(v).strip()]
             distinct = len(set(strings))
-            avg_len = sum(len(s) for s in strings) / len(strings) if strings else float('inf')
+            avg_len = sum(len(s) for s in strings) / len(strings) if strings else float("inf")
             if distinct > best_count or (distinct == best_count and avg_len < best_avg):
                 best_count, best_idx, best_row, best_avg = distinct, idx, row, avg_len
         return best_idx, best_row
@@ -378,7 +385,7 @@ async def consolidate_submissions(
             useful = [v for v in hrow if v is not None and str(v).strip()]
             if len(useful) < 3:
                 continue
-            data = [r for r in rows[hidx + 1:] if any(c is not None and str(c).strip() for c in r)]
+            data = [r for r in rows[hidx + 1 :] if any(c is not None and str(c).strip() for c in r)]
             if not data:
                 continue
             candidates[name] = (name, rows, hidx, hrow, len(useful))
@@ -396,22 +403,35 @@ async def consolidate_submissions(
     # Parse each xlsx
     file_schemas = []
     all_file_data = []
+    failed_files: list[str] = []
     for sub in submissions:
-        path = Path(sub.file_path)
+        path = Path(sub.processed_file_path or sub.file_path)
         if not path.exists():
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "consolidate_submissions: file missing for submission %s: %s", sub.id, path
+            )
+            failed_files.append(sub.file_name)
             continue
         try:
             wb = openpyxl.load_workbook(path, data_only=True)
             picked = _pick_sheet(wb)
             if not picked:
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "consolidate_submissions: no usable sheet in submission %s (%s)", sub.id, sub.file_name
+                )
+                failed_files.append(sub.file_name)
                 continue
             _, rows, header_idx, header_row, _ = picked
 
             # Truncate verbose header strings — KPI templates use full sentences as column names
-            headers = [str(h).strip()[:80] if h is not None else '' for h in header_row]
+            headers = [str(h).strip()[:80] if h is not None else "" for h in header_row]
 
             def _nonempty(v) -> bool:
-                return v is not None and str(v).strip() != ''
+                return v is not None and str(v).strip() != ""
 
             def _coerce(v):
                 """Preserve native numeric types; only stringify text."""
@@ -420,7 +440,7 @@ async def consolidate_submissions(
                 if isinstance(v, (int, float)):
                     return v
                 s = str(v).strip()
-                if s == '':
+                if s == "":
                     return None
                 try:
                     return int(s)
@@ -435,18 +455,21 @@ async def consolidate_submissions(
             # (excludes sparse sequence-number rows and label rows like "KPI Ratings" repeated)
             data_rows = [
                 [_coerce(c) for c in r]
-                for r in rows[header_idx + 1:]
-                if (
-                    sum(1 for c in r if _nonempty(c)) >= 3
-                    and len({str(c) for c in r if _nonempty(c)}) > 1
-                )
+                for r in rows[header_idx + 1 :]
+                if (sum(1 for c in r if _nonempty(c)) >= 3 and len({str(c) for c in r if _nonempty(c)}) > 1)
             ]
             if not data_rows:
                 continue
 
             file_schemas.append({"name": sub.file_name, "headers": headers, "sample_rows": data_rows[:5]})
             all_file_data.append({"name": sub.file_name, "headers": headers, "all_rows": data_rows})
-        except Exception:
+        except Exception as exc:
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "consolidate_submissions: failed to parse %s (sub %s): %s", sub.file_name, sub.id, exc
+            )
+            failed_files.append(sub.file_name)
             continue
 
     if not all_file_data:
@@ -460,22 +483,29 @@ async def consolidate_submissions(
         '{"unified_headers":["Source File","<col>",...],'
         '"mappings":[{"file":"<name>","column_map":{"<src>":"<unified>"}}]}\n\n'
         "Rules:\n"
-        "- Always include \"Source File\" as the first unified header.\n"
+        '- Always include "Source File" as the first unified header.\n'
         "- Merge columns that represent the same concept under one standard name.\n"
         "- Include every column that appears in at least one file.\n"
         "- column_map must cover every source column in that file."
     )
-    ai_data = await _ai_post({
-        "model": "anthropic/claude-sonnet-4-5",
-        "max_tokens": 8192,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": json.dumps([
-                {"name": f["name"], "headers": f["headers"], "sample_rows": f["sample_rows"][:3]}
-                for f in file_schemas
-            ])},
-        ],
-    })
+    ai_data = await _ai_post(
+        {
+            "model": "anthropic/claude-sonnet-4-5",
+            "max_tokens": 8192,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        [
+                            {"name": f["name"], "headers": f["headers"], "sample_rows": f["sample_rows"][:3]}
+                            for f in file_schemas
+                        ]
+                    ),
+                },
+            ],
+        }
+    )
 
     raw_ai = ai_data.get("choices", [{}])[0].get("message", {}).get("content", "{}")
     raw_ai = raw_ai.strip()
@@ -484,7 +514,7 @@ async def consolidate_submissions(
     try:
         schema = json.loads(raw_ai)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=502, detail=f"AI returned invalid schema: {exc}")
+        raise HTTPException(status_code=502, detail=f"AI returned invalid schema: {exc}") from exc
 
     unified_headers = schema.get("unified_headers", ["Source File"])
     mappings = {m["file"]: m.get("column_map", {}) for m in schema.get("mappings", [])}
@@ -541,21 +571,154 @@ async def consolidate_submissions(
         "freeform_count": 0,
         "name": auto_name,
         "period": report_period,
+        "failed_files": failed_files,
     }
+
+
+# ── Assignment Lock / Unlock ─────────────────────────────────────────────────
+
+
+class AssignmentLockResponse(BaseModel):
+    id: str
+    status: str
+    locked_at: datetime | None = None
+    locked_by: str | None = None
+
+    model_config = {"from_attributes": True}
 
 
 # ── Master report management ──────────────────────────────────────────────────
 
+
 class ConsolidatedSheetResponse(BaseModel):
     id: str
     template_id: str
-    project_id: Optional[str]
-    name: Optional[str]
-    period: Optional[str]
-    generated_by: Optional[str]
+    project_id: str | None
+    name: str | None
+    period: str | None
+    generated_by: str | None
     generated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+@router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
+def lock_assignment(
+    assignment_id: str,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Lock a submission — no further uploads accepted from the DevCo."""
+    a = db.query(TemplateAssignment).filter(TemplateAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if a.status == "locked":
+        raise HTTPException(status_code=409, detail="Assignment already locked")
+    a.status = "locked"
+    a.locked_at = datetime.now(UTC)
+    a.locked_by = str(user.id)
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+@router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
+def unlock_assignment(
+    assignment_id: str,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Unlock a submission — allows DevCo to resubmit."""
+    a = db.query(TemplateAssignment).filter(TemplateAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    a.status = "submitted"
+    a.locked_at = None
+    a.locked_by = None
+    db.commit()
+    db.refresh(a)
+    return a
+
+
+# ── Template Formula CRUD ────────────────────────────────────────────────────
+
+
+@router.get(
+    "/template-versions/{version_id}/formulas",
+    response_model=list[TemplateFormulaResponse],
+)
+def list_formulas(
+    version_id: str,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    return db.query(TemplateFormula).filter(TemplateFormula.template_version_id == version_id).all()
+
+
+@router.post(
+    "/template-versions/{version_id}/formulas",
+    response_model=TemplateFormulaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_formula(
+    version_id: str,
+    body: TemplateFormulaCreate,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    import uuid as _u
+
+    f = TemplateFormula(
+        id=str(_u.uuid4()),
+        template_version_id=version_id,
+        name=body.name,
+        target_column=body.target_column,
+        formula_type=body.formula_type,
+        expression=body.expression,
+        weight=body.weight,
+        benchmark=body.benchmark,
+        scoring_rules=json.dumps(body.scoring_rules) if body.scoring_rules is not None else None,
+        created_by=str(user.id),
+    )
+    db.add(f)
+    db.commit()
+    db.refresh(f)
+    return f
+
+
+@router.put("/formulas/{formula_id}", response_model=TemplateFormulaResponse)
+def update_formula(
+    formula_id: str,
+    body: TemplateFormulaUpdate,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Formula not found")
+    for field, val in body.model_dump(exclude_unset=True).items():
+        if field == "scoring_rules" and val is not None:
+            val = json.dumps(val)
+        setattr(f, field, val)
+    db.commit()
+    db.refresh(f)
+    return f
+
+
+@router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_formula(
+    formula_id: str,
+    user: Profile = Depends(require_org_super_admin),
+    db: Session = Depends(get_db),
+):
+    f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
+    if not f:
+        raise HTTPException(status_code=404, detail="Formula not found")
+    db.delete(f)
+    db.commit()
+
+
+# ── Master report management ─────────────────────────────────────────────────
 
 
 class RenameReportRequest(BaseModel):

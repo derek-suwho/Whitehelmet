@@ -67,3 +67,41 @@ def test_upload_unauthenticated(client):
         files={"file": ("test.xlsx", BytesIO(content), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
     )
     assert resp.status_code == 401
+
+
+def test_list_files(auth_client, db, test_user, tmp_path):
+    from app.models.uploaded_file import UploadedFile
+    f = UploadedFile(
+        user_id=str(test_user.id), original_name="a.xlsx",
+        stored_path=str(tmp_path / "a.xlsx"), mime_type="application/octet-stream", size_bytes=100, sha256="abc"
+    )
+    db.add(f); db.commit()
+    resp = auth_client.get("/api/files")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["files"][0]["original_name"] == "a.xlsx"
+
+
+def test_get_file_not_found(auth_client):
+    resp = auth_client.get("/api/files/9999")
+    assert resp.status_code == 404
+
+
+def test_delete_file(auth_client, db, test_user, tmp_path):
+    from app.models.uploaded_file import UploadedFile
+    stored = tmp_path / "del.xlsx"
+    stored.write_bytes(b"data")
+    f = UploadedFile(
+        user_id=str(test_user.id), original_name="del.xlsx",
+        stored_path=str(stored), mime_type="application/octet-stream", size_bytes=4, sha256="xyz"
+    )
+    db.add(f); db.commit(); db.refresh(f)
+    resp = auth_client.delete(f"/api/files/{f.id}")
+    assert resp.status_code == 204
+    assert db.query(UploadedFile).filter_by(id=f.id).first() is None
+
+
+def test_delete_file_not_found(auth_client):
+    resp = auth_client.delete("/api/files/9999")
+    assert resp.status_code == 404

@@ -1,9 +1,9 @@
 """Security utilities: session tokens, CSRF, password hashing."""
 
-import secrets
 import hashlib
 import hmac
-from datetime import datetime, timedelta, timezone
+import secrets
+from datetime import UTC, datetime, timedelta
 
 from passlib.context import CryptContext
 
@@ -44,7 +44,7 @@ def verify_csrf_token(session_token: str, csrf_token: str) -> bool:
 def session_expiry() -> datetime:
     """Return expiry timestamp for a new session."""
     settings = get_settings()
-    return datetime.now(timezone.utc) + timedelta(hours=settings.session_expiry_hours)
+    return datetime.now(UTC) + timedelta(hours=settings.session_expiry_hours)
 
 
 def hash_file(data: bytes) -> str:

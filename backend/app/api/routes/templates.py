@@ -1,22 +1,26 @@
 """Template routes — CRUD, versioning, status management."""
-import uuid
+
 import json
+import uuid
 from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from typing import Optional
 from fastapi.responses import FileResponse as FastAPIFileResponse
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
 from app.db.session import get_db
+from app.models.consolidated_sheet import ConsolidatedSheet
+from app.models.profile import Profile
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
-from app.models.consolidated_sheet import ConsolidatedSheet
-from app.models.user import User
 from app.schemas.templates import (
-    TemplateCreate, TemplateResponse,
-    TemplateVersionCreate, TemplateVersionResponse,
     ConsolidatedSheetResponse,
+    TemplateCreate,
+    TemplateResponse,
+    TemplateVersionCreate,
+    TemplateVersionResponse,
 )
 
 router = APIRouter(
@@ -28,7 +32,7 @@ router = APIRouter(
 
 @router.get("", response_model=list[TemplateResponse])
 def list_templates(
-    type: Optional[str] = Query(None, alias="type"),
+    type: str | None = Query(None, alias="type"),
     db: Session = Depends(get_db),
 ):
     q = db.query(Template)
@@ -40,18 +44,13 @@ def list_templates(
 @router.get("/master", response_model=list[TemplateResponse])
 def list_master_templates(db: Session = Depends(get_db)):
     """Return all master templates, newest first."""
-    return (
-        db.query(Template)
-        .filter(Template.template_type == "master")
-        .order_by(Template.updated_at.desc())
-        .all()
-    )
+    return db.query(Template).filter(Template.template_type == "master").order_by(Template.updated_at.desc()).all()
 
 
-@router.post("", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(verify_csrf)])
-def create_template(body: TemplateCreate, user: User = Depends(get_current_user),
-                    db: Session = Depends(get_db)):
+@router.post(
+    "", response_model=TemplateResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)]
+)
+def create_template(body: TemplateCreate, user: Profile = Depends(get_current_user), db: Session = Depends(get_db)):
     tmpl = Template(
         id=str(uuid.uuid4()),
         name=body.name,
@@ -73,8 +72,8 @@ def get_template(template_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Template not found")
     return tmpl
 
-@router.patch("/{template_id}", response_model=TemplateResponse,
-              dependencies=[Depends(verify_csrf)])
+
+@router.patch("/{template_id}", response_model=TemplateResponse, dependencies=[Depends(verify_csrf)])
 def update_template(template_id: str, body: dict, db: Session = Depends(get_db)):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
     if not tmpl:
@@ -89,8 +88,8 @@ def update_template(template_id: str, body: dict, db: Session = Depends(get_db))
     db.refresh(tmpl)
     return tmpl
 
-@router.patch("/{template_id}/status", response_model=TemplateResponse,
-              dependencies=[Depends(verify_csrf)])
+
+@router.patch("/{template_id}/status", response_model=TemplateResponse, dependencies=[Depends(verify_csrf)])
 def update_status(template_id: str, body: dict, db: Session = Depends(get_db)):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
     if not tmpl:
@@ -114,10 +113,18 @@ def list_versions(template_id: str, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/{template_id}/versions", response_model=TemplateVersionResponse,
-             status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)])
-def save_version(template_id: str, body: TemplateVersionCreate,
-                 user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+@router.post(
+    "/{template_id}/versions",
+    response_model=TemplateVersionResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_csrf)],
+)
+def save_version(
+    template_id: str,
+    body: TemplateVersionCreate,
+    user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
     if not tmpl:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -134,11 +141,15 @@ def save_version(template_id: str, body: TemplateVersionCreate,
         id=str(uuid.uuid4()),
         template_id=template_id,
         version_number=next_version,
-        schema_json=json.dumps(body.schema_json),
+        schema_json=json.dumps(body.schema_data),
         created_by=str(user.id),
     )
     db.add(ver)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Version conflict — please retry") from None
     db.refresh(ver)
     return ver
 

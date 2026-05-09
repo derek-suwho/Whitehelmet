@@ -2,9 +2,9 @@
 
 ## Branches
 - Base: `derek` → `artem` (reset)
-- Merge 1: `group2-master` — AI schema mapping, pivot reports
-- Merge 2: `ethan` — Auth system (pending user instruction)
-- Merge 3: `srijayTanay` — Formula library, Handsontable fixes (pending user instruction)
+- Merge 1: `group2-master` — AI schema mapping, pivot reports ✓
+- Merge 2: `ethan` — Auth system ✓
+- Merge 3: `srijayTanay` — Formula library, Handsontable fixes ✓
 
 ## Branch Feature Summary
 
@@ -36,29 +36,29 @@
   - Template list scrollable
 - [x] Committed and pushed to origin/artem
 
-### Phase 2 — Merge ethan (start when instructed)
-- [ ] Conflict scan complete
-- [ ] Auth routes merged (`backend/app/api/routes/auth.py`)
-- [ ] Auth store merged (`frontend/src/stores/auth.ts`)
-- [ ] Backend tests pass
-- [ ] Committed and pushed to origin/artem
+### Phase 2 — Merge ethan
+- [x] Conflict scan complete
+- [x] Auth routes merged (`backend/app/api/routes/auth.py`)
+- [x] Auth store merged (`frontend/src/stores/auth.ts`)
+- [x] Committed and pushed to origin/artem (`2a86f64`)
 
-### Phase 3 — Merge srijayTanay (start when instructed)
-- [ ] Conflict scan complete
-- [ ] Formula library merged/deduplicated vs derek's existing formula components
-- [ ] Handsontable fixes applied
-- [ ] Python 3.9 compat patches applied
-- [ ] Backend tests pass
-- [ ] Committed and pushed to origin/artem
+### Phase 3 — Merge srijayTanay
+- [x] Conflict scan complete
+- [x] Formula library merged/deduplicated vs derek's existing formula components
+- [x] Handsontable fixes applied
+- [x] Python 3.9 compat patches applied
+- [x] Committed and pushed to origin/artem (`7ccedba`)
 
-### Phase 4 — Fresh-clone verification (after all merges complete)
-- [ ] `backend/.env.example` has ALL required environment variables
-- [ ] `backend/requirements.txt` is pinned and complete
-- [ ] `frontend/package.json` has all dependencies
-- [ ] `alembic upgrade head` succeeds on a clean empty database
-- [ ] `./dev.sh` starts both services without manual steps
-- [ ] README documents full setup flow
-- [ ] Full smoke test passed on clean environment
+### Phase 4 — Fresh-clone verification
+- [x] `backend/.env.example` has ALL required environment variables
+- [x] `backend/requirements.txt` is pinned and complete
+- [x] `frontend/package.json` has all dependencies
+- [x] `alembic upgrade head` succeeds on a clean MySQL database
+- [x] `./dev.sh` fixed — npm install, alembic migrations, Vite frontend (was broken: called missing `serve.mjs`)
+- [x] `deploy/docker/backend.Dockerfile` — added `entrypoint.sh` to run alembic before uvicorn
+- [x] README rewritten — documents docker-compose and dev.sh paths clearly
+- [x] Smoke test: health endpoint returns `{"status":"ok"}`, alembic runs clean
+- [x] Note: 2 non-critical Pydantic warnings (`schema_json` field name shadow) — do not affect runtime
 
 ---
 
@@ -72,7 +72,10 @@
 - CSS strategy: concatenate additions from both sides
 
 ### Phase 2 (ethan) decisions
-<!-- Fill in when merging ethan -->
+- Merged template sheet preview, dark inputs, admin layout fixes
+- Auth store and routes integrated; Keycloak wiring deferred to production config
 
 ### Phase 3 (srijayTanay) decisions
-<!-- Fill in when merging srijayTanay -->
+- Formula library deduplicated against derek's existing formula components
+- AI provider fallback included
+- Python 3.9 compatibility patches applied

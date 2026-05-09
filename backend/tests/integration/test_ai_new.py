@@ -33,7 +33,7 @@ def test_parse_template_returns_columns(client):
     assert cols[0]["name"] == "Incident Count"
     assert cols[0]["inferred_type"] == "number"
     assert cols[1]["name"] == "Date"
-    assert cols[1]["inferred_type"] == "text"
+    assert cols[1]["inferred_type"] == "date"
     assert cols[2]["name"] == "Notes"
     assert cols[2]["inferred_type"] == "text"
 

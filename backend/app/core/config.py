@@ -1,7 +1,8 @@
 """Application configuration — all secrets from env vars, never hardcoded."""
 
-from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -21,19 +22,23 @@ class Settings(BaseSettings):
     openrouter_api_key: str = ""
 
     # Auth
-    auth_service_url: str = ""      # Laravel authorization service base URL
+    auth_service_url: str = ""  # Laravel authorization service base URL
     session_secret: str = ""
     csrf_secret: str = ""
     session_expiry_hours: int = 24
 
+    # Supabase (required when auth_mode=supabase)
+    # JWKS URL derived as: {supabase_url}/auth/v1/.well-known/jwks.json
+    supabase_url: str = ""  # e.g. https://[ref].supabase.co
+
     # Keycloak (required when auth_mode=keycloak)
-    auth_mode: str = "local"        # "local" | "keycloak"
-    keycloak_url: str = ""          # e.g. https://auth.client.com
-    keycloak_realm: str = ""        # e.g. pif
+    auth_mode: str = "local"  # "local" | "keycloak" | "supabase"
+    keycloak_url: str = ""  # e.g. https://auth.client.com
+    keycloak_realm: str = ""  # e.g. pif
     keycloak_client_id: str = "whitehelmet"
 
     # OCI MySQL SSL (optional — leave empty to disable SSL)
-    db_ssl_ca: str = ""             # path to CA cert file, e.g. /etc/ssl/mysql-ca.pem
+    db_ssl_ca: str = ""  # path to CA cert file, e.g. /etc/ssl/mysql-ca.pem
 
     # File upload
     max_upload_size_mb: int = 50

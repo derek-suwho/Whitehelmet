@@ -1,14 +1,16 @@
 """Assignment routes — distribute templates or freeform links to DevCos."""
-import uuid
+
 import secrets
-from datetime import datetime, timezone, timedelta
+import uuid
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
 from app.db.session import get_db
+from app.models.profile import Profile
 from app.models.template_assignment import TemplateAssignment
-from app.models.user import User
 from app.schemas.admin import AssignmentCreate, AssignmentResponse
 
 router = APIRouter(
@@ -21,7 +23,7 @@ router = APIRouter(
 @router.post("", response_model=list[AssignmentResponse], status_code=status.HTTP_201_CREATED)
 def create_assignments(
     body: AssignmentCreate,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     results = []
@@ -42,7 +44,7 @@ def create_assignments(
             results.append(a)
     else:
         token = secrets.token_urlsafe(32)
-        expires = datetime.now(timezone.utc) + timedelta(days=7)
+        expires = datetime.now(UTC) + timedelta(days=7)
         a = TemplateAssignment(
             id=str(uuid.uuid4()),
             org_id=body.org_id or "",

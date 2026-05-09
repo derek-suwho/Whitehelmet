@@ -1,5 +1,7 @@
 """Organization routes — list and create orgs."""
+
 import uuid
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
@@ -20,8 +22,9 @@ def list_organizations(db: Session = Depends(get_db)):
     return db.query(Organization).order_by(Organization.name).all()
 
 
-@router.post("", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED,
-             dependencies=[Depends(verify_csrf)])
+@router.post(
+    "", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_csrf)]
+)
 def create_organization(body: OrganizationCreate, db: Session = Depends(get_db)):
     org = Organization(
         id=str(uuid.uuid4()),

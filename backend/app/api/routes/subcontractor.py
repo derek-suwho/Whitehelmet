@@ -17,12 +17,14 @@ from app.core.dependencies import get_current_user, verify_csrf
 from app.core.rbac import require_subcontractor
 from app.core.security import hash_file
 from app.db.session import get_db
+from app.models.profile import Profile
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
+from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
-from app.models.user import User
 from app.schemas.subcontractor import AssignmentForSubcontractor, SubmissionResponse
+from app.services.formula_executor import FormulaExecutor
 
 ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 
@@ -32,19 +34,21 @@ router = APIRouter(
     dependencies=[Depends(require_subcontractor)],
 )
 
-def _assignment_filter(user: User):
+
+def _assignment_filter(user: Profile):
     """Return an OR filter matching project-wide assignments OR user-targeted ones."""
     return or_(
-        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id == None),
+        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id is None),
         TemplateAssignment.assigned_to_user_id == str(user.id),
     )
 
 
 # ── 1. List assignments for this org/user ────────────────────────────────────
 
+
 @router.get("/assignments", response_model=list[AssignmentForSubcontractor])
 def list_my_assignments(
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return template assignments for this user — project-wide or directly targeted."""
@@ -65,9 +69,7 @@ def list_my_assignments(
     for a in assignments:
         template_name = None
         if a.template_version_id:
-            ver = db.query(TemplateVersion).filter(
-                TemplateVersion.id == a.template_version_id
-            ).first()
+            ver = db.query(TemplateVersion).filter(TemplateVersion.id == a.template_version_id).first()
             if ver:
                 tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
                 template_name = tmpl.name if tmpl else None
@@ -105,28 +107,31 @@ def list_my_assignments(
 
 # ── 2. Download the template Excel for an assignment ─────────────────────────
 
+
 @router.get("/assignments/{assignment_id}/template-download")
 def download_template(
     assignment_id: str,
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Generate and serve an xlsx template from the PM's template schema."""
     if not user.org_id:
         raise HTTPException(status_code=400, detail="User has no org_id assigned")
 
-    a = db.query(TemplateAssignment).filter(
-        TemplateAssignment.id == assignment_id,
-        _assignment_filter(user),
-    ).first()
+    a = (
+        db.query(TemplateAssignment)
+        .filter(
+            TemplateAssignment.id == assignment_id,
+            _assignment_filter(user),
+        )
+        .first()
+    )
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
     if not a.template_version_id:
         raise HTTPException(status_code=400, detail="No template linked to this assignment")
 
-    ver = db.query(TemplateVersion).filter(
-        TemplateVersion.id == a.template_version_id
-    ).first()
+    ver = db.query(TemplateVersion).filter(TemplateVersion.id == a.template_version_id).first()
     if not ver:
         raise HTTPException(status_code=404, detail="Template version not found")
 
@@ -159,6 +164,7 @@ def download_template(
 
 # ── 3. Upload submission for an assignment ────────────────────────────────────
 
+
 @router.post(
     "/assignments/{assignment_id}/submit",
     response_model=SubmissionResponse,
@@ -168,17 +174,21 @@ def download_template(
 async def submit_file(
     assignment_id: str,
     file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Upload an xlsx against an assignment. Resubmission replaces the prior file."""
     if not user.org_id:
         raise HTTPException(status_code=400, detail="User has no org_id assigned")
 
-    a = db.query(TemplateAssignment).filter(
-        TemplateAssignment.id == assignment_id,
-        _assignment_filter(user),
-    ).first()
+    a = (
+        db.query(TemplateAssignment)
+        .filter(
+            TemplateAssignment.id == assignment_id,
+            _assignment_filter(user),
+        )
+        .first()
+    )
     if not a:
         raise HTTPException(status_code=404, detail="Assignment not found")
     if a.status == "locked":
@@ -193,8 +203,10 @@ async def submit_file(
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File exceeds {settings.max_upload_size_mb} MB limit")
-    if content[:4] != b"PK\x03\x04":
-        raise HTTPException(status_code=400, detail="File does not appear to be a valid xlsx")
+    _xlsx_magic = b"PK\x03\x04"
+    _xls_magic = b"\xd0\xcf\x11\xe0"
+    if not ((ext == ".xlsx" and content[:4] == _xlsx_magic) or (ext == ".xls" and content[:4] == _xls_magic)):
+        raise HTTPException(status_code=400, detail="File does not appear to be a valid spreadsheet")
 
     sha = hash_file(content)
     org_dir = Path(settings.upload_dir) / "submissions" / str(user.org_id)
@@ -202,10 +214,14 @@ async def submit_file(
     stored_path = org_dir / f"{sha}{ext}"
     stored_path.write_bytes(content)
 
-    existing = db.query(Submission).filter(
-        Submission.assignment_id == assignment_id,
-        Submission.submitted_by == str(user.id),
-    ).first()
+    existing = (
+        db.query(Submission)
+        .filter(
+            Submission.assignment_id == assignment_id,
+            Submission.submitted_by == str(user.id),
+        )
+        .first()
+    )
 
     if existing:
         existing.file_path = str(stored_path)
@@ -225,6 +241,26 @@ async def submit_file(
         db.add(sub)
 
     a.status = "submitted"
+
+    # ── Apply formulas if template version has any ────────────────────────
+    if a.template_version_id:
+        formulas = db.query(TemplateFormula).filter(TemplateFormula.template_version_id == a.template_version_id).all()
+        if formulas:
+            try:
+                processed_bytes = FormulaExecutor.execute(content, formulas)
+                processed_path = org_dir / f"{sha}_processed{ext}"
+                processed_path.write_bytes(processed_bytes)
+                if existing:
+                    existing.processed_file_path = str(processed_path)
+                else:
+                    sub.processed_file_path = str(processed_path)
+            except Exception as exc:
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "Formula execution failed for submission %s: %s", sub.id if not existing else existing.id, exc
+                )
+
     db.commit()
     db.refresh(sub)
     return sub
@@ -232,9 +268,10 @@ async def submit_file(
 
 # ── 4. List own submission history ───────────────────────────────────────────
 
+
 @router.get("/submissions", response_model=list[SubmissionResponse])
 def list_my_submissions(
-    user: User = Depends(get_current_user),
+    user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return all submissions made by this user, newest first."""

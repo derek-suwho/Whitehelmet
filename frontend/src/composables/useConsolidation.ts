@@ -110,7 +110,7 @@ export function useConsolidation() {
       const parsed: ParsedFile[] = []
       for (const file of files) {
         const buffer = await file.arrayBuffer()
-        const wb = XLSX.read(buffer, { type: 'array' })
+        const wb = XLSX.read(buffer, { type: 'array', cellStyles: true })
         const sheetName = wb.SheetNames[0]
         if (!sheetName) continue
         const sheet = wb.Sheets[sheetName]

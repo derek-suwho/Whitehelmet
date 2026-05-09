@@ -1,15 +1,15 @@
 """Integration tests — admin routes."""
 
 
-def test_list_users(auth_client, test_user):
-    resp = auth_client.get("/api/admin/users")
+def test_list_users(pif_admin_client, test_user):
+    resp = pif_admin_client.get("/api/admin/users")
     assert resp.status_code == 200
     users = resp.json()
-    assert any(u["email"] == "test@whitehelmet.com" for u in users)
+    assert any(u["display_name"] == "Test User" for u in users)
 
 
-def test_update_user_role(auth_client, test_user):
-    resp = auth_client.patch(
+def test_update_user_role(pif_admin_client, test_user):
+    resp = pif_admin_client.patch(
         f"/api/admin/users/{test_user.id}/role",
         json={"role": "org_admin"},
     )

@@ -17,13 +17,13 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    // Verify pif_admin
+    // Verify org_super_admin
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) return json({ error: 'Unauthorized' }, 401)
     const { data: { user }, error: authError } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
     if (authError || !user) return json({ error: 'Unauthorized' }, 401)
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-    if (profile?.role !== 'pif_admin') return json({ error: 'Forbidden' }, 403)
+    if (profile?.role !== 'org_super_admin') return json({ error: 'Forbidden' }, 403)
 
     const { file_path } = await req.json()
     if (!file_path) return json({ error: 'file_path is required' }, 400)

@@ -1,18 +1,15 @@
 """Admin request/response schemas."""
 
 from __future__ import annotations
-from typing import Optional
 
 from pydantic import BaseModel
 
 
 class UserWithOrgResponse(BaseModel):
-    id: int
-    external_id: str
-    email: str
+    id: str
     display_name: str
-    role: Optional[str]
-    org_id: Optional[str]
+    role: str | None
+    org_id: str | None
 
     model_config = {"from_attributes": True}
 
@@ -22,11 +19,11 @@ class UpdateRoleRequest(BaseModel):
 
 
 class AssignmentCreate(BaseModel):
-    template_version_id: Optional[str] = None
+    template_version_id: str | None = None
     org_ids: list[str]
-    org_id: Optional[str] = None
-    deadline: Optional[str] = None
-    instructions: Optional[str] = None
+    org_id: str | None = None
+    deadline: str | None = None
+    instructions: str | None = None
     submission_type: str = "template"
 
 
@@ -35,6 +32,6 @@ class AssignmentResponse(BaseModel):
     org_id: str
     submission_type: str
     status: str
-    upload_token: Optional[str]
+    upload_token: str | None
 
     model_config = {"from_attributes": True}

@@ -2,11 +2,12 @@
 import pytest
 from unittest.mock import MagicMock
 from fastapi import HTTPException
+from types import SimpleNamespace
 
 
 def _make_user(role: str):
-    """Create a mock user dict as returned by get_current_user in keycloak mode."""
-    return {"external_id": "u-123", "email": "a@b.com", "system_role": role, "org_external_id": "org-001"}
+    """Create a mock user with role attribute matching the Profile model interface."""
+    return SimpleNamespace(role=role)
 
 
 def test_require_org_super_admin_passes():
@@ -53,7 +54,7 @@ def test_require_org_member_passes_any_role():
 def test_require_org_member_denies_no_role():
     from app.core.rbac import require_org_member
     import asyncio
-    user = {"external_id": "u-123", "email": "a@b.com", "system_role": None, "org_external_id": "org-001"}
+    user = SimpleNamespace(role=None)
     with pytest.raises(HTTPException) as exc_info:
         asyncio.get_event_loop().run_until_complete(require_org_member(current_user=user))
     assert exc_info.value.status_code == 403

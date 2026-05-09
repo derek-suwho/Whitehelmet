@@ -2,6 +2,7 @@
 """FastAPI RBAC dependencies — role-based access control."""
 
 from fastapi import Depends, HTTPException, status
+
 from app.core.dependencies import get_current_user
 
 # Role hierarchy: higher index = more privilege
