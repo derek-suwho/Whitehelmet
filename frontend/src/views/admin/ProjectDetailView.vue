@@ -174,7 +174,7 @@ function availableUsers() {
 
 function versionsForTemplate() {
   if (!selectedTemplateId.value) return []
-  return templatesStore.versions.filter(v => v.template_id === selectedTemplateId.value)
+  return templatesStore.versions
 }
 
 function openTemplateModal() {
@@ -253,7 +253,11 @@ async function setMasterTemplate(templateId: string | null) {
 async function onTemplateChange() {
   selectedVersionId.value = ''
   if (selectedTemplateId.value) {
-    await templatesStore.fetchTemplate(selectedTemplateId.value)
+    try {
+      await templatesStore.fetchTemplate(selectedTemplateId.value)
+    } catch (e) {
+      console.error('Failed to load template versions:', e)
+    }
   }
 }
 

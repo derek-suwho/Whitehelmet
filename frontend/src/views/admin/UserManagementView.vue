@@ -71,7 +71,7 @@ async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admi
           <tr v-for="user in adminStore.users" :key="user.id" class="hover:bg-gray-50">
             <td class="px-5 py-3 font-medium text-gray-800">{{ user.display_name }}</td>
             <td class="px-5 py-3 text-gray-500">
-              {{ adminStore.projects.find(p => p.id === user.org_id)?.name ?? '—' }}
+              {{ user.project_name ?? '—' }}
             </td>
             <td class="px-5 py-3">
               <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" :class="roleBadge(user.role ?? '')">

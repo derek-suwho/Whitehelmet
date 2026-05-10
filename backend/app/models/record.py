@@ -1,7 +1,6 @@
 """Master record model — persisted consolidation results."""
 
 from sqlalchemy import BigInteger, Column, DateTime, Integer, LargeBinary, String, func
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
 
@@ -10,8 +9,8 @@ class Record(Base):
     __tablename__ = "records"
 
     id = Column(BigInteger, primary_key=True, autoincrement=True)
-    user_id = Column(UUID(as_uuid=False), nullable=False, index=True)
-    org_id = Column(UUID(as_uuid=False), nullable=True, index=True)
+    user_id = Column(String(36), nullable=False, index=True)
+    org_id = Column(String(36), nullable=True, index=True)
     name = Column(String(500), nullable=False)
     source_count = Column(Integer, nullable=False, default=0)
     row_count = Column(Integer, nullable=False, default=0)

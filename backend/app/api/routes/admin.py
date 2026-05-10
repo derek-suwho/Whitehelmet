@@ -1,8 +1,10 @@
 """Admin routes — user management and consolidation progress."""
 
+from __future__ import annotations
+
 import json
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import openpyxl
@@ -41,7 +43,25 @@ router = APIRouter(
 
 @router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_org_super_admin)])
 def list_users(db: Session = Depends(get_db)):
-    return db.query(Profile).order_by(Profile.display_name).all()
+    profiles = db.query(Profile).order_by(Profile.display_name).all()
+    from app.models.project_member import ProjectMember
+    from app.models.project import Project
+    result = []
+    for p in profiles:
+        pm = db.query(ProjectMember).filter(ProjectMember.user_id == str(p.id)).first()
+        project_name = None
+        if pm:
+            proj = db.query(Project).filter(Project.id == pm.project_id).first()
+            project_name = proj.name if proj else None
+        result.append(UserWithOrgResponse(
+            id=str(p.id),
+            display_name=p.display_name,
+            email=p.email,
+            role=p.role,
+            org_id=str(p.org_id) if p.org_id else None,
+            project_name=project_name,
+        ))
+    return result
 
 
 @router.patch(
@@ -615,7 +635,7 @@ def lock_assignment(
     if a.status == "locked":
         raise HTTPException(status_code=409, detail="Assignment already locked")
     a.status = "locked"
-    a.locked_at = datetime.now(UTC)
+    a.locked_at = datetime.now(timezone.utc)
     a.locked_by = str(user.id)
     db.commit()
     db.refresh(a)

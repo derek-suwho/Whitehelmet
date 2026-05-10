@@ -23,3 +23,5 @@ pytest-cov==6.0.0
 httpx==0.28.1
 ruff==0.8.4
 bandit==1.8.0
+eval_type_backport
+xlcalculator

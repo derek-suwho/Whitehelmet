@@ -24,12 +24,12 @@ export interface MasterReport {
 }
 
 export interface UserWithProject {
-  id: number
-  external_id: string
-  email: string
+  id: string
+  email: string | null
   display_name: string
   role?: string
   org_id?: string
+  project_name?: string | null
 }
 
 export interface ProjectDetail extends Project {

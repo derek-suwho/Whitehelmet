@@ -1,3 +1,4 @@
+from __future__ import annotations
 # backend/app/core/keycloak.py
 """Keycloak JWT validation — fetch JWKS, decode tokens, extract roles."""
 

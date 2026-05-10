@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { api, ApiError } from '@/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
+import { supabase } from '@/lib/supabase'
 import TopBar from '@/components/layout/TopBar.vue'
 
 interface Assignment {
@@ -46,8 +47,19 @@ async function fetchData() {
   }
 }
 
-function downloadTemplate(assignmentId: string) {
-  window.open(`/api/subcontractor/assignments/${assignmentId}/template-download`, '_blank')
+async function downloadTemplate(assignmentId: string) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {}
+  const res = await fetch(`/api/subcontractor/assignments/${assignmentId}/template-download`, { headers })
+  if (!res.ok) { alert('Download failed: ' + res.statusText); return }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const cd = res.headers.get('content-disposition') ?? ''
+  a.download = cd.match(/filename="?([^"]+)"?/)?.[1] ?? 'template.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 async function handleFileUpload(assignmentId: string, event: Event) {
