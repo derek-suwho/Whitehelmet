@@ -1,5 +1,7 @@
 """Formula library CRUD routes."""
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -7,7 +9,14 @@ from app.core.dependencies import get_current_user, verify_csrf
 from app.db.session import get_db
 from app.models.formula import Formula
 from app.models.profile import Profile
-from app.schemas.formula import FormulaCreate, FormulaListResponse, FormulaResponse
+from app.schemas.formula import (
+    FormulaCreate,
+    FormulaEvaluateRequest,
+    FormulaEvaluateResponse,
+    FormulaListResponse,
+    FormulaResponse,
+    safe_eval_expression,
+)
 
 router = APIRouter(
     prefix="/api/formulas",
@@ -16,13 +25,32 @@ router = APIRouter(
 )
 
 
+def _formula_to_response(formula: Formula) -> dict:
+    params = None
+    if formula.parameters:
+        try:
+            params = json.loads(formula.parameters)
+        except Exception:
+            params = None
+    return {
+        "id": formula.id,
+        "name": formula.name,
+        "expression": formula.expression,
+        "parameters": params,
+        "description": formula.description,
+        "nl_prompt": formula.nl_prompt,
+        "formula_type": formula.formula_type,
+        "created_at": formula.created_at,
+    }
+
+
 @router.get("", response_model=FormulaListResponse)
 def list_formulas(
     user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     rows = db.query(Formula).filter(Formula.created_by == user.id).order_by(Formula.created_at.desc()).all()
-    return FormulaListResponse(formulas=rows, total=len(rows))
+    return FormulaListResponse(formulas=[_formula_to_response(r) for r in rows], total=len(rows))
 
 
 @router.post("", response_model=FormulaResponse, status_code=status.HTTP_201_CREATED)
@@ -35,6 +63,7 @@ def create_formula(
         created_by=user.id,
         name=body.name,
         expression=body.expression,
+        parameters=json.dumps(body.parameters) if body.parameters else None,
         description=body.description,
         nl_prompt=body.nl_prompt,
         formula_type=body.formula_type,
@@ -42,7 +71,43 @@ def create_formula(
     db.add(formula)
     db.commit()
     db.refresh(formula)
-    return formula
+    return _formula_to_response(formula)
+
+
+@router.post("/evaluate", response_model=FormulaEvaluateResponse)
+def evaluate_formula(
+    body: FormulaEvaluateRequest,
+    user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    formula = db.query(Formula).filter(
+        Formula.id == body.formula_id,
+        Formula.created_by == user.id,
+    ).first()
+    if not formula:
+        raise HTTPException(status_code=404, detail="Formula not found")
+
+    values: list[float | None] = []
+    for row in body.rows:
+        # Build variable dict: param_name -> numeric cell value
+        variables: dict[str, float] = {}
+        for param, col_name in body.column_map.items():
+            raw = row.get(col_name)
+            try:
+                variables[param] = float(raw) if raw not in (None, "", "—") else 0.0
+            except (TypeError, ValueError):
+                variables[param] = 0.0
+        try:
+            result = safe_eval_expression(formula.expression, variables)
+        except Exception:
+            result = None
+        values.append(result)
+
+    # Increment usage count
+    formula.usage_count = (formula.usage_count or 0) + 1
+    db.commit()
+
+    return FormulaEvaluateResponse(column_name=body.output_name, values=values)
 
 
 @router.delete("/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)

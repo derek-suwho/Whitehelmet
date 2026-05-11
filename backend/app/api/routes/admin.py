@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_org_super_admin
+from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.profile import Profile
@@ -41,7 +41,7 @@ router = APIRouter(
 )
 
 
-@router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_org_super_admin)])
+@router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_admin)])
 def list_users(db: Session = Depends(get_db)):
     profiles = db.query(Profile).order_by(Profile.display_name).all()
     from app.models.project_member import ProjectMember
@@ -67,7 +67,7 @@ def list_users(db: Session = Depends(get_db)):
 @router.patch(
     "/users/{user_id}/role",
     response_model=UserWithOrgResponse,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)):
     user = db.query(Profile).filter(Profile.id == user_id).first()
@@ -82,7 +82,7 @@ def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depend
 @router.get(
     "/templates/{template_id}/consolidation-progress",
     response_model=ConsolidationProgressResponse,
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def get_consolidation_progress(
     template_id: str,
@@ -241,7 +241,7 @@ def get_consolidation_progress(
 
 @router.get(
     "/projects/{project_id}/submission-overview",
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def get_project_submission_overview(project_id: str, db: Session = Depends(get_db)):
     """Return cross-template submission counts for a project.
@@ -318,7 +318,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 
 @router.post(
     "/templates/{template_id}/consolidate-submissions",
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 async def consolidate_submissions(
     template_id: str,
@@ -625,7 +625,7 @@ class ConsolidatedSheetResponse(BaseModel):
 @router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
 def lock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Lock a submission — no further uploads accepted from the DevCo."""
@@ -645,7 +645,7 @@ def lock_assignment(
 @router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
 def unlock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Unlock a submission — allows DevCo to resubmit."""
@@ -669,7 +669,7 @@ def unlock_assignment(
 )
 def list_formulas(
     version_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     return db.query(TemplateFormula).filter(TemplateFormula.template_version_id == version_id).all()
@@ -683,7 +683,7 @@ def list_formulas(
 def create_formula(
     version_id: str,
     body: TemplateFormulaCreate,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     import uuid as _u
@@ -710,7 +710,7 @@ def create_formula(
 def update_formula(
     formula_id: str,
     body: TemplateFormulaUpdate,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -728,7 +728,7 @@ def update_formula(
 @router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_formula(
     formula_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -748,7 +748,7 @@ class RenameReportRequest(BaseModel):
 @router.get(
     "/projects/{project_id}/master-reports",
     response_model=list[ConsolidatedSheetResponse],
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def list_master_reports(project_id: str, db: Session = Depends(get_db)):
     """List all consolidated master reports for a project, newest first."""
@@ -763,7 +763,7 @@ def list_master_reports(project_id: str, db: Session = Depends(get_db)):
 @router.patch(
     "/consolidated-sheets/{sheet_id}/rename",
     response_model=ConsolidatedSheetResponse,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def rename_master_report(
     sheet_id: str,
@@ -783,7 +783,7 @@ def rename_master_report(
 @router.delete(
     "/consolidated-sheets/{sheet_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
     """Delete a consolidated master report record and its file from disk."""
@@ -800,7 +800,7 @@ def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
 
 @router.get(
     "/consolidated-sheets/{sheet_id}/download",
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def download_master_report(sheet_id: str, db: Session = Depends(get_db)):
     """Download the xlsx file for a consolidated master report."""

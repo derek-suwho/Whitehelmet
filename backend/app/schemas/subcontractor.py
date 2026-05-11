@@ -16,6 +16,7 @@ class AssignmentForSubcontractor(BaseModel):
     assigned_at: datetime
     template_name: str | None
     has_submission: bool
+    participant_role: str | None = None  # focal | member | viewer
 
 
 class SubmissionResponse(BaseModel):
@@ -27,8 +28,16 @@ class SubmissionResponse(BaseModel):
     submitted_at: datetime
     submitted_by: str | None
     processed_file_path: str | None = None
+    review_status: str | None = None
+    review_comment: str | None = None
+    reviewed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class SubmissionReviewRequest(BaseModel):
+    status: str   # 'approved' | 'changes_requested'
+    comment: str | None = None
 
 
 class OrgSubmissionStatus(BaseModel):

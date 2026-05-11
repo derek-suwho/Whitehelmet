@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 import TopBar from '@/components/layout/TopBar.vue'
+
+const route = useRoute()
 </script>
 
 <template>
   <div class="flex h-screen flex-col">
-    <TopBar />
+    <TopBar v-if="route.meta.requiresAuth" />
     <RouterView />
   </div>
 </template>

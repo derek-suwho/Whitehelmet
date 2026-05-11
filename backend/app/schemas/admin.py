@@ -17,7 +17,7 @@ class UserWithOrgResponse(BaseModel):
 
 
 class UpdateRoleRequest(BaseModel):
-    role: str
+    role: str  # super_admin | coe_admin | participant
 
 
 class AssignmentCreate(BaseModel):

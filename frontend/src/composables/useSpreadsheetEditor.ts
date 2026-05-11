@@ -98,6 +98,16 @@ export function renderExternal(): void {
 }
 
 // ── Private helpers ──────────────────────────────────────────────
+
+function _isDark(hex: string): boolean {
+  const h = hex.replace('#', '')
+  if (h.length < 6) return false
+  const r = parseInt(h.slice(0, 2), 16)
+  const g = parseInt(h.slice(2, 4), 16)
+  const b = parseInt(h.slice(4, 6), 16)
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.45
+}
+
 function _argbToCss(argb: string): string | null {
   if (!argb) return null
   const s = String(argb).replace('#', '')
@@ -201,7 +211,13 @@ Handsontable.renderers.registerRenderer(
     if (fmt.italic) TD.style.fontStyle = 'italic'
     if (fmt.underline) TD.style.textDecoration = 'underline'
     if (fmt.color) TD.style.color = fmt.color
-    if (fmt.bgColor) TD.style.backgroundColor = fmt.bgColor
+    if (fmt.bgColor) {
+      // Replace pure black fills with dark slate grey for readability
+      const bg = fmt.bgColor.toUpperCase() === '#000000' ? '#374151' : fmt.bgColor
+      TD.style.backgroundColor = bg
+      // Auto-contrast: use white text on dark backgrounds when no explicit text color set
+      if (!fmt.color && _isDark(bg)) TD.style.color = '#FFFFFF'
+    }
     if (fmt.align) TD.style.textAlign = fmt.align
     if (fmt.wrapText) {
       TD.style.whiteSpace = 'normal'
@@ -315,7 +331,8 @@ export function useSpreadsheetEditor() {
       const maxCols = Math.max(range.e.c + 1, 10)
       const maxRows = range.e.r + 1
 
-      // Data rows — prefer formula strings, then display value, then raw value
+      // Data rows — formula strings first, then raw number (avoids comma-formatted
+      // strings like "125,000" that HyperFormula can't sum), then display value
       const processed: any[][] = []
       for (let R = 0; R < maxRows; R++) {
         const row: any[] = []
@@ -323,13 +340,16 @@ export function useSpreadsheetEditor() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C })
           const cell = ws[addr]
           if (!cell) { row.push(''); continue }
-          const val = cell.f
-            ? `=${cell.f}`
-            : cell.w !== undefined && cell.w !== ''
-              ? cell.w
-              : cell.v !== undefined && cell.v !== null
-                ? cell.v
-                : ''
+          let val: any
+          if (cell.f) {
+            val = `=${cell.f}`
+          } else if (cell.t === 'n' && cell.v !== undefined && cell.v !== null) {
+            val = cell.v  // raw number — keeps HyperFormula SUM working
+          } else if (cell.w !== undefined && cell.w !== '') {
+            val = cell.w
+          } else {
+            val = cell.v !== undefined && cell.v !== null ? cell.v : ''
+          }
           row.push(val)
         }
         processed.push(row)
@@ -364,15 +384,15 @@ export function useSpreadsheetEditor() {
           if (!scell?.s) continue
           const s = scell.s
           const fmt: Record<string, any> = {}
-          if (s.font) {
-            if (s.font.bold) fmt.bold = true
-            if (s.font.italic) fmt.italic = true
-            if (s.font.underline) fmt.underline = true
-            const fc = _resolveXlsxColor(s.font.color)
-            if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
-          }
-          if (s.fill) {
-            const bg = _resolveXlsxColor(s.fill.fgColor)
+          // XLSX.js flattens font props directly onto s (not s.font)
+          if (s.bold) fmt.bold = true
+          if (s.italic) fmt.italic = true
+          if (s.underline) fmt.underline = true
+          const fc = _resolveXlsxColor(s.color)
+          if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
+          // Fill: fgColor is flat on s (not s.fill.fgColor)
+          if (s.patternType === 'solid') {
+            const bg = _resolveXlsxColor(s.fgColor)
             if (bg && bg.toUpperCase() !== '#FFFFFF') fmt.bgColor = bg
           }
           if (s.alignment) {

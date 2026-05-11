@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_org_super_admin
+from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.profile import Profile
 from app.models.project import Project
@@ -41,7 +41,7 @@ def list_projects(db: Session = Depends(get_db)):
     "",
     response_model=ProjectResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def create_project(
     body: ProjectCreate,
@@ -118,6 +118,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                     "user_id": u.id,
                     "display_name": u.display_name,
                     "role": u.role,
+                    "participant_role": m.participant_role,
                     "added_at": m.added_at.isoformat() if m.added_at else None,
                     "has_submission": str(u.id) in submitter_ids,
                 }
@@ -173,7 +174,7 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 @router.post(
     "/{project_id}/members",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def add_member(
     project_id: str,
@@ -203,6 +204,7 @@ def add_member(
         id=str(uuid.uuid4()),
         project_id=project_id,
         user_id=body.user_id,
+        participant_role=body.participant_role,
     )
     db.add(member)
     db.commit()
@@ -212,7 +214,7 @@ def add_member(
 @router.delete(
     "/{project_id}/members/{membership_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def remove_member(
     project_id: str,
@@ -236,7 +238,7 @@ def remove_member(
 @router.patch(
     "/{project_id}/master-template",
     response_model=ProjectDetailResponse,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def set_master_template(
     project_id: str,
@@ -270,7 +272,7 @@ def set_master_template(
 @router.post(
     "/{project_id}/assign-template",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def assign_template(
     project_id: str,
@@ -335,20 +337,22 @@ def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
     )
 
     result = []
-    user_cache: dict[str, str] = {}
+    org_cache: dict[str, str] = {}
     for idx, s in enumerate(submissions):
-        if s.submitted_by and s.submitted_by not in user_cache:
-            u = db.query(Profile).filter(Profile.id == s.submitted_by).first()
-            user_cache[s.submitted_by] = u.display_name if u else "Unknown"
+        if s.org_id and s.org_id not in org_cache:
+            from app.models.organization import Organization
+            org = db.query(Organization).filter(Organization.id == s.org_id).first()
+            org_cache[s.org_id] = org.name if org else s.org_id
         result.append(
             {
                 "id": s.id,
                 "row_number": idx + 1,
                 "file_name": s.file_name,
-                "submitter_name": user_cache.get(s.submitted_by or "", "Unknown"),
+                "submitter_name": org_cache.get(s.org_id or "", "Unknown"),
                 "reporting_period": s.reporting_period,
                 "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
                 "status": s.status,
+                "review_status": s.review_status,
             }
         )
     return result

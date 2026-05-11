@@ -17,6 +17,7 @@ class Formula(Base):
     nl_prompt = Column(Text, nullable=True)
     expression = Column(Text, nullable=False)
     formula_type = Column(String(50), nullable=False, default="calculation")
+    parameters = Column(Text, nullable=True)  # JSON list of named param strings e.g. '["incidents","hours"]'
     is_library_item = Column(Boolean, nullable=False, default=False)
     created_by = Column(String(36), nullable=True, index=True)
     usage_count = Column(Integer, nullable=False, default=0)

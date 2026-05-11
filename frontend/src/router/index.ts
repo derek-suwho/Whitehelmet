@@ -36,13 +36,19 @@ const router = createRouter({
       component: () => import('@/views/SubcontractorView.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/submissions/assignments/:assignmentId/fill',
+      name: 'assignment-fill',
+      component: () => import('@/views/SubcontractorTemplateEditorView.vue'),
+      meta: { requiresAuth: true },
+    },
     // ===== END GROUP 1 ROUTES =====
 
     // ===== GROUP 2 ROUTES — do not edit outside this block =====
     {
       path: '/admin',
       component: () => import('@/views/admin/AdminLayout.vue'),
-      meta: { requiresAuth: true, role: 'org_super_admin' },
+      meta: { requiresAuth: true, requiresAdmin: true },
       children: [
         {
           path: '',
@@ -108,6 +114,11 @@ const router = createRouter({
           name: 'admin-master-sheet',
           component: () => import('@/views/admin/MasterSheetEditorView.vue'),
         },
+        {
+          path: 'submissions/:submissionId/review',
+          name: 'admin-submission-review',
+          component: () => import('@/views/admin/SubmissionReviewView.vue'),
+        },
       ],
     },
     // ===== END GROUP 2 ROUTES =====
@@ -128,17 +139,19 @@ router.beforeEach(async (to) => {
     return { name: 'login' }
   }
 
+  const isAdmin = auth.user?.role === 'super_admin' || auth.user?.role === 'coe_admin'
+
   // Redirect authenticated users away from login/signup
   if ((to.name === 'login' || to.name === 'signup') && auth.user) {
-    return auth.user.role === 'org_super_admin' ? { name: 'admin-dashboard' } : { name: 'submissions' }
+    return isAdmin ? { name: 'admin-dashboard' } : { name: 'submissions' }
   }
 
   // Intercept post-login 'dashboard' push (LoginView calls router.push({ name: 'dashboard' }))
   if (to.name === 'dashboard' && auth.user) {
-    return auth.user.role === 'org_super_admin' ? { name: 'admin-dashboard' } : { name: 'submissions' }
+    return isAdmin ? { name: 'admin-dashboard' } : { name: 'submissions' }
   }
 
-  if (to.meta.role === 'org_super_admin' && auth.user?.role !== 'org_super_admin') {
+  if (to.meta.requiresAdmin && !isAdmin) {
     return { name: 'submissions' }
   }
 })
