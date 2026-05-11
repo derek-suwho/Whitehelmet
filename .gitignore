@@ -31,5 +31,11 @@ Project Documents/*.ovpn
 Project Documents/*.tar
 Project Documents/*.zip
 Project Documents/KPI/
+Project-Documents/*.ovpn
+Project-Documents/*.tar
+Project-Documents/*.zip
+Project-Documents/*.key
+Project-Documents/*.pem
+Project-Documents/*.cert
 backend/.venv_test/
 supabase/.temp/
