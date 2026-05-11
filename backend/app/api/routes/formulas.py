@@ -1,14 +1,18 @@
 """Formula library CRUD routes."""
 
 import json
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.formula import Formula
 from app.models.profile import Profile
+from app.models.template_formula import TemplateFormula
+from app.models.template_version import TemplateVersion
 from app.schemas.formula import (
     FormulaCreate,
     FormulaEvaluateRequest,
@@ -17,6 +21,7 @@ from app.schemas.formula import (
     FormulaResponse,
     safe_eval_expression,
 )
+from app.schemas.template_formula import TemplateFormulaCreate
 
 router = APIRouter(
     prefix="/api/formulas",
@@ -42,6 +47,42 @@ def _formula_to_response(formula: Formula) -> dict:
         "formula_type": formula.formula_type,
         "created_at": formula.created_at,
     }
+
+
+@router.post("/bulk-save")
+def bulk_save_template_formulas(
+    template_version_id: str,
+    formulas: list[TemplateFormulaCreate],
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """Atomically replace all formulas for a template version."""
+    tv = db.query(TemplateVersion).filter(TemplateVersion.id == template_version_id).first()
+    if not tv:
+        raise HTTPException(404, "Template version not found")
+
+    db.query(TemplateFormula).filter(
+        TemplateFormula.template_version_id == template_version_id
+    ).delete()
+
+    created = []
+    for f in formulas:
+        tf = TemplateFormula(
+            id=str(uuid.uuid4()),
+            template_version_id=template_version_id,
+            name=f.name,
+            target_column=f.target_column,
+            formula_type=f.formula_type,
+            expression=f.expression,
+            target_row=f.target_row,
+            weight=f.weight,
+            scoring_rules=f.scoring_rules,
+            created_by=user.id,
+        )
+        db.add(tf)
+        created.append(tf.id)
+    db.commit()
+    return {"replaced": len(created), "ids": created}
 
 
 @router.get("", response_model=FormulaListResponse)

@@ -55,3 +55,8 @@ class CommandRequest(BaseModel):
 class CommandResponse(BaseModel):
     op: str | None
     params: dict = {}
+
+
+class FormulaConfigRequest(BaseModel):
+    template_version_id: str
+    messages: list[dict]  # [{role: "user"/"assistant", content: "..."}]

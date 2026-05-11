@@ -24,6 +24,7 @@ from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.profile import Profile
 from app.models.template import Template
 from app.models.template_version import TemplateVersion
+from app.core.rbac import require_admin
 from app.schemas.ai import (
     AgentRequest,
     ChatRequest,
@@ -31,6 +32,7 @@ from app.schemas.ai import (
     CommandResponse,
     ConsolidateRequest,
     ConsolidateResponse,
+    FormulaConfigRequest,
 )
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
@@ -735,6 +737,75 @@ async def generate_formula(body: FormulaRequest):
         description=parsed.get("description", ""),
         formula_type=parsed.get("formula_type", "calculation"),
     )
+
+
+@router.post("/configure-formulas")
+async def configure_formulas(
+    body: FormulaConfigRequest,
+    db: Session = Depends(get_db),
+    user=Depends(require_admin),
+):
+    """AI-driven formula configuration for a template version."""
+    from app.services.template_analyzer import analyze_template
+
+    tv = db.query(TemplateVersion).filter(
+        TemplateVersion.id == body.template_version_id
+    ).first()
+    if not tv:
+        raise HTTPException(404, "Template version not found")
+
+    with open(tv.file_path, "rb") as f:
+        file_bytes = f.read()
+
+    layout = analyze_template(file_bytes)
+
+    system_prompt = f"""You are a KPI formula configuration assistant for the Whitehelmet QHSE platform.
+
+The admin wants to configure calculation formulas for a template. Here is the template structure:
+
+{json.dumps(layout, indent=2)}
+
+Your job:
+1. Identify the header row, data rows, and formula/total rows from the layout.
+2. Ask the admin to confirm your findings: "I see headers in row X, data in rows Y-Z. Is this correct?"
+3. Ask what formulas they want: SUM totals? KPI rate calculations? Weighted scores?
+4. For KPI rates, ask about the formula pattern (e.g., "incidents * 200000 / manhours") and which columns.
+5. Once confirmed, output a JSON array of formula definitions in this exact format:
+
+```json
+[{{
+  "name": "formula name",
+  "target_column": "F",
+  "formula_type": "single_cell",
+  "expression": "=SUM(F10:F14)",
+  "target_row": 16,
+  "target_sheet": "ARD",
+  "weight": null,
+  "scoring_rules": null
+}}]
+```
+
+Be concise. Ask one round of questions at most before proposing formulas. The admin can iterate."""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        *body.messages,
+    ]
+
+    data = await _ai_post({
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 2048,
+        "messages": messages,
+    })
+    content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    return {"response": content, "layout_summary": {
+        "sheets": [s["name"] for s in layout["sheets"]],
+        "detected_headers": [
+            {"sheet": s["name"], "row": h["row"], "cells": len(h["cells"])}
+            for s in layout["sheets"] for h in s["headers"] if h["likely_header"]
+        ],
+    }}
 
 
 # ── Agentic spreadsheet editing ───────────────────────────────────────────────
