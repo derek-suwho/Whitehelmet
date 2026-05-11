@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, String, Text, func
+from sqlalchemy import Column, DateTime, Float, Integer, String, Text, func
 
 from app.db.session import Base
 
@@ -19,5 +19,7 @@ class TemplateFormula(Base):
     weight = Column(Float, nullable=True)
     benchmark = Column(Float, nullable=True)
     scoring_rules = Column(Text, nullable=True)
+    target_row = Column(Integer, nullable=True)  # row to write formula into; None = auto
+    target_sheet = Column(String(100), nullable=True)  # sheet name; None = active sheet
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

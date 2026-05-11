@@ -16,6 +16,8 @@ class TemplateFormulaCreate(BaseModel):
     weight: float | None = None
     benchmark: float | None = None
     scoring_rules: Any | None = None  # list of {min, max, score} dicts
+    target_row: int | None = None
+    target_sheet: str | None = None
 
 
 class TemplateFormulaUpdate(BaseModel):
@@ -26,6 +28,8 @@ class TemplateFormulaUpdate(BaseModel):
     weight: float | None = None
     benchmark: float | None = None
     scoring_rules: Any | None = None
+    target_row: int | None = None
+    target_sheet: str | None = None
 
 
 class TemplateFormulaResponse(BaseModel):
@@ -40,5 +44,7 @@ class TemplateFormulaResponse(BaseModel):
     scoring_rules: Any | None
     created_by: str | None
     created_at: datetime
+    target_row: int | None = None
+    target_sheet: str | None = None
 
     model_config = {"from_attributes": True}
