@@ -45,6 +45,7 @@ def _formula_to_response(formula: Formula) -> dict:
         "description": formula.description,
         "nl_prompt": formula.nl_prompt,
         "formula_type": formula.formula_type,
+        "is_library_item": formula.is_library_item,
         "created_at": formula.created_at,
     }
 
@@ -83,6 +84,13 @@ def bulk_save_template_formulas(
         created.append(tf.id)
     db.commit()
     return {"replaced": len(created), "ids": created}
+
+
+@router.get("/library", response_model=list[FormulaResponse])
+def list_library_formulas(db: Session = Depends(get_db)):
+    """List all formula presets (library items)."""
+    rows = db.query(Formula).filter(Formula.is_library_item == True).order_by(Formula.name).all()
+    return [_formula_to_response(f) for f in rows]
 
 
 @router.get("", response_model=FormulaListResponse)

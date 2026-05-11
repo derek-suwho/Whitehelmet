@@ -26,6 +26,7 @@ class FormulaResponse(BaseModel):
     description: str | None
     nl_prompt: str | None
     formula_type: str | None
+    is_library_item: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

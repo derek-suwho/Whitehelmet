@@ -5,6 +5,7 @@ import type { SavedFormula, FormulaCreate } from '@/types'
 
 export const useFormulasStore = defineStore('formulas', () => {
   const formulas = ref<SavedFormula[]>([])
+  const libraryFormulas = ref<SavedFormula[]>([])
   const loading = ref(false)
 
   async function fetchFormulas() {
@@ -44,10 +45,19 @@ export const useFormulasStore = defineStore('formulas', () => {
     })
   }
 
+  async function fetchLibrary() {
+    try {
+      const data = await api.get<SavedFormula[]>('/api/formulas/library')
+      libraryFormulas.value = data
+    } catch (err) {
+      console.error('[formulas] fetchLibrary failed:', err)
+    }
+  }
+
   function findByName(name: string): SavedFormula | undefined {
     const lower = name.toLowerCase()
     return formulas.value.find((f) => f.name.toLowerCase() === lower)
   }
 
-  return { formulas, loading, fetchFormulas, saveFormula, deleteFormula, createFromNL, findByName }
+  return { formulas, libraryFormulas, loading, fetchFormulas, fetchLibrary, saveFormula, deleteFormula, createFromNL, findByName }
 })
