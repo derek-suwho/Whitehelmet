@@ -28,15 +28,43 @@ router = APIRouter(
 )
 
 
-@router.get("/{submission_id}/download")
-def download_submission(
+@router.get("/{submission_id}")
+def get_submission(
     submission_id: str,
     db: Session = Depends(get_db),
 ):
     sub = db.query(Submission).filter(Submission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
-    path = Path(sub.file_path)
+    return {
+        "id": sub.id,
+        "file_name": sub.file_name,
+        "status": sub.status,
+        "has_processed": sub.processed_file_path is not None,
+        "file_revision": sub.file_revision,
+        "review_status": sub.review_status,
+        "review_comment": sub.review_comment,
+        "reviewed_at": sub.reviewed_at.isoformat() if sub.reviewed_at else None,
+    }
+
+
+@router.get("/{submission_id}/download")
+def download_submission(
+    submission_id: str,
+    type: str = "raw",
+    db: Session = Depends(get_db),
+):
+    sub = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+
+    if type == "processed":
+        if not sub.processed_file_path:
+            raise HTTPException(status_code=404, detail="No processed file available")
+        path = Path(sub.processed_file_path)
+    else:
+        path = Path(sub.file_path)
+
     if not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(

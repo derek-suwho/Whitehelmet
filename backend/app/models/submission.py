@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import Column, DateTime, String, Text, func
+from sqlalchemy import Column, DateTime, Integer, String, Text, func
 
 from app.db.session import Base
 
@@ -20,6 +20,8 @@ class Submission(Base):
     submitted_by = Column(String(36), nullable=True)
     processed_file_path = Column(String(500), nullable=True)
     reporting_period = Column(String(50), nullable=True, index=True)  # e.g. "2026-07"
+
+    file_revision = Column(Integer, nullable=False, default=0, server_default="0")
 
     # Review fields (populated by PIF admin)
     review_status = Column(String(20), nullable=True)   # 'approved' | 'changes_requested'
