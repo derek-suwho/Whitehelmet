@@ -39,7 +39,7 @@ router = APIRouter(
 def _assignment_filter(user: Profile):
     """Return an OR filter matching project-wide assignments OR user-targeted ones."""
     return or_(
-        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id is None),
+        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id.is_(None)),
         TemplateAssignment.assigned_to_user_id == str(user.id),
     )
 

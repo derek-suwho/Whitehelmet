@@ -15,10 +15,9 @@ from app.db.session import get_db
 from app.main import app
 from app.models.profile import Profile
 from app.models.template_assignment import TemplateAssignment
-from app.models.submission import Submission
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def make_xlsx() -> bytes:
     wb = openpyxl.Workbook()
@@ -36,6 +35,7 @@ OTHER_ORG_ID = "00000000-0000-0000-0000-000000000002"
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def devco_user(db) -> Profile:
     user = Profile(
@@ -45,6 +45,16 @@ def devco_user(db) -> Profile:
         org_id=ORG_ID,
     )
     db.add(user)
+    db.flush()
+    # Add as focal participant so submit tests pass
+    from app.models.project_member import ProjectMember
+    pm = ProjectMember(
+        id=str(uuid.uuid4()),
+        project_id=ORG_ID,
+        user_id=str(user.id),
+        participant_role="focal",
+    )
+    db.add(pm)
     db.commit()
     db.refresh(user)
     return user
@@ -76,6 +86,7 @@ def devco_client(db, devco_user, tmp_path):
     app.dependency_overrides[get_current_user] = override_user
 
     from fastapi.testclient import TestClient
+
     # Patch get_settings at the route module level so direct calls also get the tmp dir
     with patch("app.api.routes.subcontractor.get_settings", return_value=test_settings):
         with TestClient(app) as c:
@@ -101,6 +112,7 @@ def _make_assignment(db, org_id=ORG_ID, assigned_to_user_id=None, status="pendin
 
 # ── 1. list_my_assignments ────────────────────────────────────────────────────
 
+
 def test_list_assignments_no_org(db):
     """User with no org_id → 400."""
     user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="No Org")
@@ -121,6 +133,7 @@ def test_list_assignments_no_org(db):
     app.dependency_overrides[get_current_user] = override_user
 
     from fastapi.testclient import TestClient
+
     with TestClient(app) as c:
         resp = c.get("/api/subcontractor/assignments")
 
@@ -168,6 +181,7 @@ def test_list_assignments_other_org_excluded(devco_client, db):
 
 
 # ── 2. submit_file ────────────────────────────────────────────────────────────
+
 
 def test_submit_file_success(devco_client, db, devco_user):  # settings_override active via devco_client
     """Upload valid xlsx against a pending assignment → 201, creates submission."""
@@ -222,6 +236,7 @@ def test_submit_file_not_found(devco_client):
 
 # ── 3. list_my_submissions ────────────────────────────────────────────────────
 
+
 def test_list_submissions(devco_client, db, devco_user):
     """After a successful upload, submissions list returns the entry."""
     a = _make_assignment(db, org_id=ORG_ID, status="pending")
@@ -244,22 +259,28 @@ def test_list_submissions(devco_client, db, devco_user):
 def test_download_template(devco_client, db):
     """download_template generates an xlsx from the template schema."""
     import json
+
     from app.models.template import Template
-    from app.models.template_version import TemplateVersion
     from app.models.template_assignment import TemplateAssignment
+    from app.models.template_version import TemplateVersion
 
     VER_ID = "00000000-0000-0000-0000-000000000010"
 
     t = Template(id="00000000-0000-0000-0000-000000000020", name="Download Template", template_type="subcontractor")
     db.add(t)
     ver = TemplateVersion(
-        id=VER_ID, template_id="00000000-0000-0000-0000-000000000020", version_number=1,
-        schema_json=json.dumps({"columns": [{"name": "KPI"}, {"name": "Value"}]})
+        id=VER_ID,
+        template_id="00000000-0000-0000-0000-000000000020",
+        version_number=1,
+        schema_json=json.dumps({"columns": [{"name": "KPI"}, {"name": "Value"}]}),
     )
     db.add(ver)
     a = TemplateAssignment(
-        id="asn-dl-1", template_version_id=VER_ID,
-        org_id=ORG_ID, status="pending", submission_type="template",
+        id="asn-dl-1",
+        template_version_id=VER_ID,
+        org_id=ORG_ID,
+        status="pending",
+        submission_type="template",
     )
     db.add(a)
     db.commit()
@@ -276,12 +297,18 @@ def test_download_template_not_found(devco_client):
 
 def test_download_template_no_org(client, db):
     """User without org_id gets 400."""
+    import uuid
+
     from app.core.dependencies import get_current_user
     from app.models.profile import Profile
-    import uuid
+
     user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="NoOrg")
-    db.add(user); db.commit()
-    async def override(): return user
+    db.add(user)
+    db.commit()
+
+    async def override():
+        return user
+
     client.app.dependency_overrides[get_current_user] = override
     resp = client.get("/api/subcontractor/assignments/any/template-download")
     assert resp.status_code == 400

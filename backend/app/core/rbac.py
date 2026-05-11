@@ -5,8 +5,8 @@ from fastapi import Depends, HTTPException, status
 
 from app.core.dependencies import get_current_user
 
-_ADMIN_ROLES = frozenset({"super_admin", "coe_admin"})
-_ALL_ROLES   = frozenset({"super_admin", "coe_admin", "participant"})
+_ADMIN_ROLES = frozenset({"super_admin", "coe_admin", "org_super_admin", "org_admin"})
+_ALL_ROLES   = frozenset({"super_admin", "coe_admin", "org_super_admin", "org_admin", "org_member", "participant"})
 
 
 def _is_admin(user) -> bool:
@@ -36,9 +36,17 @@ async def require_participant(current_user=Depends(get_current_user)):
     return current_user
 
 
-# Legacy aliases — kept so any remaining import sites work without change.
-# Safe to delete after rollout is confirmed stable.
-require_org_super_admin = require_admin
-require_org_admin       = require_admin
-require_org_member      = require_participant
-require_subcontractor   = require_participant
+_SUPER_ADMIN_ROLES = frozenset({"super_admin", "coe_admin", "org_super_admin"})
+
+
+async def require_org_super_admin(current_user=Depends(get_current_user)):
+    """Only super-admin-tier roles (not org_admin)."""
+    if getattr(current_user, "role", None) not in _SUPER_ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Requires super admin role")
+    return current_user
+
+
+# Legacy aliases
+require_org_admin     = require_admin
+require_org_member    = require_participant
+require_subcontractor = require_participant

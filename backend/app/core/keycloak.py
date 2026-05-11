@@ -13,9 +13,9 @@ _ROLE_MAP = {
     "COE_Admin":       "coe_admin",
     "Participant":     "participant",
     # Legacy Keycloak role names (kept until Keycloak config is updated)
-    "Org_Super_Admin": "super_admin",
-    "Org_Admin":       "participant",
-    "Org_Member":      "participant",
+    "Org_Super_Admin": "org_super_admin",
+    "Org_Admin":       "org_admin",
+    "Org_Member":      "org_member",
 }
 
 # Internal Keycloak roles to ignore when extracting app roles
@@ -76,7 +76,7 @@ def extract_roles(claims: dict) -> list[str]:
 
 def map_system_role(roles: list[str]) -> str | None:
     """Map Keycloak realm roles to our system role. Returns highest-privilege match."""
-    priority = ["super_admin", "coe_admin", "participant"]
+    priority = ["super_admin", "coe_admin", "org_super_admin", "org_admin", "org_member", "participant"]
     mapped = {_ROLE_MAP[r] for r in roles if r in _ROLE_MAP}
     for role in priority:
         if role in mapped:
