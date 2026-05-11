@@ -3,7 +3,6 @@
 import uuid
 
 from sqlalchemy import Column, DateTime, String, func
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
 
@@ -11,8 +10,8 @@ from app.db.session import Base
 class Organization(Base):
     __tablename__ = "organizations"
 
-    id = Column(UUID(as_uuid=False), primary_key=True, default=lambda: str(uuid.uuid4()))
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
     type = Column(String(10), nullable=False)  # pif | devco
-    parent_org_id = Column(UUID(as_uuid=False), nullable=True, index=True)
+    parent_org_id = Column(String(36), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, RouterLink } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
+import { useFormulasStore } from '@/stores/formulas'
 import type { ProjectDetail, MasterReport, ProjectSubmission } from '@/stores/admin'
 import type { ProjectMember } from '@/types/database'
 
 const route = useRoute()
 const adminStore = useAdminStore()
 const templatesStore = useTemplatesStore()
+const formulasStore = useFormulasStore()
 
 const projectId = route.params.projectId as string
 const project = ref<ProjectDetail | null>(null)
@@ -22,6 +24,7 @@ const tabs = [
   { key: 'template',      label: 'Subcontractor Templates' },
   { key: 'subcontractor', label: 'Sub-Contractor Record' },
   { key: 'consolidated',  label: 'Auto-Consolidated Master Records' },
+  { key: 'formulas',      label: 'Formulas' },
   { key: 'notifications', label: 'Notifications' },
 ] as const
 type TabKey = typeof tabs[number]['key']
@@ -30,6 +33,7 @@ const activeTab = ref<TabKey>('workpackage')
 // Add member modal
 const showMemberModal = ref(false)
 const memberUserId = ref<number | null>(null)
+const memberParticipantRole = ref<'focal' | 'member' | 'viewer'>('focal')
 const addingMember = ref(false)
 const memberError = ref('')
 
@@ -41,6 +45,91 @@ const templateDeadline = ref('')
 const selectedMemberIds = ref<number[]>([])
 const assigningTemplate = ref(false)
 const templateError = ref('')
+
+// Upload xlsx template
+const showUploadModal = ref(false)
+const uploadTemplateName = ref('')
+const uploadTemplateFile = ref<File | null>(null)
+const uploadingTemplate = ref(false)
+const uploadTemplateError = ref('')
+const uploadTemplateSuccess = ref('')
+
+async function handleTemplateFileChange(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0] ?? null
+  uploadTemplateFile.value = f
+  if (f && !uploadTemplateName.value) {
+    uploadTemplateName.value = f.name.replace(/\.xlsx?$/i, '').replace(/_/g, ' ')
+  }
+}
+
+async function uploadXlsxTemplate() {
+  if (!uploadTemplateName.value.trim()) { uploadTemplateError.value = 'Enter a template name.'; return }
+  if (!uploadTemplateFile.value) { uploadTemplateError.value = 'Select an xlsx file.'; return }
+  uploadingTemplate.value = true
+  uploadTemplateError.value = ''
+  uploadTemplateSuccess.value = ''
+  try {
+    const { supabase } = await import('@/lib/supabase')
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {}
+    const form = new FormData()
+    form.append('file', uploadTemplateFile.value)
+    const resp = await fetch(
+      `/api/templates/upload-xlsx?name=${encodeURIComponent(uploadTemplateName.value.trim())}`,
+      { method: 'POST', headers, body: form },
+    )
+    if (!resp.ok) { const t = await resp.text(); throw new Error(t) }
+    uploadTemplateSuccess.value = 'Template uploaded! You can now assign it to members.'
+    uploadTemplateName.value = ''
+    uploadTemplateFile.value = null
+    await templatesStore.fetchTemplates()
+  } catch (e) {
+    uploadTemplateError.value = e instanceof Error ? e.message : 'Upload failed'
+  } finally {
+    uploadingTemplate.value = false
+  }
+}
+
+// Formula management
+const showFormulaForm = ref(false)
+const newFormula = ref({ name: '', expression: '', description: '', formula_type: 'calculation' })
+const newFormulaParamInput = ref('')
+const newFormulaParams = ref<string[]>([])
+const addingFormula = ref(false)
+const formulaError = ref('')
+
+function addParam() {
+  const val = newFormulaParamInput.value.trim().replace(/[^a-zA-Z0-9_]/g, '_')
+  if (val && !newFormulaParams.value.includes(val)) newFormulaParams.value.push(val)
+  newFormulaParamInput.value = ''
+}
+
+function removeParam(p: string) {
+  newFormulaParams.value = newFormulaParams.value.filter(x => x !== p)
+}
+
+async function addFormula() {
+  if (!newFormula.value.name.trim() || !newFormula.value.expression.trim()) {
+    formulaError.value = 'Name and expression are required.'
+    return
+  }
+  addingFormula.value = true
+  formulaError.value = ''
+  try {
+    await formulasStore.saveFormula({
+      ...newFormula.value,
+      parameters: newFormulaParams.value.length ? [...newFormulaParams.value] : undefined,
+    })
+    newFormula.value = { name: '', expression: '', description: '', formula_type: 'calculation' }
+    newFormulaParams.value = []
+    newFormulaParamInput.value = ''
+    showFormulaForm.value = false
+  } catch (e) {
+    formulaError.value = e instanceof Error ? e.message : 'Failed to save formula'
+  } finally {
+    addingFormula.value = false
+  }
+}
 
 // Master template
 const showMasterModal = ref(false)
@@ -157,6 +246,7 @@ onMounted(async () => {
       loadMasterReports(),
       loadSubmissions(),
       loadSubmissionOverview(),
+      formulasStore.fetchFormulas(),
     ])
   } finally {
     loading.value = false
@@ -174,7 +264,7 @@ function availableUsers() {
 
 function versionsForTemplate() {
   if (!selectedTemplateId.value) return []
-  return templatesStore.versions.filter(v => v.template_id === selectedTemplateId.value)
+  return templatesStore.versions
 }
 
 function openTemplateModal() {
@@ -191,10 +281,11 @@ async function addMember() {
   addingMember.value = true
   memberError.value = ''
   try {
-    await adminStore.addProjectMember(projectId, memberUserId.value)
+    await adminStore.addProjectMember(projectId, memberUserId.value, memberParticipantRole.value)
     await loadProject()
     showMemberModal.value = false
     memberUserId.value = null
+    memberParticipantRole.value = 'focal'
   } catch (e) {
     memberError.value = e instanceof Error ? e.message : 'Failed'
   } finally {
@@ -253,7 +344,11 @@ async function setMasterTemplate(templateId: string | null) {
 async function onTemplateChange() {
   selectedVersionId.value = ''
   if (selectedTemplateId.value) {
-    await templatesStore.fetchTemplate(selectedTemplateId.value)
+    try {
+      await templatesStore.fetchTemplate(selectedTemplateId.value)
+    } catch (e) {
+      console.error('Failed to load template versions:', e)
+    }
   }
 }
 
@@ -406,6 +501,12 @@ function formatDate(iso: string | null) {
                 class="rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-violet-500"
               />
             </div>
+            <button
+              class="flex items-center gap-1.5 rounded-lg border border-violet-400 text-violet-700 px-4 py-2 text-sm font-medium hover:bg-violet-50 transition-colors"
+              @click="showUploadModal = true; uploadTemplateError = ''; uploadTemplateSuccess = ''"
+            >
+              ↑ Upload KPI Template
+            </button>
             <button
               class="flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
               @click="openTemplateModal"
@@ -604,17 +705,31 @@ function formatDate(iso: string | null) {
                   {{ s.submitted_at ? new Date(s.submitted_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—' }}
                 </td>
                 <td class="px-4 py-3.5">
-                  <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
-                    :class="s.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
-                    {{ s.status.charAt(0).toUpperCase() + s.status.slice(1) }}
-                  </span>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium"
+                      :class="s.status === 'submitted' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'">
+                      {{ s.status.charAt(0).toUpperCase() + s.status.slice(1) }}
+                    </span>
+                    <span v-if="s.review_status === 'approved'"
+                      class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                      ✓ Approved
+                    </span>
+                    <span v-else-if="s.review_status === 'changes_requested'"
+                      class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                      ↩ Changes
+                    </span>
+                  </div>
                 </td>
                 <td class="px-4 py-3.5 text-center">
-                  <button class="text-gray-400 hover:text-gray-600 transition-colors">
+                  <RouterLink
+                    :to="`/admin/submissions/${s.id}/review?fileName=${encodeURIComponent(s.file_name)}`"
+                    class="text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Review submission"
+                  >
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                     </svg>
-                  </button>
+                  </RouterLink>
                 </td>
               </tr>
               <tr v-if="!filteredSubmissions.length">
@@ -783,6 +898,179 @@ function formatDate(iso: string | null) {
         </div>
       </template>
 
+      <!-- ── Formulas ── -->
+      <template v-else-if="activeTab === 'formulas'">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-base font-semibold text-gray-800">
+            Formula Library ({{ formulasStore.formulas.length }})
+          </h2>
+          <button
+            class="flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+            @click="showFormulaForm = !showFormulaForm"
+          >
+            {{ showFormulaForm ? '✕ Cancel' : '+ Add Formula' }}
+          </button>
+        </div>
+
+        <!-- Add formula form -->
+        <div v-if="showFormulaForm" class="mb-5 bg-white rounded-xl border border-violet-200 p-5">
+          <h3 class="text-sm font-semibold text-gray-700 mb-4">New Formula</h3>
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Name *</label>
+              <input
+                v-model="newFormula.name"
+                type="text"
+                placeholder="e.g. Injury Rate"
+                class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Type</label>
+              <select v-model="newFormula.formula_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="calculation">Calculation</option>
+                <option value="aggregation">Aggregation</option>
+                <option value="validation">Validation</option>
+              </select>
+            </div>
+          </div>
+          <!-- Parameters -->
+          <div class="mb-4">
+            <label class="block text-xs text-gray-500 mb-1">Parameters</label>
+            <div class="flex flex-wrap gap-1.5 mb-2">
+              <span
+                v-for="p in newFormulaParams"
+                :key="p"
+                class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+              >
+                {{ p }}
+                <button type="button" class="ml-0.5 text-violet-400 hover:text-violet-700" @click="removeParam(p)">×</button>
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <input
+                v-model="newFormulaParamInput"
+                type="text"
+                placeholder="e.g. incidents"
+                class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                @keydown.enter.prevent="addParam"
+                @keydown.comma.prevent="addParam"
+              />
+              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="addParam">Add</button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Press Enter or comma after each name. Use these names in the expression below.</p>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-xs text-gray-500 mb-1">Expression *</label>
+            <input
+              v-model="newFormula.expression"
+              type="text"
+              :placeholder="newFormulaParams.length >= 2 ? `e.g. (${newFormulaParams[0]} / ${newFormulaParams[1]}) * 200000` : 'e.g. (incidents / hours_worked) * 200000'"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+            <p class="text-xs text-gray-400 mt-1">
+              Use your parameter names as variables.
+              <span v-if="newFormulaParams.length" class="text-violet-600">
+                Available: {{ newFormulaParams.join(', ') }}
+              </span>
+            </p>
+          </div>
+          <div class="mb-4">
+            <label class="block text-xs text-gray-500 mb-1">Description (optional)</label>
+            <input
+              v-model="newFormula.description"
+              type="text"
+              placeholder="What does this formula calculate?"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div v-if="formulaError" class="mb-3 text-sm text-red-600">{{ formulaError }}</div>
+          <div class="flex justify-end gap-2">
+            <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100" @click="showFormulaForm = false">Cancel</button>
+            <button
+              :disabled="addingFormula"
+              class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+              @click="addFormula"
+            >{{ addingFormula ? 'Saving…' : 'Save Formula' }}</button>
+          </div>
+        </div>
+
+        <!-- Formula table -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div v-if="formulasStore.loading" class="py-10 text-center text-sm text-gray-400">Loading…</div>
+          <table v-else class="min-w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 bg-gray-50">
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Parameters</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Expression</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Type</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Description</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr
+                v-for="f in formulasStore.formulas"
+                :key="f.id"
+                class="hover:bg-gray-50 transition-colors"
+              >
+                <td class="px-5 py-3.5 font-medium text-gray-800">{{ f.name }}</td>
+                <td class="px-5 py-3.5">
+                  <div v-if="f.parameters?.length" class="flex flex-wrap gap-1">
+                    <span
+                      v-for="p in f.parameters"
+                      :key="p"
+                      class="inline-flex px-2 py-0.5 rounded-full text-xs bg-violet-100 text-violet-700 font-mono"
+                    >{{ p }}</span>
+                  </div>
+                  <span v-else class="text-gray-400 text-xs">—</span>
+                </td>
+                <td class="px-5 py-3.5 font-mono text-xs text-blue-700 max-w-xs">
+                  <span class="block truncate" :title="f.expression">{{ f.expression }}</span>
+                </td>
+                <td class="px-5 py-3.5">
+                  <span class="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">
+                    {{ f.formula_type }}
+                  </span>
+                </td>
+                <td class="px-5 py-3.5 text-gray-500 text-xs max-w-xs">
+                  <span class="block truncate">{{ f.description ?? '—' }}</span>
+                </td>
+                <td class="px-5 py-3.5">
+                  <button
+                    class="text-xs text-red-400 hover:text-red-600 transition-colors"
+                    @click="formulasStore.deleteFormula(f.id)"
+                  >Delete</button>
+                </td>
+              </tr>
+              <tr v-if="!formulasStore.formulas.length">
+                <td colspan="5" class="py-20 text-center">
+                  <div class="flex flex-col items-center gap-3">
+                    <svg width="120" height="90" viewBox="0 0 120 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <ellipse cx="60" cy="75" rx="40" ry="6" fill="#EDE9FE"/>
+                      <rect x="20" y="30" width="60" height="8" rx="4" fill="#C4B5FD"/>
+                      <rect x="28" y="44" width="44" height="8" rx="4" fill="#DDD6FE"/>
+                      <rect x="10" y="58" width="70" height="8" rx="4" fill="#EDE9FE"/>
+                      <circle cx="72" cy="36" r="22" fill="#7C3AED"/>
+                      <circle cx="72" cy="36" r="14" fill="white" fill-opacity="0.15"/>
+                      <circle cx="72" cy="36" r="10" stroke="white" stroke-width="2.5" fill="none"/>
+                      <path d="M79 43l6 6" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+                      <circle cx="44" cy="22" r="4" fill="#C4B5FD"/>
+                      <circle cx="100" cy="52" r="5" fill="#DDD6FE"/>
+                      <circle cx="18" cy="48" r="3" fill="#EDE9FE"/>
+                    </svg>
+                    <p class="text-sm text-gray-400">No formulas yet.</p>
+                    <p class="text-xs text-gray-400">Add formulas to define KPI calculations for this project.</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
+
       <!-- ── Notifications (TODO) ── -->
       <template v-else-if="activeTab === 'notifications'">
         <div class="flex flex-col items-center justify-center py-24 text-center">
@@ -815,6 +1103,14 @@ function formatDate(iso: string | null) {
               <option v-for="u in availableUsers()" :key="u.id" :value="u.id">
                 {{ u.display_name }} ({{ u.email }})
               </option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Project Role *</label>
+            <select v-model="memberParticipantRole" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
+              <option value="focal">Focal (can submit)</option>
+              <option value="member">Member (view only)</option>
+              <option value="viewer">Viewer (view only)</option>
             </select>
           </div>
           <div v-if="memberError" class="text-sm text-red-600">{{ memberError }}</div>
@@ -920,6 +1216,59 @@ function formatDate(iso: string | null) {
             class="px-4 py-2 rounded bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
             @click="setMasterTemplate(selectedMasterTemplateId)"
           >{{ settingMaster ? 'Saving…' : 'Assign' }}</button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Upload KPI Template modal -->
+  <Teleport to="body">
+    <div
+      v-if="showUploadModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      @click.self="showUploadModal = false"
+    >
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-4">
+        <h3 class="font-semibold text-gray-800">Upload KPI Template</h3>
+        <p class="text-xs text-gray-500">
+          Upload an xlsx file — it will be saved as a new template that you can assign to DevCos.
+        </p>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Template Name</label>
+          <input
+            v-model="uploadTemplateName"
+            type="text"
+            placeholder="e.g. Safety KPI Template"
+            class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500"
+          />
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Excel File (.xlsx)</label>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            class="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-violet-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-violet-700 hover:file:bg-violet-100"
+            @change="handleTemplateFileChange"
+          />
+        </div>
+
+        <p v-if="uploadTemplateError" class="text-xs text-red-600">{{ uploadTemplateError }}</p>
+        <p v-if="uploadTemplateSuccess" class="text-xs text-green-600">{{ uploadTemplateSuccess }}</p>
+
+        <div class="flex justify-end gap-3 pt-1">
+          <button
+            class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100 transition-colors"
+            @click="showUploadModal = false"
+          >Cancel</button>
+          <button
+            :disabled="uploadingTemplate"
+            class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            @click="uploadXlsxTemplate"
+          >
+            {{ uploadingTemplate ? 'Uploading…' : 'Upload Template' }}
+          </button>
         </div>
       </div>
     </div>

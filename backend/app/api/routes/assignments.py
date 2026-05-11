@@ -2,7 +2,7 @@
 
 import secrets
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
@@ -44,7 +44,7 @@ def create_assignments(
             results.append(a)
     else:
         token = secrets.token_urlsafe(32)
-        expires = datetime.now(UTC) + timedelta(days=7)
+        expires = datetime.now(timezone.utc) + timedelta(days=7)
         a = TemplateAssignment(
             id=str(uuid.uuid4()),
             org_id=body.org_id or "",

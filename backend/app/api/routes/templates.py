@@ -1,10 +1,13 @@
 """Template routes — CRUD, versioning, status management."""
 
+from __future__ import annotations
+
 import json
+import shutil
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse as FastAPIFileResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -152,6 +155,64 @@ def save_version(
         raise HTTPException(status_code=409, detail="Version conflict — please retry") from None
     db.refresh(ver)
     return ver
+
+
+@router.post(
+    "/upload-xlsx",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_csrf)],
+)
+async def upload_xlsx_template(
+    name: str = Query(..., description="Template name"),
+    file: UploadFile = File(...),
+    user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new template + version directly from an uploaded xlsx file."""
+    from app.core.config import get_settings
+    settings = get_settings()
+
+    # Save file to disk, stripping utility sheets (Dropdown, Sheet1, Quality, etc.)
+    import openpyxl, io as _io
+    raw = await file.read()
+    wb_in = openpyxl.load_workbook(_io.BytesIO(raw))
+    _UTILITY_SHEETS = {"dropdown", "sheet1", "quality", "cover", "instructions"}
+    for sheet_name in wb_in.sheetnames[:]:
+        if sheet_name.lower() in _UTILITY_SHEETS:
+            del wb_in[sheet_name]
+
+    upload_dir = Path(settings.upload_dir) / "templates"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    file_id = str(uuid.uuid4())
+    dest = upload_dir / f"{file_id}.xlsx"
+    wb_in.save(str(dest))
+
+    # Create Template record
+    tmpl = Template(
+        id=str(uuid.uuid4()),
+        name=name,
+        template_type="subcontractor",
+        status="active",
+        created_by=str(user.id),
+    )
+    db.add(tmpl)
+    db.flush()
+
+    # Create TemplateVersion with empty schema + file path
+    ver = TemplateVersion(
+        id=str(uuid.uuid4()),
+        template_id=tmpl.id,
+        version_number=1,
+        schema_json='{"columns":[]}',
+        file_path=str(dest),
+        created_by=str(user.id),
+    )
+    db.add(ver)
+    db.commit()
+    db.refresh(tmpl)
+    db.refresh(ver)
+
+    return {"template_id": tmpl.id, "version_id": ver.id, "name": tmpl.name}
 
 
 @router.get("/consolidations/{sheet_id}/download")

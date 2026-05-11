@@ -1,8 +1,10 @@
 """Admin routes — user management and consolidation progress."""
 
+from __future__ import annotations
+
 import json
 import uuid as _uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import openpyxl
@@ -13,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_org_super_admin
+from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.profile import Profile
@@ -39,15 +41,33 @@ router = APIRouter(
 )
 
 
-@router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_org_super_admin)])
+@router.get("/users", response_model=list[UserWithOrgResponse], dependencies=[Depends(require_admin)])
 def list_users(db: Session = Depends(get_db)):
-    return db.query(Profile).order_by(Profile.display_name).all()
+    profiles = db.query(Profile).order_by(Profile.display_name).all()
+    from app.models.project_member import ProjectMember
+    from app.models.project import Project
+    result = []
+    for p in profiles:
+        pm = db.query(ProjectMember).filter(ProjectMember.user_id == str(p.id)).first()
+        project_name = None
+        if pm:
+            proj = db.query(Project).filter(Project.id == pm.project_id).first()
+            project_name = proj.name if proj else None
+        result.append(UserWithOrgResponse(
+            id=str(p.id),
+            display_name=p.display_name,
+            email=p.email,
+            role=p.role,
+            org_id=str(p.org_id) if p.org_id else None,
+            project_name=project_name,
+        ))
+    return result
 
 
 @router.patch(
     "/users/{user_id}/role",
     response_model=UserWithOrgResponse,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)):
     user = db.query(Profile).filter(Profile.id == user_id).first()
@@ -62,7 +82,7 @@ def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depend
 @router.get(
     "/templates/{template_id}/consolidation-progress",
     response_model=ConsolidationProgressResponse,
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def get_consolidation_progress(
     template_id: str,
@@ -221,7 +241,7 @@ def get_consolidation_progress(
 
 @router.get(
     "/projects/{project_id}/submission-overview",
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def get_project_submission_overview(project_id: str, db: Session = Depends(get_db)):
     """Return cross-template submission counts for a project.
@@ -234,9 +254,8 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
         raise HTTPException(status_code=404, detail="Project not found")
 
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
-    _member_ids = [m.user_id for m in members]
-    member_users = db.query(Profile).filter(Profile.id.in_(_member_ids)).all() if _member_ids else []
-    total_members = len(member_users)
+    total_members = len(members)
+    member_ids = [str(m.user_id) for m in members]
 
     # All template version assignments for this project (project-wide org_id assignments)
     project_assignments = db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()
@@ -268,14 +287,11 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
         ]
 
         submitted_count = sum(
-            1
-            for u in member_users
-            if db.query(Submission)
-            .filter(
+            1 for uid in member_ids
+            if db.query(Submission).filter(
                 Submission.assignment_id.in_(t_assignment_ids),
-                Submission.submitted_by == str(u.id),
-            )
-            .first()
+                Submission.submitted_by == uid,
+            ).first()
         )
 
         templates_progress.append(
@@ -302,7 +318,7 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
 
 @router.post(
     "/templates/{template_id}/consolidate-submissions",
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 async def consolidate_submissions(
     template_id: str,
@@ -609,7 +625,7 @@ class ConsolidatedSheetResponse(BaseModel):
 @router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
 def lock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Lock a submission — no further uploads accepted from the DevCo."""
@@ -619,7 +635,7 @@ def lock_assignment(
     if a.status == "locked":
         raise HTTPException(status_code=409, detail="Assignment already locked")
     a.status = "locked"
-    a.locked_at = datetime.now(UTC)
+    a.locked_at = datetime.now(timezone.utc)
     a.locked_by = str(user.id)
     db.commit()
     db.refresh(a)
@@ -629,7 +645,7 @@ def lock_assignment(
 @router.post("/assignments/{assignment_id}/unlock", response_model=AssignmentLockResponse)
 def unlock_assignment(
     assignment_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """Unlock a submission — allows DevCo to resubmit."""
@@ -653,7 +669,7 @@ def unlock_assignment(
 )
 def list_formulas(
     version_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     return db.query(TemplateFormula).filter(TemplateFormula.template_version_id == version_id).all()
@@ -667,7 +683,7 @@ def list_formulas(
 def create_formula(
     version_id: str,
     body: TemplateFormulaCreate,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     import uuid as _u
@@ -694,7 +710,7 @@ def create_formula(
 def update_formula(
     formula_id: str,
     body: TemplateFormulaUpdate,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -712,7 +728,7 @@ def update_formula(
 @router.delete("/formulas/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_formula(
     formula_id: str,
-    user: Profile = Depends(require_org_super_admin),
+    user: Profile = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     f = db.query(TemplateFormula).filter(TemplateFormula.id == formula_id).first()
@@ -732,7 +748,7 @@ class RenameReportRequest(BaseModel):
 @router.get(
     "/projects/{project_id}/master-reports",
     response_model=list[ConsolidatedSheetResponse],
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def list_master_reports(project_id: str, db: Session = Depends(get_db)):
     """List all consolidated master reports for a project, newest first."""
@@ -747,7 +763,7 @@ def list_master_reports(project_id: str, db: Session = Depends(get_db)):
 @router.patch(
     "/consolidated-sheets/{sheet_id}/rename",
     response_model=ConsolidatedSheetResponse,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def rename_master_report(
     sheet_id: str,
@@ -767,7 +783,7 @@ def rename_master_report(
 @router.delete(
     "/consolidated-sheets/{sheet_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    dependencies=[Depends(require_org_super_admin), Depends(verify_csrf)],
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
     """Delete a consolidated master report record and its file from disk."""
@@ -784,7 +800,7 @@ def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
 
 @router.get(
     "/consolidated-sheets/{sheet_id}/download",
-    dependencies=[Depends(require_org_super_admin)],
+    dependencies=[Depends(require_admin)],
 )
 def download_master_report(sheet_id: str, db: Session = Depends(get_db)):
     """Download the xlsx file for a consolidated master report."""

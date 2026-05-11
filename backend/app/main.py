@@ -15,6 +15,7 @@ from app.api.routes import (
     projects,
     records,
     subcontractor,
+    submissions,
     templates,
 )
 from app.core.config import get_settings
@@ -46,5 +47,6 @@ app.include_router(admin.router)
 app.include_router(templates.router)
 app.include_router(assignments.router)
 app.include_router(subcontractor.router)
+app.include_router(submissions.router)
 app.include_router(formulas.router)
 app.include_router(organizations.router)

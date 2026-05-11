@@ -26,6 +26,7 @@ class ProjectResponse(BaseModel):
 
 class AddMemberRequest(BaseModel):
     user_id: str
+    participant_role: str = "focal"  # focal | member | viewer
 
 
 class AssignTemplateRequest(BaseModel):

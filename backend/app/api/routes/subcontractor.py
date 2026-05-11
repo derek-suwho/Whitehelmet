@@ -14,10 +14,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
-from app.core.rbac import require_subcontractor
+from app.core.rbac import _is_admin, require_participant
 from app.core.security import hash_file
 from app.db.session import get_db
 from app.models.profile import Profile
+from app.models.project_member import ProjectMember
 from app.models.submission import Submission
 from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
@@ -31,7 +32,7 @@ ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 router = APIRouter(
     prefix="/api/subcontractor",
     tags=["subcontractor"],
-    dependencies=[Depends(require_subcontractor)],
+    dependencies=[Depends(require_participant)],
 )
 
 
@@ -90,6 +91,15 @@ def list_my_assignments(
         else:
             user_status = "submitted" if has_submission else "pending"
 
+        pm = (
+            db.query(ProjectMember)
+            .filter(
+                ProjectMember.project_id == a.org_id,
+                ProjectMember.user_id == str(user.id),
+            )
+            .first()
+        ) if a.org_id else None
+
         result.append(
             AssignmentForSubcontractor(
                 id=a.id,
@@ -100,6 +110,7 @@ def list_my_assignments(
                 assigned_at=a.assigned_at,
                 template_name=template_name,
                 has_submission=has_submission,
+                participant_role=pm.participant_role if pm else None,
             )
         )
     return result
@@ -135,6 +146,18 @@ def download_template(
     if not ver:
         raise HTTPException(status_code=404, detail="Template version not found")
 
+    tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
+    safe_name = (tmpl.name.replace(" ", "_") if tmpl else "template") + ".xlsx"
+
+    # If an xlsx file was uploaded for this version, serve it directly
+    if ver.file_path and Path(ver.file_path).exists():
+        return FastAPIFileResponse(
+            path=ver.file_path,
+            filename=safe_name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    # Fallback: generate a simple xlsx from the schema columns
     import openpyxl
 
     schema = ver.schema_json if isinstance(ver.schema_json, dict) else json.loads(ver.schema_json)
@@ -151,9 +174,6 @@ def download_template(
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx")
     wb.save(tmp.name)
     tmp.close()
-
-    tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
-    safe_name = (tmpl.name.replace(" ", "_") if tmpl else "template") + ".xlsx"
 
     return FastAPIFileResponse(
         path=tmp.name,
@@ -194,6 +214,19 @@ async def submit_file(
     if a.status == "locked":
         raise HTTPException(status_code=409, detail="Assignment is locked; no further submissions accepted")
 
+    if not _is_admin(user):
+        pm = (
+            db.query(ProjectMember)
+            .filter(
+                ProjectMember.project_id == a.org_id,
+                ProjectMember.user_id == str(user.id),
+                ProjectMember.participant_role == "focal",
+            )
+            .first()
+        )
+        if not pm:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only focal participants may submit files")
+
     settings = get_settings()
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -227,6 +260,12 @@ async def submit_file(
         existing.file_path = str(stored_path)
         existing.file_name = file.filename or "submission.xlsx"
         existing.submitted_by = str(user.id)
+        existing.status = "resubmitted"
+        # Clear previous review so PIF sees it fresh
+        existing.review_status = None
+        existing.review_comment = None
+        existing.reviewed_by = None
+        existing.reviewed_at = None
         sub = existing
     else:
         sub = Submission(

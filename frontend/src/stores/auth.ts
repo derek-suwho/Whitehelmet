@@ -14,7 +14,9 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<AuthUser | null>(null)
   const checked = ref(false)
 
-  const isAdmin = computed(() => user.value?.role === 'org_super_admin')
+  const isAdmin = computed(() =>
+    user.value?.role === 'super_admin' || user.value?.role === 'coe_admin'
+  )
   const orgId = computed(() => user.value?.org_id ?? null)
 
   async function checkSession() {

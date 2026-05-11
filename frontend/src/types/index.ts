@@ -28,6 +28,7 @@ export interface SavedFormula {
   id: number
   name: string
   expression: string
+  parameters: string[] | null  // named param identifiers used in the expression
   description: string | null
   nl_prompt: string | null
   formula_type: string | null
@@ -37,6 +38,7 @@ export interface SavedFormula {
 export interface FormulaCreate {
   name: string
   expression: string
+  parameters?: string[]
   description?: string
   nl_prompt?: string
   formula_type?: string

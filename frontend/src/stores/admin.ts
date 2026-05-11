@@ -11,6 +11,7 @@ export interface ProjectSubmission {
   reporting_period: string | null
   submitted_at: string | null
   status: string
+  review_status: string | null
 }
 
 export interface MasterReport {
@@ -24,12 +25,12 @@ export interface MasterReport {
 }
 
 export interface UserWithProject {
-  id: number
-  external_id: string
-  email: string
+  id: string
+  email: string | null
   display_name: string
   role?: string
   org_id?: string
+  project_name?: string | null
 }
 
 export interface ProjectDetail extends Project {
@@ -55,8 +56,15 @@ export const useAdminStore = defineStore('admin', () => {
     return api.get<ProjectDetail>(`/api/projects/${projectId}`)
   }
 
-  async function addProjectMember(projectId: string, userId: number): Promise<void> {
-    await api.post(`/api/projects/${projectId}/members`, { user_id: userId })
+  async function addProjectMember(
+    projectId: string,
+    userId: number,
+    participantRole: 'focal' | 'member' | 'viewer' = 'focal',
+  ): Promise<void> {
+    await api.post(`/api/projects/${projectId}/members`, {
+      user_id: userId,
+      participant_role: participantRole,
+    })
   }
 
   async function removeProjectMember(projectId: string, membershipId: string): Promise<void> {
@@ -92,7 +100,7 @@ export const useAdminStore = defineStore('admin', () => {
   async function createUser(
     email: string,
     displayName: string,
-    role: 'org_super_admin' | 'org_admin' | 'org_member',
+    role: 'super_admin' | 'coe_admin' | 'participant',
   ): Promise<void> {
     await api.post('/api/auth/register', { email, password: 'ChangeMe123!', display_name: displayName })
     await fetchUsers()
@@ -103,7 +111,7 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function updateUserRole(
     userId: number,
-    role: 'org_super_admin' | 'org_admin' | 'org_member',
+    role: 'super_admin' | 'coe_admin' | 'participant',
   ): Promise<void> {
     const updated = await api.patch<UserWithProject>(`/api/admin/users/${userId}/role`, { role })
     const u = users.value.find(u => u.id === userId)

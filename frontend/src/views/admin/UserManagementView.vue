@@ -6,7 +6,7 @@ const adminStore = useAdminStore()
 const showInviteModal = ref(false)
 const email = ref('')
 const displayName = ref('')
-const role = ref<'org_super_admin' | 'org_admin' | 'org_member'>('org_member')
+const role = ref<'super_admin' | 'coe_admin' | 'participant'>('participant')
 const saving = ref(false)
 const error = ref('')
 
@@ -16,8 +16,8 @@ onMounted(() => {
 })
 
 function roleBadge(r: string) {
-  if (r === 'org_super_admin') return 'bg-purple-100 text-purple-700'
-  if (r === 'org_admin') return 'bg-blue-100 text-blue-700'
+  if (r === 'super_admin') return 'bg-purple-100 text-purple-700'
+  if (r === 'coe_admin')   return 'bg-indigo-100 text-indigo-700'
   return 'bg-gray-100 text-gray-600'
 }
 
@@ -33,7 +33,7 @@ async function invite() {
     showInviteModal.value = false
     email.value = ''
     displayName.value = ''
-    role.value = 'org_member'
+    role.value = 'participant'
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed'
   } finally {
@@ -41,7 +41,7 @@ async function invite() {
   }
 }
 
-async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admin' | 'org_member') {
+async function changeRole(userId: number, newRole: 'super_admin' | 'coe_admin' | 'participant') {
   await adminStore.updateUserRole(userId, newRole)
 }
 </script>
@@ -71,7 +71,7 @@ async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admi
           <tr v-for="user in adminStore.users" :key="user.id" class="hover:bg-gray-50">
             <td class="px-5 py-3 font-medium text-gray-800">{{ user.display_name }}</td>
             <td class="px-5 py-3 text-gray-500">
-              {{ adminStore.projects.find(p => p.id === user.org_id)?.name ?? '—' }}
+              {{ user.project_name ?? '—' }}
             </td>
             <td class="px-5 py-3">
               <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-medium" :class="roleBadge(user.role ?? '')">
@@ -82,11 +82,11 @@ async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admi
               <select
                 :value="user.role ?? ''"
                 class="rounded border border-gray-200 text-xs px-2 py-1"
-                @change="changeRole(user.id, ($event.target as HTMLSelectElement).value as 'org_super_admin' | 'org_admin' | 'org_member')"
+                @change="changeRole(user.id, ($event.target as HTMLSelectElement).value as 'super_admin' | 'coe_admin' | 'participant')"
               >
-                <option value="org_super_admin">Org Super Admin</option>
-                <option value="org_admin">Org Admin</option>
-                <option value="org_member">Org Member</option>
+                <option value="super_admin">Super Admin</option>
+                <option value="coe_admin">COE Admin</option>
+                <option value="participant">Participant</option>
               </select>
             </td>
           </tr>
@@ -118,9 +118,9 @@ async function changeRole(userId: number, newRole: 'org_super_admin' | 'org_admi
           <div>
             <label class="block text-xs text-gray-500 mb-1">Role *</label>
             <select v-model="role" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm">
-              <option value="org_super_admin">Org Super Admin</option>
-              <option value="org_admin">Org Admin</option>
-              <option value="org_member">Org Member</option>
+              <option value="super_admin">Super Admin</option>
+              <option value="coe_admin">COE Admin</option>
+              <option value="participant">Participant</option>
             </select>
           </div>
           <div v-if="error" class="text-sm text-red-600">{{ error }}</div>

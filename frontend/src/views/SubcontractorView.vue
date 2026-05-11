@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { api, ApiError } from '@/composables/useApi'
 import { useAuthStore } from '@/stores/auth'
+import { supabase } from '@/lib/supabase'
 import TopBar from '@/components/layout/TopBar.vue'
 
 interface Assignment {
@@ -13,6 +15,7 @@ interface Assignment {
   assigned_at: string
   template_name: string | null
   has_submission: boolean
+  participant_role: 'focal' | 'member' | 'viewer' | null
 }
 
 interface SubmissionRecord {
@@ -23,9 +26,12 @@ interface SubmissionRecord {
   status: string
   submitted_at: string
   submitted_by: string | null
+  review_status: string | null
+  review_comment: string | null
 }
 
 const auth = useAuthStore()
+const router = useRouter()
 const assignments = ref<Assignment[]>([])
 const submissions = ref<SubmissionRecord[]>([])
 const loading = ref(true)
@@ -46,8 +52,19 @@ async function fetchData() {
   }
 }
 
-function downloadTemplate(assignmentId: string) {
-  window.open(`/api/subcontractor/assignments/${assignmentId}/template-download`, '_blank')
+async function downloadTemplate(assignmentId: string) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {}
+  const res = await fetch(`/api/subcontractor/assignments/${assignmentId}/template-download`, { headers })
+  if (!res.ok) { alert('Download failed: ' + res.statusText); return }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  const cd = res.headers.get('content-disposition') ?? ''
+  a.download = cd.match(/filename="?([^"]+)"?/)?.[1] ?? 'template.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 async function handleFileUpload(assignmentId: string, event: Event) {
@@ -82,6 +99,8 @@ function formatDateTime(iso: string) {
 }
 
 const pendingCount = computed(() => assignments.value.filter(a => a.status === 'pending').length)
+
+const viewingComment = ref<string | null>(null)
 
 onMounted(fetchData)
 </script>
@@ -147,6 +166,16 @@ onMounted(fetchData)
 
           <!-- Actions -->
           <div class="flex flex-wrap items-center gap-3 pt-1">
+            <!-- Fill Online -->
+            <button
+              v-if="a.status !== 'locked' && a.participant_role === 'focal'"
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg border border-brand-500 text-brand-600 px-4 py-1.5 text-sm font-medium hover:bg-brand-50 transition-colors"
+              @click="router.push({ name: 'assignment-fill', params: { assignmentId: a.id }, query: { name: a.template_name ?? 'Template' } })"
+            >
+              Fill Online
+            </button>
+
             <!-- Download template -->
             <button
               type="button"
@@ -156,8 +185,8 @@ onMounted(fetchData)
               Download template
             </button>
 
-            <!-- Upload / locked -->
-            <template v-if="a.status !== 'locked'">
+            <!-- Upload / locked — only focal participants can submit -->
+            <template v-if="a.status !== 'locked' && a.participant_role === 'focal'">
               <label
                 :for="`upload-${a.id}`"
                 class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-700"
@@ -208,6 +237,9 @@ onMounted(fetchData)
                 <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">File</th>
                 <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">Submitted</th>
                 <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">Status</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">Verification</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">Comments</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-muted uppercase tracking-wide">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-border">
@@ -215,15 +247,89 @@ onMounted(fetchData)
                 <td class="px-5 py-3 font-medium text-gray-800">{{ s.file_name }}</td>
                 <td class="px-5 py-3 text-muted">{{ formatDateTime(s.submitted_at) }}</td>
                 <td class="px-5 py-3">
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-green-100 text-green-700': s.status === 'submitted',
+                      'bg-blue-100 text-blue-700':   s.status === 'resubmitted',
+                      'bg-gray-100 text-gray-500':   s.status === 'locked',
+                    }"
+                  >
                     {{ s.status }}
                   </span>
+                </td>
+                <td class="px-5 py-3">
+                  <span
+                    v-if="s.review_status === 'approved'"
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"
+                  >✓ Approved</span>
+                  <span
+                    v-else-if="s.review_status === 'changes_requested'"
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"
+                  >↩ Changes Requested</span>
+                  <span
+                    v-else
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500"
+                  >Awaiting Verification</span>
+                </td>
+                <td class="px-5 py-3">
+                  <button
+                    v-if="s.review_comment"
+                    class="text-xs text-violet-600 hover:underline font-medium"
+                    @click="viewingComment = s.review_comment"
+                  >View</button>
+                  <span v-else class="text-xs text-gray-400">—</span>
+                </td>
+                <td class="px-5 py-3">
+                  <template v-if="s.review_status === 'changes_requested'">
+                    <label
+                      :for="`resubmit-${s.id}`"
+                      class="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-amber-500 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600"
+                      :class="{ 'pointer-events-none opacity-60': uploading === s.assignment_id }"
+                    >
+                      <svg v-if="uploading === s.assignment_id" class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                      </svg>
+                      {{ uploading === s.assignment_id ? 'Uploading…' : 'Resubmit' }}
+                    </label>
+                    <input
+                      :id="`resubmit-${s.id}`"
+                      type="file"
+                      accept=".xlsx,.xls"
+                      class="sr-only"
+                      :disabled="uploading === s.assignment_id"
+                      @change="handleFileUpload(s.assignment_id, $event)"
+                    />
+                    <p v-if="uploadErrors[s.assignment_id]" class="mt-1 text-xs text-red-600">
+                      {{ uploadErrors[s.assignment_id] }}
+                    </p>
+                  </template>
+                  <span v-else class="text-xs text-gray-400">—</span>
                 </td>
               </tr>
             </tbody>
           </table>
         </div>
       </section>
+
+      <!-- Comment modal -->
+      <Teleport to="body">
+        <div
+          v-if="viewingComment"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+          @click.self="viewingComment = null"
+        >
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6">
+            <h3 class="font-semibold text-gray-800 mb-3">PIF Comment</h3>
+            <p class="text-sm text-gray-600 whitespace-pre-wrap">{{ viewingComment }}</p>
+            <button
+              class="mt-4 w-full rounded-lg bg-gray-100 py-2 text-sm text-gray-600 hover:bg-gray-200"
+              @click="viewingComment = null"
+            >Close</button>
+          </div>
+        </div>
+      </Teleport>
 
     </div>
   </div>
