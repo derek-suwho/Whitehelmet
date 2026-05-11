@@ -28,6 +28,14 @@ const reviewError = ref('')
 const reviewSuccess = ref('')
 const currentReview = ref<{ status: string; comment: string | null } | null>(null)
 
+// Dual view state
+const viewMode = ref<'raw' | 'processed'>('raw')
+const hasProcessed = ref(false)
+const hasFormulas = ref(false)
+const fileRevision = ref(0)
+const canSave = ref(true)
+const pendingChanges = ref<Map<string, { row: number; col: number; value: any }>>(new Map())
+
 async function getAuthHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
   if (!session) return {}
@@ -35,32 +43,125 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 onMounted(async () => {
+  // Fetch submission metadata
   try {
     const headers = await getAuthHeader()
-    const resp = await fetch(`/api/admin/submissions/${submissionId}/download`, { headers })
+    const meta = await fetch(`/api/admin/submissions/${submissionId}`, { headers })
+    if (meta.ok) {
+      const data = await meta.json()
+      hasProcessed.value = data.has_processed ?? false
+      fileRevision.value = data.file_revision ?? 0
+      if (data.review_status) {
+        reviewStatus.value = data.review_status as 'approved' | 'changes_requested'
+        reviewComment.value = data.review_comment ?? ''
+        currentReview.value = { status: data.review_status, comment: data.review_comment ?? null }
+      }
+    }
+  } catch { /* non-fatal */ }
+
+  // Load the file (processed if available, otherwise raw)
+  try {
+    const mode = hasProcessed.value ? 'processed' : 'raw'
+    const headers = await getAuthHeader()
+    const resp = await fetch(
+      `/api/admin/submissions/${submissionId}/download?type=${mode}`,
+      { headers },
+    )
     if (!resp.ok) throw new Error(`Failed to load submission (${resp.status})`)
     const buffer = await resp.arrayBuffer()
     const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
     spreadsheetStore.loadWorkbook(wb, fileName.value, buffer)
+    viewMode.value = mode
+
+    // Raw = read-only, Calculated = editable
+    const hot = spreadsheetStore.instance
+    if (hot) {
+      hot.updateSettings({ readOnly: mode === 'raw' })
+    }
+    canSave.value = mode === 'processed'
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Failed to load submission file'
   }
-
-  // Load current review status
-  try {
-    const data = await api.get<{
-      review_status: string | null
-      review_comment: string | null
-    }>(`/api/subcontractor/submissions/${submissionId}`)
-    if (data.review_status) {
-      currentReview.value = { status: data.review_status, comment: data.review_comment ?? null }
-      reviewStatus.value = data.review_status as 'approved' | 'changes_requested'
-      reviewComment.value = data.review_comment ?? ''
-    }
-  } catch { /* non-fatal — submission detail endpoint may not exist yet */ }
 })
 
+async function switchView(mode: 'raw' | 'processed') {
+  if (mode === viewMode.value) return
+  viewMode.value = mode
+  try {
+    const headers = await getAuthHeader()
+    const resp = await fetch(
+      `/api/admin/submissions/${submissionId}/download?type=${mode}`,
+      { headers },
+    )
+    if (!resp.ok) throw new Error(`Failed to load ${mode} file`)
+    const buffer = await resp.arrayBuffer()
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+    spreadsheetStore.loadWorkbook(wb, fileName.value, buffer)
+
+    const hot = spreadsheetStore.instance
+    if (hot) {
+      hot.updateSettings({ readOnly: mode === 'raw' })
+    }
+    canSave.value = mode === 'processed'
+    pendingChanges.value.clear()
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : `Failed to load ${mode} file`
+    viewMode.value = mode === 'raw' ? 'processed' : 'raw'
+  }
+}
+
+async function confirmRecalculate() {
+  if (!confirm('This will regenerate the calculated sheet from the original raw submission + formulas, discarding any manual edits. Continue?')) return
+  try {
+    const headers = await getAuthHeader()
+    const resp = await fetch(`/api/admin/submissions/${submissionId}/recalculate`, {
+      method: 'POST', headers,
+    })
+    if (!resp.ok) throw new Error('Recalculate failed')
+    const data = await resp.json()
+    fileRevision.value = data.revision ?? fileRevision.value
+    hasProcessed.value = true
+    viewMode.value = 'raw' // force re-fetch on switchView
+    await switchView('processed')
+  } catch (e) {
+    loadError.value = e instanceof Error ? e.message : 'Recalculate failed'
+  }
+}
+
 async function saveChanges() {
+  if (viewMode.value === 'processed' && pendingChanges.value.size > 0) {
+    // Cell-patch save for processed view
+    saveLoading.value = true
+    saveError.value = ''
+    saveSuccess.value = ''
+    try {
+      const headers = await getAuthHeader()
+      const resp = await fetch(`/api/admin/submissions/${submissionId}/cells`, {
+        method: 'PATCH',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          changes: Array.from(pendingChanges.value.values()),
+          revision: fileRevision.value,
+        }),
+      })
+      if (resp.status === 409) {
+        saveError.value = 'File was modified by another user. Please reload.'
+        return
+      }
+      if (!resp.ok) throw new Error('Save failed')
+      const data = await resp.json()
+      fileRevision.value = data.revision
+      pendingChanges.value.clear()
+      saveSuccess.value = 'Changes saved successfully.'
+    } catch (e) {
+      saveError.value = e instanceof Error ? e.message : 'Failed to save changes'
+    } finally {
+      saveLoading.value = false
+    }
+    return
+  }
+
+  // Full-replace save (raw view fallback or no pending cell changes)
   const hot = spreadsheetStore.instance
   if (!hot) { saveError.value = 'Spreadsheet not loaded yet.'; return }
 
@@ -179,6 +280,7 @@ function goBack() {
           {{ kpiLoading ? 'Generating…' : 'Generate KPI Report' }}
         </button>
         <button
+          v-if="canSave"
           :disabled="saveLoading"
           class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
           @click="saveChanges"
@@ -195,6 +297,47 @@ function goBack() {
     <div v-else class="flex flex-1 min-h-0">
       <!-- Spreadsheet (main area) -->
       <div class="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <!-- Dual view tabs -->
+        <div v-if="hasProcessed" class="flex items-center gap-1 px-4 py-2 bg-gray-50 border-b shrink-0">
+          <button
+            @click="switchView('raw')"
+            :class="[
+              'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+              viewMode === 'raw'
+                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            ]"
+          >
+            Raw Data
+            <span v-if="viewMode === 'raw'" class="text-xs text-gray-400 ml-1">(read-only)</span>
+          </button>
+          <button
+            @click="switchView('processed')"
+            :class="[
+              'px-3 py-1.5 text-sm font-medium rounded-md transition-colors',
+              viewMode === 'processed'
+                ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                : 'text-gray-500 hover:text-gray-700'
+            ]"
+          >Calculated</button>
+          <div class="ml-auto">
+            <button
+              v-if="viewMode === 'processed'"
+              @click="confirmRecalculate"
+              class="px-3 py-1.5 text-xs font-medium rounded-md text-amber-700 bg-amber-50 hover:bg-amber-100 transition-colors"
+            >Recalculate from Raw</button>
+          </div>
+        </div>
+
+        <!-- Bootstrap: no calculated file yet -->
+        <div v-if="!hasProcessed && hasFormulas" class="flex items-center gap-2 px-4 py-2 bg-blue-50 border-b shrink-0">
+          <span class="text-sm text-blue-700">No calculated view yet.</span>
+          <button
+            @click="confirmRecalculate"
+            class="px-3 py-1.5 text-xs font-medium rounded-md text-blue-700 bg-white border border-blue-200 hover:bg-blue-100 transition-colors"
+          >Generate Calculated View</button>
+        </div>
+
         <SpreadsheetEditor class="flex-1" />
       </div>
 
