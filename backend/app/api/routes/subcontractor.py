@@ -44,6 +44,58 @@ def _assignment_filter(user: Profile):
     )
 
 
+def _merge_into_template(submitted_bytes: bytes, template_version_id: str | None, db: Session) -> bytes | None:
+    """Overlay submitted values onto the original template, preserving all cell styles.
+
+    Returns merged bytes, or None if the merge can't be done (caller falls back to raw bytes).
+    """
+    if not template_version_id:
+        return None
+    try:
+        import io
+        import logging
+        import openpyxl
+
+        ver = db.query(TemplateVersion).filter(TemplateVersion.id == template_version_id).first()
+        if not ver or not ver.file_path or not Path(ver.file_path).exists():
+            return None
+
+        template_wb = openpyxl.load_workbook(ver.file_path)
+        submitted_wb = openpyxl.load_workbook(io.BytesIO(submitted_bytes), data_only=True)
+
+        for sheet_name in submitted_wb.sheetnames:
+            if sheet_name not in template_wb.sheetnames:
+                continue
+            t_ws = template_wb[sheet_name]
+            s_ws = submitted_wb[sheet_name]
+            for row in s_ws.iter_rows():
+                for cell in row:
+                    if cell.value is None:
+                        continue
+                    t_cell = t_ws.cell(row=cell.row, column=cell.column)
+                    # Never overwrite formula cells — keep template formulas intact
+                    if isinstance(t_cell.value, str) and t_cell.value.startswith("="):
+                        continue
+                    # Coerce comma-formatted strings (e.g. "125,000") to numbers so
+                    # HyperFormula arithmetic on the frontend doesn't get #VALUE!
+                    val = cell.value
+                    if isinstance(val, str):
+                        stripped = val.replace(",", "")
+                        try:
+                            val = int(stripped) if "." not in stripped else float(stripped)
+                        except (ValueError, TypeError):
+                            pass
+                    t_cell.value = val
+
+        buf = io.BytesIO()
+        template_wb.save(buf)
+        return buf.getvalue()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Style merge failed, falling back to raw: %s", exc)
+        return None
+
+
 # ── 1. List assignments for this org/user ────────────────────────────────────
 
 
@@ -151,10 +203,17 @@ def download_template(
 
     # If an xlsx file was uploaded for this version, serve it directly
     if ver.file_path and Path(ver.file_path).exists():
-        return FastAPIFileResponse(
-            path=ver.file_path,
-            filename=safe_name,
+        from fastapi.responses import Response
+        with open(ver.file_path, "rb") as f:
+            content = f.read()
+        return Response(
+            content=content,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{safe_name}"',
+                "Cache-Control": "no-store, no-cache, must-revalidate",
+                "Pragma": "no-cache",
+            },
         )
 
     # Fallback: generate a simple xlsx from the schema columns
@@ -245,7 +304,11 @@ async def submit_file(
     org_dir = Path(settings.upload_dir) / "submissions" / str(user.org_id)
     org_dir.mkdir(parents=True, exist_ok=True)
     stored_path = org_dir / f"{sha}{ext}"
-    stored_path.write_bytes(content)
+
+    # Merge submitted values into the original template so cell styles,
+    # colors, merged cells and row heights are preserved for the admin view.
+    styled_bytes = _merge_into_template(content, a.template_version_id, db)
+    stored_path.write_bytes(styled_bytes if styled_bytes else content)
 
     existing = (
         db.query(Submission)

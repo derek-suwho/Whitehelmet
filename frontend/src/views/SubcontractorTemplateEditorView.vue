@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
+import { currentSheetIdx } from '@/composables/useSpreadsheetEditor'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 
@@ -49,11 +50,45 @@ async function submitFilled() {
   submitError.value = ''
 
   try {
-    const data = hot.getData() as unknown[][]
-    const ws = XLSX.utils.aoa_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'ARD')
-    const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    let bytes: ArrayBuffer
+
+    const rawBuffer = spreadsheetStore.workbookRaw
+    if (rawBuffer) {
+      // Patch the original template with entered values — preserves all cell
+      // colors, merged cells, row heights, and other formatting.
+      const wb = XLSX.read(new Uint8Array(rawBuffer), { type: 'array', cellStyles: true })
+      const sheetName = wb.SheetNames[currentSheetIdx.value] ?? wb.SheetNames[0]
+      const ws = wb.Sheets[sheetName]
+      const data = hot.getData() as unknown[][]
+
+      if (ws) {
+        for (let R = 0; R < data.length; R++) {
+          const row = data[R]
+          if (!row) continue
+          for (let C = 0; C < row.length; C++) {
+            const newVal = row[C]
+            if (newVal === null || newVal === undefined || newVal === '') continue
+            const addr = XLSX.utils.encode_cell({ r: R, c: C })
+            const existing = ws[addr] ?? {}
+            ws[addr] = {
+              ...(existing.s ? { s: existing.s } : {}),
+              v: newVal,
+              t: typeof newVal === 'number' ? 'n' : 's',
+            }
+          }
+        }
+      }
+
+      bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellStyles: true })
+    } else {
+      // Fallback: rebuild without styles
+      const data = hot.getData() as unknown[][]
+      const ws = XLSX.utils.aoa_to_sheet(data)
+      const wbNew = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wbNew, ws, 'ARD')
+      bytes = XLSX.write(wbNew, { type: 'array', bookType: 'xlsx' })
+    }
+
     const blob = new Blob([bytes], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })

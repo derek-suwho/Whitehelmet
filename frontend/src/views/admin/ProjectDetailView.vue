@@ -536,7 +536,7 @@ function formatDate(iso: string | null) {
                 <td class="px-5 py-3.5 font-medium text-gray-800">{{ a.template_name ?? a.template_version_id ?? '—' }}</td>
                 <td class="px-5 py-3.5 text-gray-500 text-xs">{{ a.assigned_to_display ?? 'All members' }}</td>
                 <td class="px-5 py-3.5">
-                  <template v-if="progressForTemplate(a.template_id)">
+                  <template v-if="!a.assigned_to_display && progressForTemplate(a.template_id)">
                     <div class="flex items-center gap-2 min-w-[120px]">
                       <div class="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                         <div
