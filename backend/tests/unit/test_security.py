@@ -1,10 +1,10 @@
 """Security utility tests."""
 
 from app.core.security import (
-    generate_session_token,
     generate_csrf_token,
-    verify_csrf_token,
+    generate_session_token,
     hash_file,
+    verify_csrf_token,
 )
 
 

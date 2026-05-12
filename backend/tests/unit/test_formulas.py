@@ -2,12 +2,15 @@
 
 
 def test_create_formula(auth_client):
-    resp = auth_client.post("/api/formulas", json={
-        "name": "Total Cost",
-        "expression": "=A{row}*B{row}",
-        "description": "Quantity times unit price",
-        "formula_type": "calculation",
-    })
+    resp = auth_client.post(
+        "/api/formulas",
+        json={
+            "name": "Total Cost",
+            "expression": "=A{row}*B{row}",
+            "description": "Quantity times unit price",
+            "formula_type": "calculation",
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Total Cost"
@@ -19,10 +22,13 @@ def test_create_formula(auth_client):
 
 
 def test_create_formula_minimal(auth_client):
-    resp = auth_client.post("/api/formulas", json={
-        "name": "Simple",
-        "expression": "=SUM(A{row}:C{row})",
-    })
+    resp = auth_client.post(
+        "/api/formulas",
+        json={
+            "name": "Simple",
+            "expression": "=SUM(A{row}:C{row})",
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Simple"

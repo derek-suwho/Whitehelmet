@@ -1,5 +1,6 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 
 @pytest.mark.asyncio
@@ -13,6 +14,7 @@ async def test_get_jwks_returns_keys():
 
     with patch("app.core.jwks.httpx.AsyncClient", return_value=mock_client):
         from app.core.jwks import _fetch_jwks
+
         keys = await _fetch_jwks("https://fake.supabase.co")
     assert len(keys) == 1
     assert keys[0]["kid"] == "abc"

@@ -1,8 +1,8 @@
 # backend/tests/unit/test_rbac.py
-import pytest
-from unittest.mock import MagicMock
-from fastapi import HTTPException
 from types import SimpleNamespace
+
+import pytest
+from fastapi import HTTPException
 
 
 def _make_user(role: str):
@@ -11,15 +11,19 @@ def _make_user(role: str):
 
 
 def test_require_org_super_admin_passes():
-    from app.core.rbac import require_org_super_admin
     import asyncio
+
+    from app.core.rbac import require_org_super_admin
+
     user = _make_user("org_super_admin")
     asyncio.get_event_loop().run_until_complete(require_org_super_admin(current_user=user))
 
 
 def test_require_org_super_admin_denies_org_admin():
-    from app.core.rbac import require_org_super_admin
     import asyncio
+
+    from app.core.rbac import require_org_super_admin
+
     user = _make_user("org_admin")
     with pytest.raises(HTTPException) as exc_info:
         asyncio.get_event_loop().run_until_complete(require_org_super_admin(current_user=user))
@@ -27,16 +31,20 @@ def test_require_org_super_admin_denies_org_admin():
 
 
 def test_require_org_admin_passes():
-    from app.core.rbac import require_org_admin
     import asyncio
+
+    from app.core.rbac import require_org_admin
+
     for role in ("org_super_admin", "org_admin"):
         user = _make_user(role)
         asyncio.get_event_loop().run_until_complete(require_org_admin(current_user=user))
 
 
 def test_require_org_admin_denies_org_member():
-    from app.core.rbac import require_org_admin
     import asyncio
+
+    from app.core.rbac import require_org_admin
+
     user = _make_user("org_member")
     with pytest.raises(HTTPException) as exc_info:
         asyncio.get_event_loop().run_until_complete(require_org_admin(current_user=user))
@@ -44,16 +52,20 @@ def test_require_org_admin_denies_org_member():
 
 
 def test_require_org_member_passes_any_role():
-    from app.core.rbac import require_org_member
     import asyncio
+
+    from app.core.rbac import require_org_member
+
     for role in ("org_super_admin", "org_admin", "org_member"):
         user = _make_user(role)
         asyncio.get_event_loop().run_until_complete(require_org_member(current_user=user))
 
 
 def test_require_org_member_denies_no_role():
-    from app.core.rbac import require_org_member
     import asyncio
+
+    from app.core.rbac import require_org_member
+
     user = SimpleNamespace(role=None)
     with pytest.raises(HTTPException) as exc_info:
         asyncio.get_event_loop().run_until_complete(require_org_member(current_user=user))

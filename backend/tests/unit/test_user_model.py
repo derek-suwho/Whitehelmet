@@ -5,8 +5,8 @@ import uuid
 
 def test_user_shim_is_profile(db):
     """User import should resolve to Profile."""
-    from app.models.user import User
     from app.models.profile import Profile
+    from app.models.user import User
 
     assert User is Profile
 

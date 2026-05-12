@@ -2,7 +2,7 @@
 the plain `client` fixture (not `auth_client`). All routes proxy to OpenRouter.
 """
 
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _mock_settings(openrouter_key=""):
@@ -29,11 +29,14 @@ def _mock_openrouter_json(content: str):
 
 def test_chat_missing_key_503(client):
     with patch("app.api.routes.ai.get_settings", return_value=_mock_settings()):
-        resp = client.post("/api/ai/chat", json={
-            "messages": [{"role": "user", "content": "hi"}],
-            "model": "test",
-            "max_tokens": 100,
-        })
+        resp = client.post(
+            "/api/ai/chat",
+            json={
+                "messages": [{"role": "user", "content": "hi"}],
+                "model": "test",
+                "max_tokens": 100,
+            },
+        )
         assert resp.status_code == 503
 
 
@@ -41,7 +44,7 @@ def test_chat_streams_sse(client):
     mock_stream_resp = MagicMock()
 
     async def aiter_lines():
-        yield "data: {\"chunk\":1}"
+        yield 'data: {"chunk":1}'
         yield "data: [DONE]"
 
     mock_stream_resp.aiter_lines = aiter_lines
@@ -58,14 +61,19 @@ def test_chat_streams_sse(client):
 
     settings = _mock_settings(openrouter_key="test-key")
 
-    with patch("app.api.routes.ai.get_settings", return_value=settings), \
-         patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_client_ctx):
-        resp = client.post("/api/ai/chat", json={
-            "messages": [{"role": "user", "content": "hi"}],
-            "model": "test",
-            "max_tokens": 100,
-            "stream": True,
-        })
+    with (
+        patch("app.api.routes.ai.get_settings", return_value=settings),
+        patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_client_ctx),
+    ):
+        resp = client.post(
+            "/api/ai/chat",
+            json={
+                "messages": [{"role": "user", "content": "hi"}],
+                "model": "test",
+                "max_tokens": 100,
+                "stream": True,
+            },
+        )
         assert resp.status_code == 200
         assert "text/event-stream" in resp.headers.get("content-type", "")
 
@@ -74,40 +82,52 @@ def test_chat_non_streaming_returns_json(client):
     mock_ctx = _mock_openrouter_json("hello back")
     settings = _mock_settings(openrouter_key="test-key")
 
-    with patch("app.api.routes.ai.get_settings", return_value=settings), \
-         patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx):
-        resp = client.post("/api/ai/chat", json={
-            "messages": [{"role": "user", "content": "hi"}],
-            "model": "test",
-            "max_tokens": 100,
-            "stream": False,
-        })
+    with (
+        patch("app.api.routes.ai.get_settings", return_value=settings),
+        patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx),
+    ):
+        resp = client.post(
+            "/api/ai/chat",
+            json={
+                "messages": [{"role": "user", "content": "hi"}],
+                "model": "test",
+                "max_tokens": 100,
+                "stream": False,
+            },
+        )
         assert resp.status_code == 200
         assert resp.json()["choices"][0]["message"]["content"] == "hello back"
 
 
 def test_consolidate_missing_key_503(client):
     with patch("app.api.routes.ai.get_settings", return_value=_mock_settings()):
-        resp = client.post("/api/ai/consolidate", json={
-            "files_schema": [{"name": "f", "headers": [], "sample_rows": []}],
-            "model": "test",
-        })
+        resp = client.post(
+            "/api/ai/consolidate",
+            json={
+                "files_schema": [{"name": "f", "headers": [], "sample_rows": []}],
+                "model": "test",
+            },
+        )
         assert resp.status_code == 503
 
 
 def test_consolidate_returns_json(client):
     mock_ctx = _mock_openrouter_json(
-        '{"unified_headers":["Source File","ColA"],'
-        '"mappings":[{"file":"f","column_map":{"A":"ColA"}}]}'
+        '{"unified_headers":["Source File","ColA"],"mappings":[{"file":"f","column_map":{"A":"ColA"}}]}'
     )
     settings = _mock_settings(openrouter_key="test-key")
 
-    with patch("app.api.routes.ai.get_settings", return_value=settings), \
-         patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx):
-        resp = client.post("/api/ai/consolidate", json={
-            "files_schema": [{"name": "f", "headers": ["A"], "sample_rows": [[1]]}],
-            "model": "test",
-        })
+    with (
+        patch("app.api.routes.ai.get_settings", return_value=settings),
+        patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx),
+    ):
+        resp = client.post(
+            "/api/ai/consolidate",
+            json={
+                "files_schema": [{"name": "f", "headers": ["A"], "sample_rows": [[1]]}],
+                "model": "test",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "unified_headers" in data
@@ -116,27 +136,33 @@ def test_consolidate_returns_json(client):
 
 def test_command_missing_key_503(client):
     with patch("app.api.routes.ai.get_settings", return_value=_mock_settings()):
-        resp = client.post("/api/ai/command", json={
-            "message": "add column Total",
-            "headers": ["A", "B"],
-            "model": "test",
-        })
+        resp = client.post(
+            "/api/ai/command",
+            json={
+                "message": "add column Total",
+                "headers": ["A", "B"],
+                "model": "test",
+            },
+        )
         assert resp.status_code == 503
 
 
 def test_command_returns_parsed(client):
-    mock_ctx = _mock_openrouter_json(
-        '{"op":"add_column","name":"Total","position":null}'
-    )
+    mock_ctx = _mock_openrouter_json('{"op":"add_column","name":"Total","position":null}')
     settings = _mock_settings(openrouter_key="test-key")
 
-    with patch("app.api.routes.ai.get_settings", return_value=settings), \
-         patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx):
-        resp = client.post("/api/ai/command", json={
-            "message": "add column Total",
-            "headers": ["A", "B"],
-            "model": "test",
-        })
+    with (
+        patch("app.api.routes.ai.get_settings", return_value=settings),
+        patch("app.api.routes.ai.httpx.AsyncClient", return_value=mock_ctx),
+    ):
+        resp = client.post(
+            "/api/ai/command",
+            json={
+                "message": "add column Total",
+                "headers": ["A", "B"],
+                "model": "test",
+            },
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert data["op"] == "add_column"

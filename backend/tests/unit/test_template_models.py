@@ -5,6 +5,7 @@ import json
 
 def test_create_template(db):
     from app.models.template import Template
+
     t = Template(id="tmpl-1", name="QHSE Q1", status="draft")
     db.add(t)
     db.commit()
@@ -15,6 +16,7 @@ def test_create_template(db):
 def test_create_template_version(db):
     from app.models.template import Template
     from app.models.template_version import TemplateVersion
+
     # UUID columns require valid UUID strings (SQLAlchemy 2.0 validates on reload)
     TMPL_UUID = "00000000-0000-0000-0000-000000000001"
     VER_UUID = "00000000-0000-0000-0000-000000000010"

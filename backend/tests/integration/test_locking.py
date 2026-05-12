@@ -1,4 +1,5 @@
 """Integration tests — assignment lock/unlock endpoints."""
+
 import pytest
 
 
@@ -6,6 +7,7 @@ import pytest
 def pif_admin_client(client, db, test_user):
     """Set test_user role to pif_admin and authenticate via dependency override."""
     from app.core.dependencies import get_current_user
+
     test_user.role = "org_super_admin"
     db.commit()
 
@@ -20,6 +22,7 @@ def pif_admin_client(client, db, test_user):
 @pytest.fixture
 def assignment(db):
     from app.models.template_assignment import TemplateAssignment
+
     a = TemplateAssignment(id="asn-lock-1", org_id="org-1", submission_type="template", status="submitted")
     db.add(a)
     db.commit()

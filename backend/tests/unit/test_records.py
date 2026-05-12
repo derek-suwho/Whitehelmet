@@ -2,12 +2,15 @@
 
 
 def test_create_record(auth_client):
-    resp = auth_client.post("/api/records", json={
-        "name": "Test Consolidation",
-        "source_count": 3,
-        "row_count": 100,
-        "col_count": 5,
-    })
+    resp = auth_client.post(
+        "/api/records",
+        json={
+            "name": "Test Consolidation",
+            "source_count": 3,
+            "row_count": 100,
+            "col_count": 5,
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Test Consolidation"

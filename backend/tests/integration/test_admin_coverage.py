@@ -1,17 +1,19 @@
 """Integration tests — admin route coverage for consolidation-progress, submission-overview, lock/unlock."""
+
 import uuid
+
 import pytest
 
+from app.models.profile import Profile
 from app.models.project import Project
 from app.models.project_member import ProjectMember
-from app.models.template import Template
-from app.models.template_version import TemplateVersion
-from app.models.template_assignment import TemplateAssignment
 from app.models.submission import Submission
-from app.models.profile import Profile
-
+from app.models.template import Template
+from app.models.template_assignment import TemplateAssignment
+from app.models.template_version import TemplateVersion
 
 # ── pif_admin fixture ─────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def pif_client(client, db, test_user):
@@ -30,6 +32,7 @@ def pif_client(client, db, test_user):
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _uid():
     return str(uuid.uuid4())
@@ -110,6 +113,7 @@ def _make_submission(db, assignment_id, org_id, submitted_by):
 
 # ── consolidation-progress: project_id mode ───────────────────────────────────
 
+
 def test_consolidation_progress_project_mode(pif_client, db, test_user):
     """project_id mode lists members and marks submitted ones correctly."""
     project = _make_project(db)
@@ -155,6 +159,7 @@ def test_consolidation_progress_project_not_found(pif_client, db):
 
 # ── consolidation-progress: assignment mode ───────────────────────────────────
 
+
 def test_consolidation_progress_assignment_mode(pif_client, db, test_user):
     """Assignment mode uses TemplateVersion → TemplateAssignments → Submissions."""
     tmpl = _make_template(db)
@@ -185,6 +190,7 @@ def test_consolidation_progress_assignment_mode_no_version(pif_client, db):
 
 
 # ── submission-overview ───────────────────────────────────────────────────────
+
 
 def test_project_submission_overview(pif_client, db, test_user):
     """Returns correct totals for a project with members and template assignments."""
@@ -222,6 +228,7 @@ def test_project_submission_overview_not_found(pif_client, db):
 
 # ── lock / unlock ─────────────────────────────────────────────────────────────
 
+
 def test_lock_already_locked(pif_client, db):
     """Locking an already-locked assignment returns 409."""
     assignment = _make_assignment(db, org_id=_uid(), status="locked")
@@ -245,12 +252,14 @@ def test_unlock_assignment(pif_client, db):
 
 # ── update_user_role 404 ──────────────────────────────────────────────────────
 
+
 def test_update_user_role_not_found(pif_client, db):
     resp = pif_client.patch("/api/admin/users/does-not-exist/role", json={"role": "org_admin"})
     assert resp.status_code == 404
 
 
 # ── consolidation-progress: project mode orphan member ───────────────────────
+
 
 def test_consolidation_progress_project_mode_orphan_member(pif_client, db):
     """ProjectMember whose Profile row doesn't exist is silently skipped."""
@@ -268,6 +277,7 @@ def test_consolidation_progress_project_mode_orphan_member(pif_client, db):
 
 # ── consolidation-progress: assignment mode with no submissions ───────────────
 
+
 def test_consolidation_progress_assignment_no_submissions(pif_client, db):
     """Assignment with no submissions appears as pending in the response."""
     tmpl = _make_template(db)
@@ -282,6 +292,7 @@ def test_consolidation_progress_assignment_no_submissions(pif_client, db):
 
 
 # ── submission-overview edge cases ────────────────────────────────────────────
+
 
 def test_project_submission_overview_assignment_no_version_id(pif_client, db):
     """Assignments without template_version_id are skipped."""
@@ -318,6 +329,7 @@ def test_project_submission_overview_duplicate_template(pif_client, db):
 
 # ── lock / unlock error paths ────────────────────────────────────────────────
 
+
 def test_lock_assignment_success(pif_client, db, test_user):
     """Locking a pending assignment sets status, locked_at, and locked_by."""
     assignment = _make_assignment(db, org_id=_uid(), status="pending")
@@ -341,12 +353,11 @@ def test_unlock_assignment_not_found(pif_client, db):
 
 # ── consolidate-submissions early 400 paths ───────────────────────────────────
 
+
 def test_consolidate_submissions_no_params(pif_client, db):
     """Neither project_id nor submission_ids → 400."""
     tmpl = _make_template(db)
-    resp = pif_client.post(
-        f"/api/admin/templates/{tmpl.id}/consolidate-submissions", json={}
-    )
+    resp = pif_client.post(f"/api/admin/templates/{tmpl.id}/consolidate-submissions", json={})
     assert resp.status_code == 400
     assert "required" in resp.json()["detail"].lower()
 

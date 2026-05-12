@@ -8,12 +8,11 @@ os.environ["ENVIRONMENT"] = "test"
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, String
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-from sqlalchemy import BigInteger
+from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.db.session import Base, get_db
 
@@ -28,14 +27,11 @@ def compile_uuid_sqlite(type_, compiler, **kw):
 @compiles(BigInteger, "sqlite")
 def compile_bigint_sqlite(type_, compiler, **kw):
     return "INTEGER"
-from app.main import app
+
+
 from app.core.config import Settings, get_settings
+from app.main import app
 from app.models.profile import Profile
-from app.models.template import Template
-from app.models.template_version import TemplateVersion
-from app.models.template_assignment import TemplateAssignment
-from app.models.submission import Submission
-from app.models.consolidated_sheet import ConsolidatedSheet
 
 # In-memory SQLite for tests
 TEST_ENGINE = create_engine(
@@ -67,6 +63,7 @@ def db():
 @pytest.fixture
 def client(db):
     """Test client with DB override."""
+
     def override_get_db():
         try:
             yield db
@@ -83,6 +80,7 @@ def client(db):
 def test_user(db):
     """Create a test profile."""
     import uuid
+
     user = Profile(id=str(uuid.uuid4()), role="org_member", display_name="Test User")
     db.add(user)
     db.commit()
@@ -107,6 +105,7 @@ def auth_client(client, db, test_user):
 def pif_admin_user(db):
     """Create a pif_admin test profile."""
     import uuid
+
     user = Profile(id=str(uuid.uuid4()), role="org_super_admin", display_name="PIF Admin")
     db.add(user)
     db.commit()

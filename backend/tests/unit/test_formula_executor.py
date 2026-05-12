@@ -2,6 +2,7 @@
 
 import io
 import json
+
 import openpyxl
 import pytest
 
@@ -32,11 +33,12 @@ def make_xlsx(rows: list[dict]) -> bytes:
     return buf.getvalue()
 
 
-def make_formula(target_column, formula_type, expression, weight=None,
-                 benchmark=None, scoring_rules=None):
+def make_formula(target_column, formula_type, expression, weight=None, benchmark=None, scoring_rules=None):
     """Build a minimal TemplateFormula-like object."""
+
     class F:
         pass
+
     f = F()
     f.target_column = target_column
     f.formula_type = formula_type
@@ -50,10 +52,13 @@ def make_formula(target_column, formula_type, expression, weight=None,
 def test_column_formula_divides_values():
     """=O{row}/N{row} should produce O/N for each data row."""
     from app.services.formula_executor import FormulaExecutor
-    xlsx_bytes = make_xlsx([
-        {"N": 10.0, "O": 5.0},
-        {"N": 20.0, "O": 4.0},
-    ])
+
+    xlsx_bytes = make_xlsx(
+        [
+            {"N": 10.0, "O": 5.0},
+            {"N": 20.0, "O": 4.0},
+        ]
+    )
     formulas = [make_formula("P", "column", "=O{row}/N{row}")]
     result = FormulaExecutor.execute(xlsx_bytes, formulas)
 
@@ -68,6 +73,7 @@ def test_column_formula_divides_values():
 def test_single_cell_formula_sum():
     """=SUM(N2:N3) should produce the sum of column N."""
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0}, {"N": 20.0}])
     formulas = [make_formula("P", "single_cell", "=SUM(N2:N3)")]
     result = FormulaExecutor.execute(xlsx_bytes, formulas)
@@ -82,6 +88,7 @@ def test_single_cell_formula_sum():
 def test_scoring_rules_applied():
     """Values should be mapped to scores based on scoring_rules."""
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0, "O": 1.0}])  # O/N = 0.1
     scoring = [
         {"min": None, "max": 0.05, "score": 100},
@@ -102,6 +109,7 @@ def test_scoring_rules_applied():
 def test_no_formulas_returns_original():
     """If formulas list is empty, return original bytes unchanged."""
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"A": 1.0}])
     result = FormulaExecutor.execute(xlsx_bytes, [])
     assert result == xlsx_bytes
@@ -110,6 +118,7 @@ def test_no_formulas_returns_original():
 def test_weighted_score_summary():
     """Weighted total should be written to a summary cell when weights are present."""
     from app.services.formula_executor import FormulaExecutor
+
     scoring = [{"min": None, "max": 0.05, "score": 100}, {"min": 0.05, "max": None, "score": 0}]
     xlsx_bytes = make_xlsx([{"N": 10.0, "O": 0.2}])  # O/N = 0.02 → score 100
     formulas = [make_formula("P", "column", "=O{row}/N{row}", weight=0.5, scoring_rules=scoring)]
@@ -128,18 +137,21 @@ def test_weighted_score_summary():
 def test_apply_scoring_none_value():
     """_apply_scoring returns None when value is None."""
     from app.services.formula_executor import _apply_scoring
+
     assert _apply_scoring(None, [{"min": 0, "max": 100, "score": 50}]) is None
 
 
 def test_apply_scoring_no_match():
     """_apply_scoring returns None when no rule matches."""
     from app.services.formula_executor import _apply_scoring
+
     assert _apply_scoring(50.0, [{"min": 0, "max": 10, "score": 100}]) is None
 
 
 def test_formula_targets_existing_column():
     """Formula targeting a column that already exists in headers reuses that column."""
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0, "O": 5.0}])
     formulas = [make_formula("N", "column", "=O{row}*2")]
     result = FormulaExecutor.execute(xlsx_bytes, formulas)
@@ -152,7 +164,9 @@ def test_formula_targets_existing_column():
 def test_xlcalculator_parse_failure():
     """When xlcalculator fails to parse, returns the file with formula strings intact."""
     from unittest.mock import patch
+
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0, "O": 5.0}])
     formulas = [make_formula("P", "column", "=O{row}/N{row}")]
     with patch("app.services.formula_executor.ModelCompiler") as MockCompiler:
@@ -165,10 +179,13 @@ def test_xlcalculator_parse_failure():
 def test_scoring_column_reuse():
     """Score column created on first row is reused (not duplicated) on subsequent rows."""
     from app.services.formula_executor import FormulaExecutor
-    xlsx_bytes = make_xlsx([
-        {"N": 10.0, "O": 1.0},   # O/N = 0.1 → score 80
-        {"N": 10.0, "O": 0.3},   # O/N = 0.03 → score 100
-    ])
+
+    xlsx_bytes = make_xlsx(
+        [
+            {"N": 10.0, "O": 1.0},  # O/N = 0.1 → score 80
+            {"N": 10.0, "O": 0.3},  # O/N = 0.03 → score 100
+        ]
+    )
     scoring = [
         {"min": None, "max": 0.05, "score": 100},
         {"min": 0.05, "max": 0.2, "score": 80},
@@ -188,11 +205,15 @@ def test_scoring_column_reuse():
 def test_evaluator_exception_column():
     """Evaluator exception on column formula is caught; function returns valid xlsx."""
     from unittest.mock import patch
+
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0, "O": 5.0}])
     formulas = [make_formula("P", "column", "=O{row}/N{row}")]
-    with patch("app.services.formula_executor.ModelCompiler") as MockCompiler, \
-         patch("app.services.formula_executor.Evaluator") as MockEval:
+    with (
+        patch("app.services.formula_executor.ModelCompiler") as MockCompiler,
+        patch("app.services.formula_executor.Evaluator") as MockEval,
+    ):
         MockCompiler.return_value.read_and_parse_archive.return_value = object()
         MockEval.return_value.evaluate.side_effect = Exception("eval failed")
         result = FormulaExecutor.execute(xlsx_bytes, formulas)
@@ -204,11 +225,15 @@ def test_evaluator_exception_column():
 def test_evaluator_exception_single_cell():
     """Evaluator exception on single_cell formula is caught; function returns valid xlsx."""
     from unittest.mock import patch
+
     from app.services.formula_executor import FormulaExecutor
+
     xlsx_bytes = make_xlsx([{"N": 10.0}, {"N": 20.0}])
     formulas = [make_formula("P", "single_cell", "=SUM(N2:N3)")]
-    with patch("app.services.formula_executor.ModelCompiler") as MockCompiler, \
-         patch("app.services.formula_executor.Evaluator") as MockEval:
+    with (
+        patch("app.services.formula_executor.ModelCompiler") as MockCompiler,
+        patch("app.services.formula_executor.Evaluator") as MockEval,
+    ):
         MockCompiler.return_value.read_and_parse_archive.return_value = object()
         MockEval.return_value.evaluate.side_effect = Exception("eval failed")
         result = FormulaExecutor.execute(xlsx_bytes, formulas)

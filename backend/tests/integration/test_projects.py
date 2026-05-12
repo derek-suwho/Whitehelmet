@@ -1,7 +1,6 @@
 """Integration tests — project routes."""
 
 import uuid
-import pytest
 
 from app.core.dependencies import get_current_user
 from app.models.profile import Profile
@@ -23,6 +22,7 @@ ADMIN_USER_ID = "00000000-0000-0000-0000-000000000099"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_pif_admin(user_id: str = ADMIN_USER_ID) -> Profile:
     return Profile(id=user_id, role="org_super_admin", display_name="PIF Admin")
@@ -67,6 +67,7 @@ def _seed_master_template(db, template_id: str = TEMPLATE_ID) -> Template:
 # Tests: list_projects
 # ---------------------------------------------------------------------------
 
+
 def test_list_projects_empty(auth_client):
     resp = auth_client.get("/api/projects")
     assert resp.status_code == 200
@@ -87,6 +88,7 @@ def test_list_projects_returns_projects(auth_client, db):
 # ---------------------------------------------------------------------------
 # Tests: create_project
 # ---------------------------------------------------------------------------
+
 
 def test_create_project(client, db):
     _override_pif_admin(client)
@@ -116,6 +118,7 @@ def test_create_project_requires_pif_admin(auth_client):
 # Tests: get_project
 # ---------------------------------------------------------------------------
 
+
 def test_get_project(auth_client, db):
     _seed_project(db)
     resp = auth_client.get(f"/api/projects/{PROJECT_ID}")
@@ -136,6 +139,7 @@ def test_get_project_not_found(auth_client):
 # Tests: add_member
 # ---------------------------------------------------------------------------
 
+
 def test_add_member(client, db):
     _override_pif_admin(client)
     _seed_project(db)
@@ -145,10 +149,14 @@ def test_add_member(client, db):
     assert resp.status_code == 201
     assert resp.json()["ok"] is True
 
-    membership = db.query(ProjectMember).filter(
-        ProjectMember.project_id == PROJECT_ID,
-        ProjectMember.user_id == MEMBER_USER_ID,
-    ).first()
+    membership = (
+        db.query(ProjectMember)
+        .filter(
+            ProjectMember.project_id == PROJECT_ID,
+            ProjectMember.user_id == MEMBER_USER_ID,
+        )
+        .first()
+    )
     assert membership is not None
 
 
@@ -183,6 +191,7 @@ def test_add_member_user_not_found(client, db):
 # ---------------------------------------------------------------------------
 # Tests: remove_member
 # ---------------------------------------------------------------------------
+
 
 def _seed_membership(db, project_id: str = PROJECT_ID, user_id: str = MEMBER_USER_ID) -> ProjectMember:
     m = ProjectMember(
@@ -219,6 +228,7 @@ def test_remove_member_not_found(client, db):
 # ---------------------------------------------------------------------------
 # Tests: set_master_template
 # ---------------------------------------------------------------------------
+
 
 def test_set_master_template(client, db):
     _override_pif_admin(client)
@@ -281,6 +291,7 @@ def test_set_master_template_wrong_type(client, db):
 # Tests: assign_template
 # ---------------------------------------------------------------------------
 
+
 def test_assign_template_project_wide(client, db):
     _override_pif_admin(client)
     _seed_project(db)
@@ -294,10 +305,14 @@ def test_assign_template_project_wide(client, db):
     assert data["ok"] is True
     assert "assignment_id" in data
 
-    assignment = db.query(TemplateAssignment).filter(
-        TemplateAssignment.org_id == PROJECT_ID,
-        TemplateAssignment.assigned_to_user_id.is_(None),
-    ).first()
+    assignment = (
+        db.query(TemplateAssignment)
+        .filter(
+            TemplateAssignment.org_id == PROJECT_ID,
+            TemplateAssignment.assigned_to_user_id.is_(None),
+        )
+        .first()
+    )
     assert assignment is not None
     assert assignment.template_version_id == "ver-001"
     assert assignment.status == "pending"
@@ -319,9 +334,13 @@ def test_assign_template_per_member(client, db):
     assert data["ok"] is True
     assert len(data["assignment_ids"]) == 2
 
-    assignments = db.query(TemplateAssignment).filter(
-        TemplateAssignment.org_id == PROJECT_ID,
-    ).all()
+    assignments = (
+        db.query(TemplateAssignment)
+        .filter(
+            TemplateAssignment.org_id == PROJECT_ID,
+        )
+        .all()
+    )
     assert len(assignments) == 2
     user_ids = {a.assigned_to_user_id for a in assignments}
     assert "101" in user_ids
@@ -347,26 +366,34 @@ def test_assign_template_with_deadline(client, db):
     )
     assert resp.status_code == 201
 
-    assignment = db.query(TemplateAssignment).filter(
-        TemplateAssignment.org_id == PROJECT_ID,
-    ).first()
+    assignment = (
+        db.query(TemplateAssignment)
+        .filter(
+            TemplateAssignment.org_id == PROJECT_ID,
+        )
+        .first()
+    )
     assert assignment is not None
     assert assignment.deadline is not None
 
 
 def test_get_project_with_members_and_assignments(auth_client, db):
     """Covers get_project member loop, submitter tracking, and template_assignments paths."""
-    from app.models.project_member import ProjectMember
-    from app.models.template_assignment import TemplateAssignment
     import uuid as _uuid
 
+    from app.models.project_member import ProjectMember
+    from app.models.template_assignment import TemplateAssignment
+
     _seed_project(db)
-    member = _seed_member_profile(db)
+    _seed_member_profile(db)
     m = ProjectMember(id=str(_uuid.uuid4()), project_id=PROJECT_ID, user_id=MEMBER_USER_ID)
     db.add(m)
     a = TemplateAssignment(
-        id=str(_uuid.uuid4()), org_id=PROJECT_ID,
-        template_version_id=None, status="pending", submission_type="template",
+        id=str(_uuid.uuid4()),
+        org_id=PROJECT_ID,
+        template_version_id=None,
+        status="pending",
+        submission_type="template",
     )
     db.add(a)
     db.commit()
@@ -381,9 +408,10 @@ def test_get_project_with_members_and_assignments(auth_client, db):
 
 def test_get_project_with_template_version_assignment(auth_client, db):
     """Covers lines 109-121: template_version_id lookup in get_project."""
+    import uuid as _uuid
+
     from app.models.template_assignment import TemplateAssignment
     from app.models.template_version import TemplateVersion
-    import uuid as _uuid
 
     VER_ID = "00000000-0000-0000-0000-000000000030"
     TMPL_UUID = "00000000-0000-0000-0000-000000000031"
@@ -391,12 +419,14 @@ def test_get_project_with_template_version_assignment(auth_client, db):
     _seed_project(db)
     t = Template(id=TMPL_UUID, name="Q1 KPI", template_type="subcontractor")
     db.add(t)
-    ver = TemplateVersion(id=VER_ID, template_id=TMPL_UUID, version_number=1,
-                          schema_json='{"columns":[]}')
+    ver = TemplateVersion(id=VER_ID, template_id=TMPL_UUID, version_number=1, schema_json='{"columns":[]}')
     db.add(ver)
     a = TemplateAssignment(
-        id=str(_uuid.uuid4()), org_id=PROJECT_ID,
-        template_version_id=VER_ID, status="pending", submission_type="template",
+        id=str(_uuid.uuid4()),
+        org_id=PROJECT_ID,
+        template_version_id=VER_ID,
+        status="pending",
+        submission_type="template",
     )
     db.add(a)
     db.commit()

@@ -1,5 +1,4 @@
 """Integration tests — template routes."""
-import json
 
 
 def test_create_template(auth_client):
@@ -45,6 +44,7 @@ def test_publish_template(auth_client):
 
 
 # ── New coverage tests ────────────────────────────────────────────────────────
+
 
 def test_list_templates_by_type(auth_client):
     """GET /api/templates?type=master filters by template_type."""

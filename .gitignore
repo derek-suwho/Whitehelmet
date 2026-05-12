@@ -39,3 +39,4 @@ Project-Documents/*.pem
 Project-Documents/*.cert
 backend/.venv_test/
 supabase/.temp/
+~$*

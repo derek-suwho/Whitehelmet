@@ -1,24 +1,23 @@
 # backend/tests/unit/test_keycloak.py
-import json
 import time
-import pytest
-from unittest.mock import patch, MagicMock
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
-from jose import jwt, jwk
+from unittest.mock import patch
 
+import pytest
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import rsa
+from jose import jwk, jwt
 
 # --- Helpers ---
 
+
 def make_rsa_key_pair():
-    private_key = rsa.generate_private_key(
-        public_exponent=65537, key_size=2048, backend=default_backend()
-    )
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
     return private_key, private_key.public_key()
 
 
 def make_token(claims: dict, private_key, algorithm="RS256") -> str:
-    from cryptography.hazmat.primitives.serialization import Encoding, PrivateFormat, NoEncryption
+    from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
+
     pem_bytes = private_key.private_bytes(Encoding.PEM, PrivateFormat.TraditionalOpenSSL, NoEncryption())
     return jwt.encode(claims, pem_bytes, algorithm=algorithm)
 
@@ -26,6 +25,7 @@ def make_token(claims: dict, private_key, algorithm="RS256") -> str:
 def make_jwks(public_key) -> dict:
     """Convert RSA public key to JWKS format."""
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
     pub_bytes = public_key.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
     key_dict = jwk.construct(pub_bytes, algorithm="RS256").to_dict()
     # Convert any bytes values to strings
@@ -38,8 +38,10 @@ def make_jwks(public_key) -> dict:
 
 # --- Tests ---
 
+
 def test_decode_valid_token():
     from app.core.keycloak import decode_token
+
     private_key, public_key = make_rsa_key_pair()
     jwks = make_jwks(public_key)
     claims = {
@@ -59,7 +61,8 @@ def test_decode_valid_token():
 
 
 def test_decode_expired_token():
-    from app.core.keycloak import decode_token, TokenError
+    from app.core.keycloak import TokenError, decode_token
+
     private_key, public_key = make_rsa_key_pair()
     jwks = make_jwks(public_key)
     claims = {
@@ -75,11 +78,17 @@ def test_decode_expired_token():
 
 
 def test_decode_wrong_signature():
-    from app.core.keycloak import decode_token, TokenError
+    from app.core.keycloak import TokenError, decode_token
+
     private_key1, _ = make_rsa_key_pair()
     _, public_key2 = make_rsa_key_pair()  # different key pair
     jwks = make_jwks(public_key2)
-    claims = {"sub": "user-123", "exp": int(time.time()) + 3600, "iss": "https://auth.example.com/realms/pif", "aud": "whitehelmet"}
+    claims = {
+        "sub": "user-123",
+        "exp": int(time.time()) + 3600,
+        "iss": "https://auth.example.com/realms/pif",
+        "aud": "whitehelmet",
+    }
     token = make_token(claims, private_key1)
     with patch("app.core.keycloak._fetch_jwks", return_value=jwks):
         with pytest.raises(TokenError):
@@ -88,6 +97,7 @@ def test_decode_wrong_signature():
 
 def test_extract_roles():
     from app.core.keycloak import extract_roles
+
     claims = {"realm_access": {"roles": ["Org_Super_Admin", "offline_access", "uma_authorization"]}}
     roles = extract_roles(claims)
     assert "Org_Super_Admin" in roles
@@ -96,6 +106,7 @@ def test_extract_roles():
 
 def test_map_role_to_system_role():
     from app.core.keycloak import map_system_role
+
     assert map_system_role(["Org_Super_Admin"]) == "org_super_admin"
     assert map_system_role(["Org_Admin"]) == "org_admin"
     assert map_system_role(["Org_Member"]) == "org_member"

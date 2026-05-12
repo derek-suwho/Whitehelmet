@@ -1,8 +1,8 @@
 """Integration tests for new AI routes: parse-template, template-generate, finetune."""
 
 import io
+
 import openpyxl
-import pytest
 
 
 def make_xlsx(headers, rows):
@@ -41,7 +41,6 @@ def test_parse_template_returns_columns(client):
 def test_parse_template_empty_file(client):
     """Test parse-template with empty xlsx."""
     wb = openpyxl.Workbook()
-    ws = wb.active
     buf = io.BytesIO()
     wb.save(buf)
     xlsx_bytes = buf.getvalue()
