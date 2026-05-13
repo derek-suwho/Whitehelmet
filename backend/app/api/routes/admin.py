@@ -462,12 +462,13 @@ def _extract_ard_totals(file_path: str, org_name: str | None = None) -> dict | N
             best = score
             header_row_num = row[0].row
 
-    # Collect data rows: after header, col A has a numeric serial number
+    # Collect data rows: col F (index 5, Total Manhours) has a positive numeric value.
+    # Column A is often None/empty in submitted files, so don't rely on it.
     data_rows: list[list] = []
     for row in ard_ws.iter_rows(min_row=header_row_num + 1):
         vals = [c.value for c in row]
-        a_val = vals[0] if vals else None
-        if isinstance(a_val, (int, float)):
+        f_val = vals[5] if len(vals) > 5 else None
+        if isinstance(f_val, (int, float)) and f_val > 0:
             data_rows.append(vals)
 
     if not data_rows:
@@ -486,6 +487,11 @@ def _extract_ard_totals(file_path: str, org_name: str | None = None) -> dict | N
     totals: dict[int, float] = {}
     for col_idx in range(5, 15):  # F=5 … O=14 (0-based)
         totals[col_idx] = sum(_to_num(row[col_idx]) for row in data_rows if col_idx < len(row))
+
+    # LTI manhours (index 9, col J) is a formula =F-G that may not be cached.
+    # Compute it directly from summed manhours if it came out zero but manhours differ.
+    if totals.get(9, 0) == 0 and totals.get(5, 0) != totals.get(6, 0):
+        totals[9] = totals.get(5, 0) - totals.get(6, 0)
 
     if not org_name:
         for sname in wb.sheetnames:
