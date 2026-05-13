@@ -45,7 +45,7 @@ async function logout() {
     </aside>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-hidden flex flex-col">
+    <main class="flex-1 overflow-y-auto flex flex-col">
       <RouterView />
     </main>
   </div>

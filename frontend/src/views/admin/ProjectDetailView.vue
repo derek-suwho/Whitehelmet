@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, RouterLink } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { api } from '@/composables/useApi'
 import { useAdminStore } from '@/stores/admin'
 import { useTemplatesStore } from '@/stores/templates'
 import { useFormulasStore } from '@/stores/formulas'
+import TemplateStatusBadge from '@/components/template/TemplateStatusBadge.vue'
 import type { ProjectDetail, MasterReport, ProjectSubmission } from '@/stores/admin'
 import type { ProjectMember } from '@/types/database'
 
 const route = useRoute()
+const router = useRouter()
 const adminStore = useAdminStore()
 const templatesStore = useTemplatesStore()
 const formulasStore = useFormulasStore()
@@ -28,7 +30,9 @@ const tabs = [
   { key: 'notifications', label: 'Notifications' },
 ] as const
 type TabKey = typeof tabs[number]['key']
-const activeTab = ref<TabKey>('workpackage')
+const activeTab = ref<TabKey>(
+  (tabs.find(t => t.key === route.query.tab) ? route.query.tab : 'workpackage') as TabKey
+)
 
 // Add member modal
 const showMemberModal = ref(false)
@@ -37,12 +41,26 @@ const memberParticipantRole = ref<'focal' | 'member' | 'viewer'>('focal')
 const addingMember = ref(false)
 const memberError = ref('')
 
+const confirmRemoveAssignmentId = ref<string | null>(null)
+
+async function removeAssignment(assignmentId: string) {
+  try {
+    await api.delete(`/api/admin/assignments/${assignmentId}`)
+    project.value = await adminStore.fetchProjectDetail(projectId)
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Remove failed')
+  } finally {
+    confirmRemoveAssignmentId.value = null
+  }
+}
+
 // Assign template modal
 const showTemplateModal = ref(false)
 const selectedTemplateId = ref('')
 const selectedVersionId = ref('')
 const templateDeadline = ref('')
 const selectedMemberIds = ref<number[]>([])
+const selectedOrgIds = ref<Set<string>>(new Set())
 const assigningTemplate = ref(false)
 const templateError = ref('')
 
@@ -180,14 +198,142 @@ function formatDateTime(iso: string) {
   })
 }
 
+// Document Management tab
+const docSearch = ref('')
+const docTypeFilter = ref<'all' | 'master' | 'subcontractor'>('all')
+const showCreateTemplateModal = ref(false)
+const createStep = ref<'info' | 'method'>('info')
+const createName = ref('')
+const createType = ref<'subcontractor' | 'master'>('subcontractor')
+const createFile = ref<File | null>(null)
+const createLoading = ref(false)
+const createError = ref('')
+const confirmDeleteId = ref<string | null>(null)
+
+const assignmentsByTemplate = computed(() => {
+  const map = new Map<string, NonNullable<typeof project.value>['template_assignments']>()
+  for (const a of project.value?.template_assignments ?? []) {
+    if (!a.template_id) continue
+    const arr = map.get(a.template_id) ?? []
+    arr.push(a)
+    map.set(a.template_id, arr)
+  }
+  return map
+})
+
+const projectTemplates = ref<import('@/types/database').Template[]>([])
+
+async function loadProjectTemplates() {
+  projectTemplates.value = await templatesStore.fetchProjectTemplates(projectId)
+}
+
+const filteredDocTemplates = computed(() => {
+  // Templates owned by this project (via project_id) + the project's master template
+  const masterSet = new Set<string>()
+  if (project.value?.master_template_id) masterSet.add(project.value.master_template_id)
+  const allTemplatesStore = templatesStore.templates
+  const masterTemplates = allTemplatesStore.filter(t => masterSet.has(t.id))
+  const combined = [...projectTemplates.value, ...masterTemplates.filter(t => !projectTemplates.value.find(p => p.id === t.id))]
+  let list = combined
+  if (docTypeFilter.value !== 'all') list = list.filter(t => t.template_type === docTypeFilter.value)
+  const q = docSearch.value.trim().toLowerCase()
+  if (q) list = list.filter(t => t.name.toLowerCase().includes(q))
+  return list
+})
+
+function openCreateTemplateModal() {
+  createStep.value = 'info'
+  createName.value = ''
+  createType.value = 'subcontractor'
+  createFile.value = null
+  createError.value = ''
+  showCreateTemplateModal.value = true
+}
+
+function handleCreateFileChange(e: Event) {
+  const f = (e.target as HTMLInputElement).files?.[0] ?? null
+  createFile.value = f
+  if (f && !createName.value) {
+    createName.value = f.name.replace(/\.xlsx?$/i, '').replace(/_/g, ' ')
+  }
+}
+
+async function createTemplateUpload() {
+  if (!createName.value.trim()) { createError.value = 'Enter a template name.'; return }
+  if (!createFile.value) { createError.value = 'Select an xlsx file.'; return }
+  createLoading.value = true
+  createError.value = ''
+  try {
+    const { supabase } = await import('@/lib/supabase')
+    const { data: { session } } = await supabase.auth.getSession()
+    const headers: Record<string, string> = session ? { Authorization: `Bearer ${session.access_token}` } : {}
+    const form = new FormData()
+    form.append('file', createFile.value)
+    const resp = await fetch(
+      `/api/templates/upload-xlsx?name=${encodeURIComponent(createName.value.trim())}&template_type=${createType.value}&project_id=${encodeURIComponent(projectId)}`,
+      { method: 'POST', headers, body: form },
+    )
+    if (!resp.ok) { const t = await resp.text(); throw new Error(t) }
+    await loadProjectTemplates()
+    showCreateTemplateModal.value = false
+  } catch (e) {
+    createError.value = e instanceof Error ? e.message : 'Upload failed'
+  } finally {
+    createLoading.value = false
+  }
+}
+
+async function createTemplateInEditor() {
+  if (!createName.value.trim()) { createError.value = 'Enter a template name.'; return }
+  createLoading.value = true
+  createError.value = ''
+  try {
+    const t = await templatesStore.createTemplate(createName.value.trim(), '', createType.value, projectId)
+    showCreateTemplateModal.value = false
+    router.push({ name: 'admin-template-edit-xlsx', params: { templateId: t.id }, query: { projectId } })
+  } catch (e) {
+    createError.value = e instanceof Error ? e.message : 'Failed to create template'
+  } finally {
+    createLoading.value = false
+  }
+}
+
+function editTemplate(templateId: string) {
+  router.push({ name: 'admin-template-edit-xlsx', params: { templateId }, query: { projectId } })
+}
+
+async function openAssignModalForTemplate(templateId: string) {
+  selectedTemplateId.value = templateId
+  selectedVersionId.value = ''
+  templateDeadline.value = ''
+  selectedMemberIds.value = []
+  selectedOrgIds.value = new Set()
+  templateError.value = ''
+  await onTemplateChange()
+  showTemplateModal.value = true
+}
+
+async function handleDeleteTemplate(templateId: string) {
+  try {
+    await templatesStore.deleteTemplate(templateId)
+    await loadProjectTemplates()
+    confirmDeleteId.value = null
+  } catch (e) {
+    alert(e instanceof Error ? e.message : 'Delete failed')
+    confirmDeleteId.value = null
+  }
+}
+
 // Template search
 const templateSearch = ref('')
 const filteredAssignments = computed(() => {
-  const q = templateSearch.value.toLowerCase()
-  if (!q) return project.value?.template_assignments ?? []
-  return (project.value?.template_assignments ?? []).filter(a =>
-    (a.template_name ?? '').toLowerCase().includes(q)
+  // Only show org-scoped assignments (org_id != projectId) — exclude legacy project-scoped and master-type
+  const base = (project.value?.template_assignments ?? []).filter(a =>
+    a.template_type !== 'master' && a.assignment_org_id !== projectId
   )
+  const q = templateSearch.value.toLowerCase()
+  if (!q) return base
+  return base.filter(a => (a.template_name ?? '').toLowerCase().includes(q))
 })
 
 // Submission progress per template
@@ -242,7 +388,9 @@ onMounted(async () => {
     await Promise.all([
       loadProject(),
       adminStore.fetchUsers(),
+      adminStore.fetchOrgs(),
       templatesStore.fetchTemplates(),
+      loadProjectTemplates(),
       loadMasterReports(),
       loadSubmissions(),
       loadSubmissionOverview(),
@@ -272,6 +420,7 @@ function openTemplateModal() {
   selectedVersionId.value = ''
   templateDeadline.value = ''
   selectedMemberIds.value = []
+  selectedOrgIds.value = new Set()
   templateError.value = ''
   showTemplateModal.value = true
 }
@@ -304,14 +453,14 @@ async function removeMember(m: ProjectMember) {
 
 async function assignTemplate() {
   if (!selectedVersionId.value) { templateError.value = 'Select a template version.'; return }
+  if (selectedOrgIds.value.size === 0) { templateError.value = 'Select at least one org.'; return }
   assigningTemplate.value = true
   templateError.value = ''
   try {
-    await adminStore.assignTemplateToProject(
-      projectId,
+    await adminStore.assignTemplateToOrgs(
       selectedVersionId.value,
+      [...selectedOrgIds.value],
       templateDeadline.value || undefined,
-      selectedMemberIds.value.length ? selectedMemberIds.value : undefined,
     )
     await loadProject()
     showTemplateModal.value = false
@@ -471,24 +620,210 @@ function formatDate(iso: string | null) {
         </div>
       </template>
 
-      <!-- ── Document Management (TODO) ── -->
+      <!-- ── Document Management ── -->
       <template v-else-if="activeTab === 'document'">
-        <div class="flex flex-col items-center justify-center py-24 text-center">
-          <div class="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center mb-4">
-            <svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="text-base font-semibold text-gray-800">
+            Templates ({{ filteredDocTemplates.length }})
+          </h2>
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>
+              </svg>
+              <input
+                v-model="docSearch"
+                placeholder="Search"
+                class="rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <button
+              class="flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 transition-colors"
+              @click="openCreateTemplateModal"
+            >
+              + New Template
+            </button>
           </div>
-          <p class="text-sm font-medium text-gray-600">Document Management</p>
-          <p class="text-xs text-gray-400 mt-1">TODO — coming soon</p>
         </div>
+
+        <!-- Type filter tabs -->
+        <div class="flex -mb-px border-b border-gray-200 mb-4">
+          <button
+            v-for="f in ([{ key: 'all', label: 'All' }, { key: 'subcontractor', label: 'Subcontractor' }, { key: 'master', label: 'Master' }] as const)"
+            :key="f.key"
+            class="px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors"
+            :class="docTypeFilter === f.key
+              ? 'border-violet-600 text-violet-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'"
+            @click="docTypeFilter = f.key"
+          >{{ f.label }}</button>
+        </div>
+
+        <!-- Table -->
+        <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+          <table class="min-w-full divide-y divide-gray-200 text-sm">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Name</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Type</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Status</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Assignments</th>
+                <th class="px-5 py-3 text-left text-xs font-medium text-gray-500">Last Updated</th>
+                <th class="px-5 py-3"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-if="filteredDocTemplates.length === 0">
+                <td colspan="6" class="py-16 text-center text-sm text-gray-400">
+                  {{ docSearch ? 'No templates match your search.' : 'No templates yet. Create one to get started.' }}
+                </td>
+              </tr>
+              <tr v-for="t in filteredDocTemplates" :key="t.id" class="hover:bg-gray-50">
+                <td class="px-5 py-3.5 font-medium text-gray-900">
+                  <button class="hover:text-violet-700 transition-colors text-left" @click="editTemplate(t.id)">
+                    {{ t.name }}
+                  </button>
+                </td>
+                <td class="px-5 py-3.5">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize"
+                    :class="t.template_type === 'master' ? 'bg-gray-100 text-gray-700' : 'bg-violet-100 text-violet-700'"
+                  >{{ t.template_type }}</span>
+                </td>
+                <td class="px-5 py-3.5">
+                  <TemplateStatusBadge :status="t.status" />
+                </td>
+                <td class="px-5 py-3.5 text-gray-600">
+                  {{ assignmentsByTemplate.get(t.id)?.length ?? 0 }}
+                </td>
+                <td class="px-5 py-3.5 text-xs text-gray-500">
+                  {{ formatDate(t.updated_at) }}
+                </td>
+                <td class="px-5 py-3.5 text-right">
+                  <div class="flex items-center justify-end gap-3">
+                    <button class="text-xs text-violet-600 hover:text-violet-800 font-medium transition-colors" @click="editTemplate(t.id)">Edit</button>
+                    <button class="text-xs text-gray-500 hover:text-gray-700 font-medium transition-colors" @click="openAssignModalForTemplate(t.id)">Assign</button>
+                    <template v-if="confirmDeleteId === t.id">
+                      <span class="text-xs text-red-600 font-medium">Delete?</span>
+                      <button class="text-xs text-red-600 hover:text-red-800 font-medium transition-colors" @click="handleDeleteTemplate(t.id)">Yes</button>
+                      <button class="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors" @click="confirmDeleteId = null">No</button>
+                    </template>
+                    <button v-else class="text-xs text-red-400 hover:text-red-600 font-medium transition-colors" @click="confirmDeleteId = t.id">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Create Template Modal -->
+        <Teleport to="body">
+          <div v-if="showCreateTemplateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showCreateTemplateModal = false">
+            <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 overflow-hidden">
+              <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900">
+                  {{ createStep === 'info' ? 'New Template' : 'How would you like to create it?' }}
+                </h3>
+                <button class="text-gray-400 hover:text-gray-600 text-lg leading-none" @click="showCreateTemplateModal = false">✕</button>
+              </div>
+
+              <!-- Step 1: name + type -->
+              <div v-if="createStep === 'info'" class="p-5 space-y-4">
+                <div>
+                  <label class="block text-xs font-medium text-gray-500 mb-1">Template name <span class="text-red-500">*</span></label>
+                  <input
+                    v-model="createName"
+                    placeholder="e.g. Safety KPI Q2 2026"
+                    class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                    @keydown.enter="createName.trim() && (createStep = 'method')"
+                  />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-500 mb-2">Type</label>
+                  <div class="flex gap-3">
+                    <label
+                      v-for="opt in [{ value: 'subcontractor', label: 'Subcontractor' }, { value: 'master', label: 'Master' }]"
+                      :key="opt.value"
+                      class="flex-1 flex items-center gap-2 rounded-lg border px-3 py-2.5 cursor-pointer text-sm transition-colors"
+                      :class="createType === opt.value ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-gray-200 text-gray-700 hover:border-gray-300'"
+                    >
+                      <input type="radio" :value="opt.value" v-model="createType" class="sr-only" />
+                      {{ opt.label }}
+                    </label>
+                  </div>
+                </div>
+                <p v-if="createError" class="text-xs text-red-600">{{ createError }}</p>
+              </div>
+
+              <!-- Step 2: method selection -->
+              <div v-else class="p-5 space-y-3">
+                <!-- Upload file card -->
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-center gap-2">
+                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-900">Upload File</span>
+                  </div>
+                  <p class="text-xs text-gray-500">Import an existing .xlsx template file.</p>
+                  <input type="file" accept=".xlsx,.xls" class="block w-full text-xs text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100" @change="handleCreateFileChange" />
+                  <button
+                    :disabled="createLoading"
+                    class="w-full rounded-lg bg-violet-600 py-2 text-sm font-medium text-white hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                    @click="createTemplateUpload"
+                  >
+                    {{ createLoading ? 'Uploading…' : 'Upload & Create' }}
+                  </button>
+                </div>
+
+                <!-- Build in editor card -->
+                <div class="rounded-xl border border-gray-200 p-4 space-y-3">
+                  <div class="flex items-center gap-2">
+                    <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    <span class="text-sm font-medium text-gray-900">Build in Editor</span>
+                  </div>
+                  <p class="text-xs text-gray-500">Open the spreadsheet editor and design your template with AI assistance.</p>
+                  <button
+                    :disabled="createLoading"
+                    class="w-full rounded-lg border border-violet-400 py-2 text-sm font-medium text-violet-700 hover:bg-violet-50 disabled:opacity-50 transition-colors"
+                    @click="createTemplateInEditor"
+                  >
+                    {{ createLoading ? 'Creating…' : 'Open Editor' }}
+                  </button>
+                </div>
+
+                <p v-if="createError" class="text-xs text-red-600">{{ createError }}</p>
+              </div>
+
+              <div class="flex items-center justify-between px-5 py-4 border-t border-gray-200">
+                <button
+                  class="text-sm text-gray-500 hover:text-gray-700"
+                  @click="createStep === 'method' ? (createStep = 'info') : (showCreateTemplateModal = false)"
+                >
+                  {{ createStep === 'method' ? '← Back' : 'Cancel' }}
+                </button>
+                <button
+                  v-if="createStep === 'info'"
+                  :disabled="!createName.trim()"
+                  class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-40 transition-colors"
+                  @click="createStep = 'method'; createError = ''"
+                >
+                  Continue →
+                </button>
+              </div>
+            </div>
+          </div>
+        </Teleport>
       </template>
 
       <!-- ── Template ── -->
       <template v-else-if="activeTab === 'template'">
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-base font-semibold text-gray-800">
-            Subcontractor Templates ({{ project?.template_assignments?.length ?? 0 }})
+            Subcontractor Templates ({{ filteredAssignments.length }})
           </h2>
           <div class="flex items-center gap-3">
             <div class="relative">
@@ -534,9 +869,9 @@ function formatDate(iso: string | null) {
                 class="hover:bg-gray-50 transition-colors"
               >
                 <td class="px-5 py-3.5 font-medium text-gray-800">{{ a.template_name ?? a.template_version_id ?? '—' }}</td>
-                <td class="px-5 py-3.5 text-gray-500 text-xs">{{ a.assigned_to_display ?? 'All members' }}</td>
+                <td class="px-5 py-3.5 text-gray-500 text-xs">{{ a.assigned_to_display ?? a.assignment_org_name ?? 'None' }}</td>
                 <td class="px-5 py-3.5">
-                  <template v-if="progressForTemplate(a.template_id)">
+                  <template v-if="!a.assigned_to_display && progressForTemplate(a.template_id)">
                     <div class="flex items-center gap-2 min-w-[120px]">
                       <div class="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
                         <div
@@ -571,6 +906,12 @@ function formatDate(iso: string | null) {
                     :to="`/admin/consolidations/${a.template_id}`"
                     class="text-xs font-medium text-green-600 hover:text-green-800 hover:underline"
                   >Consolidate →</RouterLink>
+                  <template v-if="confirmRemoveAssignmentId === a.assignment_id">
+                    <span class="text-xs text-red-600 font-medium">Remove?</span>
+                    <button class="text-xs text-red-600 hover:text-red-800 font-medium" @click="removeAssignment(a.assignment_id)">Yes</button>
+                    <button class="text-xs text-gray-400 hover:text-gray-600 font-medium" @click="confirmRemoveAssignmentId = null">No</button>
+                  </template>
+                  <button v-else class="text-xs text-red-400 hover:text-red-600 font-medium" @click="confirmRemoveAssignmentId = a.assignment_id">Remove</button>
                 </td>
               </tr>
               <tr v-if="!filteredAssignments.length">
@@ -790,7 +1131,7 @@ function formatDate(iso: string | null) {
                 >Consolidate →</RouterLink>
                 <RouterLink
                   v-if="project.master_template_id"
-                  :to="`/admin/master-sheets/${project.master_template_id}`"
+                  :to="`/admin/templates/${project.master_template_id}/edit-xlsx?projectId=${project.id}`"
                   class="text-xs font-medium text-blue-600 hover:underline"
                 >View Master Sheet →</RouterLink>
                 <button class="text-xs text-gray-400 hover:text-red-500 transition-colors" @click="setMasterTemplate(null)">Remove</button>
@@ -1140,7 +1481,7 @@ function formatDate(iso: string | null) {
             <label class="block text-xs text-gray-500 mb-1">Template *</label>
             <select v-model="selectedTemplateId" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm" @change="onTemplateChange">
               <option value="">Select template…</option>
-              <option v-for="t in templatesStore.templates" :key="t.id" :value="t.id">{{ t.name }}</option>
+              <option v-for="t in projectTemplates.filter(t => t.template_type === 'subcontractor')" :key="t.id" :value="t.id">{{ t.name }}</option>
             </select>
           </div>
           <div v-if="selectedTemplateId">
@@ -1154,22 +1495,28 @@ function formatDate(iso: string | null) {
             <label class="block text-xs text-gray-500 mb-1">Deadline (optional)</label>
             <input v-model="templateDeadline" type="date" class="block w-full rounded border border-gray-300 px-3 py-2 text-sm" />
           </div>
-          <div v-if="project?.members?.length">
-            <label class="block text-xs text-gray-500 mb-2">Assign to</label>
-            <div class="border border-gray-200 rounded-lg divide-y text-sm">
-              <label class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50">
-                <input type="checkbox" :checked="selectedMemberIds.length === 0" class="rounded" @change="selectedMemberIds = []" />
-                <span class="font-medium text-gray-700">All members</span>
+          <div>
+            <label class="block text-xs text-gray-500 mb-2">Assign to org(s) *</label>
+            <div class="border border-gray-200 rounded-lg divide-y max-h-52 overflow-y-auto">
+              <label
+                v-for="org in adminStore.orgs"
+                :key="org.org_id"
+                class="flex items-start gap-2.5 px-3 py-2.5 cursor-pointer hover:bg-gray-50"
+              >
+                <input
+                  type="checkbox"
+                  :checked="selectedOrgIds.has(org.org_id)"
+                  class="rounded border-gray-300 mt-0.5"
+                  @change="selectedOrgIds.has(org.org_id) ? selectedOrgIds.delete(org.org_id) : selectedOrgIds.add(org.org_id); selectedOrgIds = new Set(selectedOrgIds)"
+                />
+                <div>
+                  <p class="text-sm text-gray-800 font-semibold">{{ org.org_name ?? 'Unnamed org' }}</p>
+                  <p class="text-xs text-gray-500 mt-0.5">{{ org.members.map(m => m.display_name).join(' · ') }}</p>
+                </div>
               </label>
-              <label v-for="m in project.members" :key="m.user_id" class="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-gray-50">
-                <input v-model="selectedMemberIds" type="checkbox" :value="m.user_id" class="rounded" />
-                <span class="text-gray-700">{{ m.display_name }}</span>
-                <span class="text-gray-400 text-xs ml-auto">{{ m.email }}</span>
-              </label>
+              <div v-if="!adminStore.orgs.length" class="px-3 py-3 text-sm text-gray-400">No orgs found — invite participants first.</div>
             </div>
-            <p class="text-xs text-gray-400 mt-1">
-              {{ selectedMemberIds.length === 0 ? 'All members will see this template.' : `${selectedMemberIds.length} member(s) selected.` }}
-            </p>
+            <p class="text-xs text-gray-400 mt-1">Focal members can submit; all members can view.</p>
           </div>
           <div v-if="templateError" class="text-sm text-red-600">{{ templateError }}</div>
         </div>

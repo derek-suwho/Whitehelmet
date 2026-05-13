@@ -15,4 +15,5 @@ class Profile(Base):
     org_id = Column(UUID(as_uuid=False), nullable=True, index=True)
     role = Column(String(50), nullable=False)  # super_admin | coe_admin | participant
     display_name = Column(String(255), nullable=False)
+    org_name = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

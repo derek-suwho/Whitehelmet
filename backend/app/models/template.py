@@ -16,5 +16,6 @@ class Template(Base):
     created_by = Column(String(36), nullable=True)
     status = Column(String(20), nullable=False, default="draft")  # draft | active | deprecated
     template_type = Column(String(20), nullable=False, default="subcontractor")  # subcontractor | master
+    project_id = Column(String(36), nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

@@ -25,6 +25,9 @@ export interface ProjectTemplateAssignment {
   template_version_id: string | null
   template_id: string | null
   template_name: string | null
+  template_type: string | null
+  assignment_org_id: string | null
+  assignment_org_name: string | null
   status: string
   deadline: string | null
   assigned_at: string
@@ -47,6 +50,7 @@ export interface Template {
   created_by: string | null
   status: 'draft' | 'active' | 'deprecated'
   template_type: 'subcontractor' | 'master'
+  project_id: string | null
   created_at: string
   updated_at: string
 }

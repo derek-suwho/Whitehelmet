@@ -110,6 +110,11 @@ const router = createRouter({
           component: () => import('@/views/admin/AdminMasterTemplateView.vue'),
         },
         {
+          path: 'templates/:templateId/edit-xlsx',
+          name: 'admin-template-edit-xlsx',
+          component: () => import('@/views/admin/TemplateXlsxEditorView.vue'),
+        },
+        {
           path: 'master-sheets/:sheetId',
           name: 'admin-master-sheet',
           component: () => import('@/views/admin/MasterSheetEditorView.vue'),

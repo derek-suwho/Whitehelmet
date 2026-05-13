@@ -298,6 +298,31 @@ export function useSpreadsheetEditor() {
     _applyFmt({ [key]: !current })
   }
 
+  // Returns the right display value for a numeric XLSX cell.
+  // Comma-formatted numbers ("125,000") → raw numeric so HyperFormula SUM works.
+  // Everything else (dates "10/30/2025", custom formats) → display string.
+  function _displayVal(cell: any): any {
+    const v = cell.v
+    const w = typeof cell.w === 'string' ? cell.w.trim() : cell.w
+    if (v === undefined || v === null) return ''
+    if (!w) return v
+    if (/^-?[\d,]+(\.\d+)?$/.test(w)) return v   // plain/comma number → raw value
+    return w                                        // date or other format → display string
+  }
+
+  // Resolve a simple cross-sheet reference by looking up the cell directly in wb.
+  // Handles both 'Sheet Name'!D4 and SheetName!D4 syntax.
+  // Returns the resolved display value, or null if the ref can't be resolved.
+  function _resolveXSheet(formula: string, wb: any): any {
+    const m = formula.match(/^'?([^'!]+)'?!([A-Z]+\d+)$/i)
+    if (!m) return null
+    const ws = wb.Sheets?.[m[1]]
+    if (!ws) return null
+    const cell = ws[m[2]]
+    if (!cell) return ''
+    return _displayVal(cell)
+  }
+
   // ── openFile: parse XLSX workbook and mount HT ──
   function openFile(wb: any): void {
     // Destroy existing instance
@@ -342,9 +367,16 @@ export function useSpreadsheetEditor() {
           if (!cell) { row.push(''); continue }
           let val: any
           if (cell.f) {
-            val = `=${cell.f}`
+            // Cross-sheet refs: resolve directly from the workbook so we get the
+            // live cell value (not a stale cached v:0 from template creation time).
+            if (cell.f.includes('!')) {
+              const resolved = _resolveXSheet(cell.f, wb)
+              val = resolved !== null ? resolved : _displayVal(cell)
+            } else {
+              val = `=${cell.f}`
+            }
           } else if (cell.t === 'n' && cell.v !== undefined && cell.v !== null) {
-            val = cell.v  // raw number — keeps HyperFormula SUM working
+            val = _displayVal(cell)
           } else if (cell.w !== undefined && cell.w !== '') {
             val = cell.w
           } else {
@@ -474,6 +506,17 @@ export function useSpreadsheetEditor() {
         _updateFormulaBar(row, col)
         _updateToolbarState(row, col)
         selectedCol.value = col
+      },
+      beforeChange(changes: any) {
+        if (!changes) return
+        for (const change of changes) {
+          const newVal = change[3]
+          if (typeof newVal === 'string' && newVal.includes(',')) {
+            const stripped = newVal.replace(/,/g, '')
+            const asNum = Number(stripped)
+            if (!isNaN(asNum) && stripped !== '') change[3] = asNum
+          }
+        }
       },
       afterChange(changes: any) {
         if (!changes) return

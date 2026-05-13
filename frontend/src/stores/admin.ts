@@ -24,13 +24,23 @@ export interface MasterReport {
   generated_at: string
 }
 
+export interface UserProjectEntry {
+  project_id: string
+  project_name: string
+  membership_id: string
+  participant_role: string | null
+}
+
 export interface UserWithProject {
   id: string
   email: string | null
   display_name: string
   role?: string
   org_id?: string
+  org_name?: string | null
   project_name?: string | null
+  participant_role?: string | null
+  projects?: UserProjectEntry[]
 }
 
 export interface ProjectDetail extends Project {
@@ -38,9 +48,16 @@ export interface ProjectDetail extends Project {
   template_assignments: ProjectTemplateAssignment[]
 }
 
+export interface OrgEntry {
+  org_id: string
+  org_name: string | null
+  members: { display_name: string; email: string }[]
+}
+
 export const useAdminStore = defineStore('admin', () => {
   const projects = ref<Project[]>([])
   const users = ref<UserWithProject[]>([])
+  const orgs = ref<OrgEntry[]>([])
 
   async function fetchProjects() {
     projects.value = await api.get<Project[]>('/api/projects')
@@ -97,6 +114,32 @@ export const useAdminStore = defineStore('admin', () => {
     users.value = await api.get<UserWithProject[]>('/api/admin/users')
   }
 
+  async function fetchOrgs(): Promise<void> {
+    orgs.value = await api.get<OrgEntry[]>('/api/admin/orgs')
+  }
+
+  async function assignTemplateToOrgs(templateVersionId: string, orgIds: string[], deadline?: string): Promise<void> {
+    await api.post('/api/admin/assign-template-to-org', {
+      template_version_id: templateVersionId,
+      org_ids: orgIds,
+      deadline: deadline ?? null,
+    })
+  }
+
+  async function updateOrgName(orgId: string, orgName: string): Promise<void> {
+    await api.patch(`/api/admin/orgs/${encodeURIComponent(orgId)}/name`, { org_name: orgName })
+    orgs.value = orgs.value.map(o => o.org_id === orgId ? { ...o, org_name: orgName } : o)
+    users.value = users.value.map(u => u.org_id === orgId ? { ...u, org_name: orgName } : u)
+  }
+
+  async function addUserToProject(projectId: string, userId: string, participantRole = 'member'): Promise<void> {
+    await api.post(`/api/projects/${projectId}/members`, { user_id: userId, participant_role: participantRole })
+  }
+
+  async function removeUserFromProject(projectId: string, membershipId: string): Promise<void> {
+    await api.delete(`/api/projects/${projectId}/members/${membershipId}`)
+  }
+
   async function createUser(
     email: string,
     displayName: string,
@@ -110,12 +153,20 @@ export const useAdminStore = defineStore('admin', () => {
   }
 
   async function updateUserRole(
-    userId: number,
+    userId: number | string,
     role: 'super_admin' | 'coe_admin' | 'participant',
+    participantRole?: 'focal' | 'member' | 'viewer',
   ): Promise<void> {
-    const updated = await api.patch<UserWithProject>(`/api/admin/users/${userId}/role`, { role })
-    const u = users.value.find(u => u.id === userId)
-    if (u) u.role = updated.role
+    const updated = await api.patch<UserWithProject>(`/api/admin/users/${userId}/role`, {
+      role,
+      participant_role: participantRole ?? null,
+    })
+    const u = users.value.find(u => u.id === String(userId))
+    if (u) {
+      u.role = updated.role
+      u.participant_role = updated.participant_role
+      u.projects = updated.projects
+    }
   }
 
   async function fetchProjectSubmissions(projectId: string): Promise<ProjectSubmission[]> {
@@ -141,7 +192,10 @@ export const useAdminStore = defineStore('admin', () => {
   return {
     projects,
     users,
+    orgs,
     fetchProjects,
+    fetchOrgs,
+    assignTemplateToOrgs,
     createProject,
     fetchProjectDetail,
     addProjectMember,
@@ -149,6 +203,9 @@ export const useAdminStore = defineStore('admin', () => {
     setProjectMasterTemplate,
     assignTemplateToProject,
     fetchUsers,
+    updateOrgName,
+    addUserToProject,
+    removeUserFromProject,
     createUser,
     updateUserRole,
     fetchProjectSubmissions,

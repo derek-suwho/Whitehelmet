@@ -207,7 +207,8 @@ onMounted(fetchData)
                 @change="handleFileUpload(a.id, $event)"
               />
             </template>
-            <span v-else class="text-xs text-muted italic">Locked — no further submissions</span>
+            <span v-else-if="a.status === 'locked'" class="text-xs text-muted italic">Locked — no further submissions</span>
+            <span v-else-if="a.participant_role !== 'focal'" class="text-xs text-muted italic">View only</span>
 
             <!-- Upload error -->
             <span v-if="uploadErrors[a.id]" class="text-xs text-red-600">
@@ -281,7 +282,7 @@ onMounted(fetchData)
                   <span v-else class="text-xs text-gray-400">—</span>
                 </td>
                 <td class="px-5 py-3">
-                  <template v-if="s.review_status === 'changes_requested'">
+                  <template v-if="s.review_status === 'changes_requested' && assignments.find(a => a.id === s.assignment_id)?.participant_role === 'focal'">
                     <label
                       :for="`resubmit-${s.id}`"
                       class="inline-flex cursor-pointer items-center gap-1 rounded-lg bg-amber-500 px-3 py-1 text-xs font-medium text-white transition-colors hover:bg-amber-600"
