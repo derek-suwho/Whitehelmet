@@ -5,6 +5,8 @@ Revises: 72aae889c8cc, 7bac4a8a6500
 Create Date: 2026-04-28 15:15:30.235245
 """
 
+from __future__ import annotations
+
 from collections.abc import Sequence
 
 revision: str = "51121d343d29"
