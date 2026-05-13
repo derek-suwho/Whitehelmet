@@ -210,9 +210,14 @@ def get_consolidation_progress(
 
         members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
-        assignment_ids = [
-            a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()
-        ]
+        from sqlalchemy import or_ as _or_
+        _pm_ids = [m.user_id for m in members]
+        _pm_org_ids = list({str(p.org_id) for p in db.query(Profile).filter(Profile.id.in_(_pm_ids)).all() if p.org_id})
+        _asgn_filter = _or_(
+            TemplateAssignment.org_id == project_id,
+            *(TemplateAssignment.org_id == oid for oid in _pm_org_ids),
+        ) if _pm_org_ids else (TemplateAssignment.org_id == project_id)
+        assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(_asgn_filter).all()]
 
         _proj_member_ids = [m.user_id for m in members]
         _proj_profiles = (
