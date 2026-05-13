@@ -64,10 +64,13 @@ def _merge_into_template(submitted_bytes: bytes, template_version_id: str | None
         import openpyxl
 
         ver = db.query(TemplateVersion).filter(TemplateVersion.id == template_version_id).first()
-        if not ver or not ver.file_path or not Path(ver.file_path).exists():
+        if not ver or not ver.file_path:
+            return None
+        template_path = resolve_path(ver.file_path)
+        if not template_path or not template_path.exists():
             return None
 
-        template_wb = openpyxl.load_workbook(ver.file_path)
+        template_wb = openpyxl.load_workbook(str(template_path))
         submitted_wb = openpyxl.load_workbook(io.BytesIO(submitted_bytes), data_only=True)
 
         for sheet_name in submitted_wb.sheetnames:
