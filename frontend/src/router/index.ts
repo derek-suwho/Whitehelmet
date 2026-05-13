@@ -70,9 +70,9 @@ const router = createRouter({
           component: () => import('@/views/admin/TemplateBuilderView.vue'),
         },
         {
-          path: 'templates/:id/edit',
+          path: 'templates/:templateId/edit',
           name: 'admin-template-edit',
-          component: () => import('@/views/admin/TemplateBuilderView.vue'),
+          component: () => import('@/views/admin/TemplateXlsxEditorView.vue'),
         },
         {
           path: 'templates/:id',

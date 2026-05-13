@@ -356,7 +356,9 @@ export function useSpreadsheetEditor() {
     _allSheetColWidths = []
     _allSheetRowHeights = []
     _sheetsData = []
-    _sheetNames = wb.SheetNames.slice()
+    // Filter out hidden/very-hidden sheets (wb.Workbook.Sheets[i].Hidden > 0)
+    const wbSheetMeta: { Hidden?: number }[] = wb.Workbook?.Sheets ?? []
+    _sheetNames = wb.SheetNames.filter((_: string, i: number) => !(wbSheetMeta[i]?.Hidden))
     _zoomLevel = 1.0
     zoomLevel.value = 1.0
     detectedFormulas.value = []
@@ -385,14 +387,11 @@ export function useSpreadsheetEditor() {
           if (!cell) { row.push(''); continue }
           let val: any
           if (cell.f) {
-            // Cross-sheet refs: resolve directly from the workbook so we get the
-            // live cell value (not a stale cached v:0 from template creation time).
-            if (cell.f.includes('!')) {
-              const resolved = _resolveXSheet(cell.f, wb)
-              val = resolved !== null ? resolved : _displayVal(cell)
-            } else {
-              val = `=${cell.f}`
-            }
+            // Always use cached Excel value for formula cells so the display
+            // matches what Excel computed. Avoids: (1) cross-sheet refs pulling
+            // wrong data via _resolveXSheet, (2) HyperFormula #REF! errors from
+            // unsupported functions or complex references.
+            val = _displayVal(cell)
           } else if (cell.t === 'n' && cell.v !== undefined && cell.v !== null) {
             val = _displayVal(cell)
           } else if (cell.w !== undefined && cell.w !== '') {
@@ -845,6 +844,31 @@ export function useSpreadsheetEditor() {
     document.addEventListener('keydown', _onKeydown)
   }
 
+  /** Return all sheets as xlsx bytes (preserves sheet names). */
+  function toXlsxBytes(): Uint8Array | null {
+    if (!_currentInstance || !_sheetsData.length) return null
+    _sheetsData[_currentSheetIdx] = (_currentInstance as any).getSourceData
+      ? (_currentInstance as any).getSourceData().map((r: any[]) => r.slice())
+      : _currentInstance.getData()
+    const wb2 = XLSX.utils.book_new()
+    for (let i = 0; i < _sheetsData.length; i++) {
+      const ws = XLSX.utils.aoa_to_sheet(_sheetsData[i])
+      Object.keys(ws)
+        .filter((k) => !k.startsWith('!'))
+        .forEach((addr) => {
+          const cell = ws[addr]
+          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
+            cell.f = cell.v.slice(1)
+            delete cell.v
+            delete cell.w
+            delete cell.t
+          }
+        })
+      XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)
+    }
+    return new Uint8Array(XLSX.write(wb2, { bookType: 'xlsx', type: 'array' }))
+  }
+
   function cleanupKeyboardShortcuts(): void {
     if (_onKeydown) {
       document.removeEventListener('keydown', _onKeydown)
@@ -869,6 +893,7 @@ export function useSpreadsheetEditor() {
     showColorPicker,
     showFindModal,
     downloadXlsx,
+    toXlsxBytes,
     wireKeyboardShortcuts,
     cleanupKeyboardShortcuts,
   }

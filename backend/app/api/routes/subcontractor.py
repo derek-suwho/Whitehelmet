@@ -94,6 +94,12 @@ def _merge_into_template(submitted_bytes: bytes, template_version_id: str | None
                             pass
                     t_cell.value = val
 
+        # Remove template-only sheets that weren't in the submitted file
+        submitted_names = set(submitted_wb.sheetnames)
+        for sheet_name in list(template_wb.sheetnames):
+            if sheet_name not in submitted_names:
+                del template_wb[sheet_name]
+
         buf = io.BytesIO()
         template_wb.save(buf)
         return buf.getvalue()

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
+import { useSpreadsheetEditor } from '@/composables/useSpreadsheetEditor'
 import { useTemplatesStore } from '@/stores/templates'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
@@ -11,9 +12,10 @@ import AIChatPanel from '@/components/template/AIChatPanel.vue'
 const route = useRoute()
 const router = useRouter()
 const spreadsheetStore = useSpreadsheetStore()
+const { downloadXlsx: downloadAllSheets } = useSpreadsheetEditor()
 const templatesStore = useTemplatesStore()
 
-const templateId = route.params.templateId as string
+const templateId = (route.params.templateId ?? route.params.id) as string
 const projectId = route.query.projectId as string | undefined
 
 const templateName = ref('')
@@ -21,6 +23,7 @@ const loadError = ref('')
 const saveLoading = ref(false)
 const saveError = ref('')
 const saveSuccess = ref(false)
+const linkCopied = ref(false)
 
 async function getAuthHeader(): Promise<Record<string, string>> {
   const { data: { session } } = await supabase.auth.getSession()
@@ -31,7 +34,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 function loadWorkbookFromHeaders(headers: string[]) {
   const ws = XLSX.utils.aoa_to_sheet([headers])
   const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+  XLSX.utils.book_append_sheet(wb, ws, 'Template')
   spreadsheetStore.loadWorkbook(wb, `${templateName.value || 'template'}.xlsx`)
 }
 
@@ -47,34 +50,9 @@ onMounted(async () => {
     if (fileResp.ok) {
       const buffer = await fileResp.arrayBuffer()
       const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
-
-      // Strip to Sheet1 only — other tabs (Quality, Dropdown, etc.) cause #REF! noise
-      const keep = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0]
-      for (const name of [...wb.SheetNames]) {
-        if (name !== keep) {
-          delete wb.Sheets[name]
-          wb.SheetNames.splice(wb.SheetNames.indexOf(name), 1)
-        }
-      }
-
-      // Clear leftover template rows below row 6 (row 6 = first data/output row, rows 7+ are leftovers)
-      const ws = wb.Sheets[keep]
-      if (ws && ws['!ref']) {
-        const range = XLSX.utils.decode_range(ws['!ref'])
-        for (let r = 6; r <= range.e.r; r++) {           // row index 6 = row 7 (0-based)
-          for (let c = range.s.c; c <= range.e.c; c++) {
-            const addr = XLSX.utils.encode_cell({ r, c })
-            delete ws[addr]
-          }
-        }
-        range.e.r = 5  // row 6 (0-based)
-        ws['!ref'] = XLSX.utils.encode_range(range)
-      }
-
       spreadsheetStore.loadWorkbook(wb, `${templateName.value}.xlsx`, buffer)
     } else {
       // Fall back to schema_json columns as header row.
-      // schema_json is stored as a JSON string in the DB — parse it if needed.
       const raw = templatesStore.currentVersion?.schema_json
       const schema = raw
         ? (typeof raw === 'string' ? JSON.parse(raw as string) : raw) as { columns?: { name?: string }[] }
@@ -136,22 +114,31 @@ async function saveTemplate() {
   }
 }
 
-function downloadXlsx() {
-  const hot = spreadsheetStore.instance
-  if (!hot) return
+async function publish() {
+  saveLoading.value = true
+  saveError.value = ''
+  saveSuccess.value = false
+  try {
+    await saveTemplate()
+    await templatesStore.publishTemplate(templateId)
+    saveSuccess.value = true
+    setTimeout(() => { saveSuccess.value = false }, 3000)
+  } catch (e) {
+    saveError.value = e instanceof Error ? e.message : 'Publish failed'
+  } finally {
+    saveLoading.value = false
+  }
+}
 
-  const data = hot.getData() as unknown[][]
-  const ws = XLSX.utils.aoa_to_sheet(data)
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-  const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
-  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${templateName.value || 'template'}.xlsx`
-  a.click()
-  URL.revokeObjectURL(url)
+function downloadXlsx() {
+  downloadAllSheets(`${templateName.value || 'template'}.xlsx`)
+}
+
+async function copySubmissionLink() {
+  const url = `${window.location.origin}/submissions`
+  await navigator.clipboard.writeText(url)
+  linkCopied.value = true
+  setTimeout(() => { linkCopied.value = false }, 2000)
 }
 
 function goBack() {
@@ -185,19 +172,22 @@ function goBack() {
         <button
           class="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3.5 py-1.5 text-sm text-gray-600 hover:bg-gray-50 transition-colors"
           @click="downloadXlsx"
-        >
-          <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-          </svg>
-          Export .xlsx
-        </button>
+        >Download</button>
+        <button
+          class="rounded-lg border border-gray-300 px-3.5 py-1.5 text-sm transition-colors"
+          :class="linkCopied ? 'border-green-300 bg-green-50 text-green-700' : 'text-gray-600 hover:bg-gray-50'"
+          @click="copySubmissionLink"
+        >{{ linkCopied ? 'Link copied!' : 'Copy DevCo Link' }}</button>
+        <button
+          :disabled="saveLoading"
+          class="rounded-lg border border-gray-300 px-3.5 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          @click="saveTemplate"
+        >{{ saveLoading ? 'Saving…' : 'Save Draft' }}</button>
         <button
           :disabled="saveLoading"
           class="bg-violet-600 text-white px-5 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors"
-          @click="saveTemplate"
-        >
-          {{ saveLoading ? 'Saving…' : 'Save' }}
-        </button>
+          @click="publish"
+        >{{ saveLoading ? 'Publishing…' : 'Publish' }}</button>
       </div>
     </div>
 

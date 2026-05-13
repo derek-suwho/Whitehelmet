@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { api } from '@/composables/useApi'
+import { useSpreadsheetEditor } from '@/composables/useSpreadsheetEditor'
 import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
@@ -11,6 +12,7 @@ import AIChatPanel from '@/components/template/AIChatPanel.vue'
 const route = useRoute()
 const router = useRouter()
 const spreadsheetStore = useSpreadsheetStore()
+const { toXlsxBytes } = useSpreadsheetEditor()
 
 const submissionId = route.params.submissionId as string
 const fileName = ref((route.query.fileName as string | undefined) ?? 'submission.xlsx')
@@ -161,21 +163,16 @@ async function saveChanges() {
     return
   }
 
-  // Full-replace save (raw view fallback or no pending cell changes)
-  const hot = spreadsheetStore.instance
-  if (!hot) { saveError.value = 'Spreadsheet not loaded yet.'; return }
+  // Full-replace save — preserves all sheets
+  const bytes = toXlsxBytes()
+  if (!bytes) { saveError.value = 'Spreadsheet not loaded yet.'; return }
 
   saveLoading.value = true
   saveError.value = ''
   saveSuccess.value = ''
 
   try {
-    const data = hot.getData() as unknown[][]
-    const ws = XLSX.utils.aoa_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
-    const bytes = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
-    const blob = new Blob([bytes], {
+    const blob = new Blob([bytes as BlobPart], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     const formData = new FormData()

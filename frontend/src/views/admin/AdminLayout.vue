@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { computed } from 'vue'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+const hideSidebar = computed(() =>
+  route.name === 'admin-template-edit' || route.name === 'admin-template-edit-xlsx' || route.name === 'admin-master-sheet' || route.name === 'admin-submission-review'
+)
 
 const navLinks = [
   { label: 'Overview', to: '/admin/dashboard' },
@@ -20,7 +25,7 @@ async function logout() {
 <template>
   <div class="flex h-screen bg-gray-50 pt-14">
     <!-- Sidebar -->
-    <aside class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
+    <aside v-if="!hideSidebar" class="w-60 shrink-0 bg-white border-r border-gray-200 flex flex-col">
       <div class="px-5 py-4 border-b border-gray-200">
         <span class="text-sm font-semibold text-gray-800">Whitehelmet</span>
       </div>
