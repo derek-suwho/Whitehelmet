@@ -26,7 +26,7 @@ from app.models.template import Template
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_formula import TemplateFormula
 from app.models.template_version import TemplateVersion
-from app.schemas.admin import UpdateRoleRequest, UserWithOrgResponse
+from app.schemas.admin import UpdateOrgRequest, UpdateRoleRequest, UserWithOrgResponse
 from app.schemas.subcontractor import ConsolidationProgressResponse, OrgSubmissionStatus
 from app.schemas.template_formula import (
     TemplateFormulaCreate,
@@ -47,21 +47,51 @@ def list_users(db: Session = Depends(get_db)):
     from app.models.project_member import ProjectMember
     from app.models.project import Project
     result = []
+    all_memberships = db.query(ProjectMember).all()
+    all_projects = {proj.id: proj for proj in db.query(Project).all()}
+    memberships_by_user: dict = {}
+    for pm in all_memberships:
+        memberships_by_user.setdefault(str(pm.user_id), []).append(pm)
+
     for p in profiles:
-        pm = db.query(ProjectMember).filter(ProjectMember.user_id == str(p.id)).first()
-        project_name = None
-        if pm:
-            proj = db.query(Project).filter(Project.id == pm.project_id).first()
-            project_name = proj.name if proj else None
+        user_memberships = memberships_by_user.get(str(p.id), [])
+        projects = []
+        for pm in user_memberships:
+            proj = all_projects.get(pm.project_id)
+            if proj:
+                projects.append({
+                    "project_id": proj.id,
+                    "project_name": proj.name,
+                    "membership_id": pm.id,
+                    "participant_role": pm.participant_role,
+                })
+        project_name = projects[0]["project_name"] if projects else None
+        participant_role = projects[0]["participant_role"] if projects else None
         result.append(UserWithOrgResponse(
             id=str(p.id),
             display_name=p.display_name,
             email=p.email,
             role=p.role,
             org_id=str(p.org_id) if p.org_id else None,
+            org_name=p.org_name,
             project_name=project_name,
+            participant_role=participant_role,
+            projects=projects,
         ))
     return result
+
+
+@router.patch(
+    "/orgs/{org_id}/name",
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
+)
+def update_org_name(org_id: str, body: UpdateOrgRequest, db: Session = Depends(get_db)):
+    """Set org_name for all profiles with this org_id."""
+    updated = db.query(Profile).filter(Profile.org_id == org_id).update(
+        {"org_name": body.org_name.strip()}, synchronize_session=False
+    )
+    db.commit()
+    return {"ok": True, "updated_users": updated}
 
 
 @router.patch(
@@ -70,13 +100,91 @@ def list_users(db: Session = Depends(get_db)):
     dependencies=[Depends(require_admin), Depends(verify_csrf)],
 )
 def update_user_role(user_id: str, body: UpdateRoleRequest, db: Session = Depends(get_db)):
+    from app.models.project_member import ProjectMember
     user = db.query(Profile).filter(Profile.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     user.role = body.role
+    if body.participant_role and body.role == "participant":
+        valid_roles = {"focal", "member", "viewer"}
+        if body.participant_role in valid_roles:
+            db.query(ProjectMember).filter(ProjectMember.user_id == user_id).update(
+                {"participant_role": body.participant_role}, synchronize_session=False
+            )
     db.commit()
     db.refresh(user)
-    return user
+    # Return with projects populated
+    memberships = db.query(ProjectMember).filter(ProjectMember.user_id == user_id).all()
+    from app.models.project import Project
+    all_projects = {p.id: p for p in db.query(Project).all()}
+    projects = []
+    for pm in memberships:
+        proj = all_projects.get(pm.project_id)
+        if proj:
+            projects.append({"project_id": proj.id, "project_name": proj.name,
+                             "membership_id": pm.id, "participant_role": pm.participant_role})
+    participant_role = projects[0]["participant_role"] if projects else None
+    return UserWithOrgResponse(
+        id=str(user.id), display_name=user.display_name, email=user.email,
+        role=user.role, org_id=str(user.org_id) if user.org_id else None,
+        project_name=projects[0]["project_name"] if projects else None,
+        participant_role=participant_role, projects=projects,
+    )
+
+
+@router.get("/orgs", dependencies=[Depends(require_admin)])
+def list_orgs(db: Session = Depends(get_db)):
+    """Return distinct orgs derived from participant profiles, with member names."""
+    participants = db.query(Profile).filter(
+        Profile.role == "participant", Profile.org_id.isnot(None)
+    ).order_by(Profile.display_name).all()
+    orgs: dict = {}
+    for p in participants:
+        oid = str(p.org_id)
+        if oid not in orgs:
+            orgs[oid] = {"org_id": oid, "org_name": p.org_name, "members": []}
+        orgs[oid]["members"].append({"display_name": p.display_name, "email": p.email})
+    return list(orgs.values())
+
+
+class AssignToOrgRequest(BaseModel):
+    template_version_id: str
+    org_ids: list[str]
+    deadline: str | None = None
+
+
+@router.post("/assign-template-to-org", status_code=201, dependencies=[Depends(require_admin), Depends(verify_csrf)])
+def assign_template_to_org(
+    body: AssignToOrgRequest,
+    user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Assign a template version to one or more orgs (org_id, not project_id)."""
+    from datetime import datetime
+    deadline_dt = datetime.fromisoformat(body.deadline) if body.deadline else None
+    created = []
+    for org_id in body.org_ids:
+        existing = db.query(TemplateAssignment).filter(
+            TemplateAssignment.org_id == org_id,
+            TemplateAssignment.template_version_id == body.template_version_id,
+            TemplateAssignment.assigned_to_user_id.is_(None),
+        ).first()
+        if existing:
+            continue
+        a = TemplateAssignment(
+            id=str(_uuid.uuid4()),
+            template_version_id=body.template_version_id,
+            org_id=org_id,
+            assigned_by=str(user.id),
+            deadline=deadline_dt,
+            submission_type="template",
+            status="pending",
+            assigned_to_user_id=None,
+        )
+        db.add(a)
+        created.append(org_id)
+    db.commit()
+    return {"ok": True, "assigned_to": created}
 
 
 @router.get(
@@ -316,6 +424,133 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
     }
 
 
+def _has_ard_sheet(file_path: str) -> bool:
+    """Return True if the xlsx at file_path contains a sheet whose name contains 'ard'."""
+    try:
+        wb = openpyxl.load_workbook(file_path, read_only=True)
+        return any("ard" in name.lower() for name in wb.sheetnames)
+    except Exception:
+        return False
+
+
+def _extract_ard_totals(file_path: str, org_name: str | None = None) -> dict | None:
+    """Sum ARD data-row totals from a submission xlsx.
+
+    Returns {'org_name': str, 'totals': {col_idx_0based: float}} for cols F-O (indices 5-14),
+    or None if no ARD sheet is found.
+    """
+    try:
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+    except Exception:
+        return None
+
+    ard_ws = next((wb[name] for name in wb.sheetnames if "ard" in name.lower()), None)
+    if ard_ws is None:
+        return None
+
+    # Find header row: row in first 15 with most non-empty string cells
+    header_row_num = 1
+    best = 0
+    for row in ard_ws.iter_rows(min_row=1, max_row=15):
+        score = sum(1 for c in row if isinstance(c.value, str) and c.value.strip())
+        if score > best:
+            best = score
+            header_row_num = row[0].row
+
+    # Collect data rows: after header, col A has a numeric serial number
+    data_rows: list[list] = []
+    for row in ard_ws.iter_rows(min_row=header_row_num + 1):
+        vals = [c.value for c in row]
+        a_val = vals[0] if vals else None
+        if isinstance(a_val, (int, float)):
+            data_rows.append(vals)
+
+    if not data_rows:
+        return None
+
+    def _to_num(v) -> float:
+        if isinstance(v, (int, float)):
+            return float(v)
+        if isinstance(v, str):
+            try:
+                return float(v.replace(",", ""))
+            except ValueError:
+                return 0.0
+        return 0.0
+
+    totals: dict[int, float] = {}
+    for col_idx in range(5, 15):  # F=5 … O=14 (0-based)
+        totals[col_idx] = sum(_to_num(row[col_idx]) for row in data_rows if col_idx < len(row))
+
+    if not org_name:
+        for sname in wb.sheetnames:
+            if "company" in sname.lower() or "infomation" in sname.lower() or "information" in sname.lower():
+                ci_ws = wb[sname]
+                for ci_row in ci_ws.iter_rows(max_row=20, values_only=True):
+                    for val in ci_row:
+                        if isinstance(val, str) and len(val.strip()) > 3:
+                            org_name = val.strip()
+                            break
+                    if org_name:
+                        break
+                break
+
+    return {"org_name": org_name or "Unknown", "totals": totals}
+
+
+def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> bytes:
+    """Copy master template xlsx, inject 'ARD' sheet with org totals, fix Sheet1 rate formulas.
+
+    ARD sheet cols (mirror subcontractor template F-O):
+      F(5)=Manhours  G(6)=SafeMH  H(7)=Fatalities  I(8)=LTI_incidents
+      J(9)=LTI_MH   K(10)=TRI    L(11)=NearMiss   M(12)=SafetyObs
+      N(13)=Walks    O(14)=Recognitions
+
+    Sheet1 odd cols C,E,G,I,K,M,O = rate input cells (were #REF!); even cols = intact IFS scores.
+    """
+    import io as _io
+
+    wb = openpyxl.load_workbook(master_template_path)
+
+    # Build ARD sheet
+    if "ARD" in wb.sheetnames:
+        del wb["ARD"]
+    ard_ws = wb.create_sheet("ARD")
+    ard_ws.append([
+        "Sr.No", "Org Name", "", "", "",
+        "Total Manhours", "Safe Manhours", "Fatalities",
+        "LTI Incidents", "LTI Manhours", "Total Recordable",
+        "Near Miss", "Safety Observations", "Leadership Walks", "Recognitions",
+    ])
+    for i, entry in enumerate(ard_entries, start=1):
+        row = [i, entry["org_name"], "", "", ""]
+        for col_idx in range(5, 15):
+            row.append(entry["totals"].get(col_idx, 0))
+        ard_ws.append(row)
+    grand = ["", "TOTAL", "", "", ""]
+    for col_idx in range(5, 15):
+        grand.append(sum(e["totals"].get(col_idx, 0) for e in ard_entries))
+    ard_ws.append(grand)
+
+    # Fix Sheet1 #REF! input cells with live ARD rate formulas
+    sheet1 = wb["Sheet1"] if "Sheet1" in wb.sheetnames else None
+    if sheet1 is not None:
+        # (Sheet1 col, ARD incident col): rate = ARD!incident * 200000 / ARD!F (manhours)
+        KPI_MAP = [("C", "H"), ("E", "I"), ("G", "K"), ("I", "L"), ("K", "M"), ("M", "N"), ("O", "O")]
+        for org_idx, _entry in enumerate(ard_entries):
+            s1_row = 6 + org_idx
+            ard_row = 2 + org_idx
+            for s1_col, ard_col in KPI_MAP:
+                sheet1[f"{s1_col}{s1_row}"].value = f"=ARD!{ard_col}{ard_row}*200000/ARD!F{ard_row}"
+        if ard_entries:
+            sheet1["D2"] = ard_entries[0]["org_name"]
+        sheet1["D3"] = datetime.utcnow().strftime("%Y-%m-%d")
+
+    buf = _io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 @router.post(
     "/templates/{template_id}/consolidate-submissions",
     dependencies=[Depends(require_admin), Depends(verify_csrf)],
@@ -338,13 +573,72 @@ async def consolidate_submissions(
     if submission_ids:
         submissions = db.query(Submission).filter(Submission.id.in_(submission_ids)).all()
     elif project_id:
-        aids = [a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()]
+        from sqlalchemy import or_ as _or_
+        # Include both legacy project-scoped (org_id=project_id) and new org-based assignments
+        _member_ids = [m.user_id for m in db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()]
+        _member_org_ids = list({str(p.org_id) for p in db.query(Profile).filter(Profile.id.in_(_member_ids)).all() if p.org_id})
+        _org_filter = _or_(
+            TemplateAssignment.org_id == project_id,
+            *(TemplateAssignment.org_id == oid for oid in _member_org_ids),
+        ) if _member_org_ids else (TemplateAssignment.org_id == project_id)
+        aids = [a.id for a in db.query(TemplateAssignment).filter(_org_filter).all()]
         submissions = db.query(Submission).filter(Submission.assignment_id.in_(aids)).all() if aids else []
     else:
         raise HTTPException(status_code=400, detail="project_id or submission_ids required")
 
     if not submissions:
         raise HTTPException(status_code=400, detail="No submissions to consolidate")
+
+    # ── ARD-mode detection ────────────────────────────────────────────────────
+    # If every submission has an ARD sheet AND the project has a master template
+    # with an uploaded xlsx, use ARD-based template consolidation (skip flat merge).
+    _master_template_path: str | None = None
+    if project_id:
+        _proj = db.query(Project).filter(Project.id == project_id).first()
+        if _proj and _proj.master_template_id:
+            _master_ver = (
+                db.query(TemplateVersion)
+                .filter(TemplateVersion.template_id == _proj.master_template_id)
+                .order_by(TemplateVersion.version_number.desc())
+                .first()
+            )
+            if _master_ver and _master_ver.file_path and Path(_master_ver.file_path).exists():
+                _master_template_path = _master_ver.file_path
+
+    _submission_paths = [s.file_path for s in submissions if s.file_path and Path(s.file_path).exists()]
+
+    if _master_template_path and _submission_paths and all(_has_ard_sheet(p) for p in _submission_paths):
+        ard_entries = []
+        for sub in submissions:
+            if not sub.file_path or not Path(sub.file_path).exists():
+                continue
+            submitter = db.query(Profile).filter(Profile.id == sub.submitted_by).first()
+            org_label = (submitter.org_name or submitter.display_name) if submitter else None
+            entry = _extract_ard_totals(sub.file_path, org_name=org_label)
+            if entry:
+                ard_entries.append(entry)
+
+        if ard_entries:
+            output_bytes = _build_ard_output(_master_template_path, ard_entries)
+            out_dir = Path(settings.upload_dir) / "consolidated"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            sheet_id = str(_uuid.uuid4())
+            out_path = out_dir / f"{sheet_id}.xlsx"
+            out_path.write_bytes(output_bytes)
+            auto_name = report_name or f"ARD Consolidation – {datetime.utcnow().strftime('%b %d, %Y')}"
+            sheet = ConsolidatedSheet(
+                id=sheet_id,
+                template_id=template_id,
+                project_id=project_id,
+                name=auto_name,
+                period=report_period,
+                file_path=str(out_path),
+                generated_by=str(user.id),
+            )
+            db.add(sheet)
+            db.commit()
+            return {"consolidated_sheet_id": sheet_id, "name": auto_name}
+    # ── end ARD-mode block — fall through to flat consolidation ───────────────
 
     from app.api.routes.ai import _expand_merged
 
@@ -620,6 +914,17 @@ class ConsolidatedSheetResponse(BaseModel):
     generated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+@router.delete("/assignments/{assignment_id}", status_code=204, dependencies=[Depends(require_admin), Depends(verify_csrf)])
+def delete_assignment(assignment_id: str, db: Session = Depends(get_db)):
+    """Remove a template assignment (and its submissions)."""
+    a = db.query(TemplateAssignment).filter(TemplateAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.query(Submission).filter(Submission.assignment_id == assignment_id).delete(synchronize_session=False)
+    db.delete(a)
+    db.commit()
 
 
 @router.post("/assignments/{assignment_id}/lock", response_model=AssignmentLockResponse)
