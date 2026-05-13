@@ -32,15 +32,8 @@ async function handleLogout() {
     <!-- Nav links -->
     <nav class="flex items-center gap-1">
       <router-link
-        :to="{ name: 'workspace' }"
-        class="rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
-        :class="$route.name === 'workspace' ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/8 hover:text-white'"
-      >
-        Records
-      </router-link>
-      <router-link
         v-if="auth.isAdmin"
-        :to="{ name: 'admin-templates' }"
+        to="/admin/dashboard"
         class="rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400"
         :class="$route.path.startsWith('/admin') ? 'bg-white/12 text-white' : 'text-white/60 hover:bg-white/8 hover:text-white'"
       >

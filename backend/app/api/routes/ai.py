@@ -625,26 +625,40 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    # Read current sheet data
+    # Read current sheet data (data_only to get cached formula values for AI)
     wb = openpyxl.load_workbook(path, data_only=True)
     ws = wb.active
-    all_rows = [r for r in ws.iter_rows(values_only=True) if any(c is not None for c in r)]
-    if not all_rows:
+    max_row = ws.max_row or 1
+    max_col = ws.max_column or 1
+
+    # Keep ALL rows including empty ones to preserve sheet structure
+    all_rows: list[list[str]] = []
+    for row in ws.iter_rows(
+        min_row=1, max_row=max_row, min_col=1, max_col=max_col,
+        values_only=True,
+    ):
+        all_rows.append([str(c) if c is not None else "" for c in row])
+
+    if not any(any(c for c in row) for row in all_rows):
         raise HTTPException(status_code=400, detail="Sheet has no data")
 
-    headers = [str(c) if c is not None else "" for c in all_rows[0]]
-    data_rows = [list(row) for row in all_rows[1:]]
     sheet_title = ws.title
 
     system = (
-        "You are a spreadsheet transformation assistant. You receive the current state of a "
-        "spreadsheet (as JSON with 'headers' and 'data' arrays) and a user instruction. "
-        "Apply the instruction and return the COMPLETE modified spreadsheet as JSON:\n"
-        '{"headers": [...], "data": [[...], ...], "message": "<brief description>"}\n'
+        "You are a spreadsheet assistant. You receive the current rows of a "
+        "spreadsheet as a JSON array and a user instruction.\n\n"
+        "If the instruction is a QUESTION (e.g. average, sum, count, lookup, "
+        "comparison, 'what is', 'how many', 'show me', 'find', 'list') that does "
+        "NOT require changing the spreadsheet data, return:\n"
+        '{"data_changed": false, "message": "<answer>"}\n\n'
+        "If the instruction requires MODIFYING the data (add/remove/rename columns, "
+        "change cell values, add/remove rows, etc.), apply the changes and return:\n"
+        '{"data_changed": true, "rows": [[...], ...], "message": "<brief description>"}\n\n'
         "Rules:\n"
-        "- Return ALL rows, including unchanged ones\n"
-        "- For computed columns: calculate each cell value from existing row data as a plain number\n"
-        "- Return ONLY the JSON object, no markdown fences or extra text"
+        "- For modifications: return ALL rows including empty rows — preserve the "
+        "exact original row/column structure. Only change what the user asked.\n"
+        "- For computed columns: calculate values as plain numbers.\n"
+        "- Return ONLY the JSON object, no markdown fences or extra text."
     )
 
     ai_data = await _ai_post(
@@ -656,11 +670,7 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
                 {
                     "role": "user",
                     "content": json.dumps(
-                        {
-                            "headers": headers,
-                            "data": data_rows,
-                            "instruction": prompt,
-                        }
+                        {"rows": all_rows, "instruction": prompt}
                     ),
                 },
             ],
@@ -677,22 +687,49 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
         else:
             raise HTTPException(status_code=500, detail=f"AI returned invalid JSON: {content[:200]}") from None
 
-    new_headers = result.get("headers", headers)
-    new_data = result.get("data", data_rows)
+    data_changed = result.get("data_changed", True)
     message = result.get("message", "Changes applied.")
 
-    # Write to a temp file then atomically replace the original to avoid corruption on error
-    new_wb = openpyxl.Workbook()
-    new_ws = new_wb.active
-    new_ws.title = sheet_title
-    new_ws.append(new_headers)
-    for row in new_data:
-        new_ws.append(list(row))
-    tmp_path = path.with_suffix(".tmp")
-    new_wb.save(tmp_path)
-    tmp_path.replace(path)
+    if data_changed:
+        new_rows = result.get("rows", all_rows)
 
-    return {"message": message}
+        # Preserve formatting: modify cells in-place in the original styled workbook
+        wb_styled = openpyxl.load_workbook(path)
+        ws_styled = wb_styled.active
+        old_max_row = ws_styled.max_row or 1
+        old_max_col = ws_styled.max_column or 1
+
+        # Write new values while keeping existing cell styles
+        for r_idx, row in enumerate(new_rows, 1):
+            for c_idx, val in enumerate(row, 1):
+                cell = ws_styled.cell(row=r_idx, column=c_idx)
+                if val is None or (isinstance(val, str) and not val.strip()):
+                    cell.value = None
+                elif isinstance(val, str):
+                    try:
+                        num = float(val)
+                        cell.value = int(num) if num == int(num) else num
+                    except (ValueError, OverflowError):
+                        cell.value = val
+                else:
+                    cell.value = val
+
+        new_max_row = len(new_rows)
+        new_max_col = max((len(r) for r in new_rows), default=0)
+
+        # Clear cells beyond new data extent
+        for r in range(new_max_row + 1, old_max_row + 1):
+            for c in range(1, old_max_col + 1):
+                ws_styled.cell(row=r, column=c).value = None
+        for r in range(1, new_max_row + 1):
+            for c in range(new_max_col + 1, old_max_col + 1):
+                ws_styled.cell(row=r, column=c).value = None
+
+        tmp_path = path.with_suffix(".tmp")
+        wb_styled.save(tmp_path)
+        tmp_path.replace(path)
+
+    return {"message": message, "data_changed": data_changed}
 
 
 class FormulaRequest(BaseModel):

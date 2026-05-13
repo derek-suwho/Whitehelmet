@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useTemplatesStore } from '@/stores/templates'
 import { useFormulasStore } from '@/stores/formulas'
-import { getColumnHeadersExternal } from '@/composables/useSpreadsheetEditor'
+import { getColumnHeadersExternal, detectHeaderRow } from '@/composables/useSpreadsheetEditor'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
 
@@ -87,8 +87,9 @@ async function applyFormula() {
   const allData = hot.getData() as unknown[][]
   if (allData.length < 2) { applyError.value = 'No data rows in the sheet.'; return }
 
-  const headers = (allData[0] as unknown[]).map(h => String(h ?? ''))
-  const dataRows = allData.slice(1).map(row => {
+  const headerRowIdx = detectHeaderRow(allData)
+  const headers = (allData[headerRowIdx] as unknown[]).map(h => String(h ?? ''))
+  const dataRows = allData.slice(headerRowIdx + 1).map(row => {
     const obj: Record<string, unknown> = {}
     headers.forEach((h, i) => { if (h.trim()) obj[h] = (row as unknown[])[i] })
     return obj
@@ -108,11 +109,11 @@ async function applyFormula() {
       },
     )
 
-    // Insert new column: row 0 = header, rows 1+ = values
-    const newColIdx = headers.filter(h => h.trim()).length
-    const changes: [number, number, unknown][] = [[0, newColIdx, result.column_name]]
+    // Append new column after the last existing column
+    const newColIdx = hot.countCols()
+    const changes: [number, number, unknown][] = [[headerRowIdx, newColIdx, result.column_name]]
     result.values.forEach((val, rowIdx) => {
-      changes.push([rowIdx + 1, newColIdx, val ?? ''])
+      changes.push([headerRowIdx + 1 + rowIdx, newColIdx, val ?? ''])
     })
     hot.setDataAtCell(changes)
     applySuccess.value = `Column "${result.column_name}" added with ${result.values.length} values.`
@@ -282,7 +283,7 @@ function download() {
             <label class="block text-xs font-medium text-gray-500 mb-1">Formula *</label>
             <select
               v-model="selectedFormulaId"
-              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
               @change="onFormulaSelect"
             >
               <option value="">Select a formula…</option>
@@ -306,7 +307,7 @@ function download() {
                 <span class="text-gray-400 text-sm">→</span>
                 <select
                   v-model="paramColumnMap[param]"
-                  class="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+                  class="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
                 >
                   <option value="">Select column…</option>
                   <option v-for="col in sheetColumns" :key="col.idx" :value="col.name">
@@ -327,7 +328,7 @@ function download() {
             <input
               v-model="outputName"
               placeholder="e.g. TRIR"
-              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-violet-500"
             />
             <p class="text-xs text-gray-400 mt-1">A new column with this name will be added to the sheet.</p>
           </div>

@@ -525,6 +525,7 @@ def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> byt
       12=SafetyObs  13=Walks  14=Recognitions
     """
     import io as _io
+    from openpyxl.styles import PatternFill, Font
 
     wb = openpyxl.load_workbook(master_template_path)
 
@@ -534,6 +535,8 @@ def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> byt
             del wb[sname]
 
     sheet1 = wb["Sheet1"]
+    no_fill = PatternFill(fill_type=None)
+    default_font = Font()
 
     # (ARD totals 0-based col index, Sheet1 input col letter)
     # Rate = raw_value * 200_000 / total_manhours
@@ -558,6 +561,15 @@ def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> byt
             raw = entry["totals"].get(ard_idx, 0)
             rate = round(raw * 200000 / manhours, 4) if manhours > 0 else 0
             sheet1[f"{s1_col}{row}"].value = rate
+
+    # Strip template formatting from all cells row 6+ and clear leftover rows
+    first_empty_row = 6 + len(ard_entries)
+    for row in sheet1.iter_rows(min_row=6, max_row=sheet1.max_row):
+        for cell in row:
+            cell.fill = no_fill
+            cell.font = default_font
+            if cell.row >= first_empty_row:
+                cell.value = None
 
     buf = _io.BytesIO()
     wb.save(buf)

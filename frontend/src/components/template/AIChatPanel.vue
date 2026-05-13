@@ -89,11 +89,11 @@ async function sendTemplateBuilder(prompt: string) {
 
 async function sendFinetune(prompt: string) {
   if (!props.consolidatedSheetId) throw new Error('No consolidated sheet selected')
-  const data = await api.post<{ message: string }>('/api/ai/finetune', {
+  const data = await api.post<{ message: string; data_changed?: boolean }>('/api/ai/finetune', {
     consolidated_sheet_id: props.consolidatedSheetId,
     prompt,
   })
-  emit('finetune-applied')
+  if (data?.data_changed) emit('finetune-applied')
   messages.value.push({ role: 'assistant', content: data?.message ?? 'Changes applied.' })
 }
 </script>

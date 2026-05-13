@@ -42,11 +42,29 @@ export const detectedFormulas = ref<{ column: string; expression: string }[]>([]
 export const selectedCol = ref(0)
 
 // ── Formula panel helpers (used by FormulaLibraryPanel) ─────────
+
+/** Find the header row — the row with the most non-empty cells among the first 10 rows. */
+export function detectHeaderRow(data: unknown[][]): number {
+  const limit = Math.min(data.length, 10)
+  let bestRow = 0
+  let bestCount = 0
+  for (let r = 0; r < limit; r++) {
+    const row = data[r] as unknown[]
+    const count = row.filter(c => c != null && String(c).trim() !== '').length
+    if (count > bestCount) {
+      bestCount = count
+      bestRow = r
+    }
+  }
+  return bestRow
+}
+
 export function getColumnHeadersExternal(): { idx: number; letter: string; name: string }[] {
   if (!_currentInstance) return []
   const data = _currentInstance.getData() as unknown[][]
   if (!data.length) return []
-  const headers = (data[0] as unknown[]).map((c) => String(c ?? ''))
+  const headerRowIdx = detectHeaderRow(data)
+  const headers = (data[headerRowIdx] as unknown[]).map((c) => String(c ?? ''))
   return headers
     .map((name, idx) => ({ idx, letter: _colLetter(idx), name }))
     .filter((h) => h.name.trim())

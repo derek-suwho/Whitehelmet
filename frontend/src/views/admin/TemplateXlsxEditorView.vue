@@ -47,6 +47,30 @@ onMounted(async () => {
     if (fileResp.ok) {
       const buffer = await fileResp.arrayBuffer()
       const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+
+      // Strip to Sheet1 only — other tabs (Quality, Dropdown, etc.) cause #REF! noise
+      const keep = wb.SheetNames.includes('Sheet1') ? 'Sheet1' : wb.SheetNames[0]
+      for (const name of [...wb.SheetNames]) {
+        if (name !== keep) {
+          delete wb.Sheets[name]
+          wb.SheetNames.splice(wb.SheetNames.indexOf(name), 1)
+        }
+      }
+
+      // Clear leftover template rows below row 6 (row 6 = first data/output row, rows 7+ are leftovers)
+      const ws = wb.Sheets[keep]
+      if (ws && ws['!ref']) {
+        const range = XLSX.utils.decode_range(ws['!ref'])
+        for (let r = 6; r <= range.e.r; r++) {           // row index 6 = row 7 (0-based)
+          for (let c = range.s.c; c <= range.e.c; c++) {
+            const addr = XLSX.utils.encode_cell({ r, c })
+            delete ws[addr]
+          }
+        }
+        range.e.r = 5  // row 6 (0-based)
+        ws['!ref'] = XLSX.utils.encode_range(range)
+      }
+
       spreadsheetStore.loadWorkbook(wb, `${templateName.value}.xlsx`, buffer)
     } else {
       // Fall back to schema_json columns as header row.

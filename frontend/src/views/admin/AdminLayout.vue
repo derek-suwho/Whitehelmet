@@ -9,8 +9,6 @@ const navLinks = [
   { label: 'Overview', to: '/admin/dashboard' },
   { label: 'Projects', to: '/admin/projects' },
   { label: 'Users', to: '/admin/users' },
-{ label: 'File Uploads', to: '/admin/freeform-uploads' },
-  { label: 'Consolidate Files', to: '/', exact: true },
 ]
 
 async function logout() {
