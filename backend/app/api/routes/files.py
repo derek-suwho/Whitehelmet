@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.paths import resolve_path, to_relative
 from app.core.security import hash_file
 from app.db.session import get_db
 from app.models.profile import Profile
@@ -66,8 +67,8 @@ async def download_file(
     if not f:
         raise HTTPException(status_code=404, detail="File not found")
 
-    stored = Path(f.stored_path)
-    if not stored.exists():
+    stored = resolve_path(f.stored_path)
+    if not stored or not stored.exists():
         raise HTTPException(status_code=404, detail="File data missing from storage")
 
     return FastAPIFileResponse(
@@ -125,7 +126,7 @@ async def upload_file(
     uploaded = UploadedFile(
         user_id=user.id,
         original_name=file.filename or "unknown.xlsx",
-        stored_path=str(stored_path),
+        stored_path=to_relative(stored_path),
         mime_type=file.content_type or "application/octet-stream",
         size_bytes=len(content),
         sha256=sha,
@@ -149,8 +150,8 @@ async def delete_file(
         raise HTTPException(status_code=404, detail="File not found")
 
     # Remove stored file
-    stored = Path(f.stored_path)
-    if stored.exists():
+    stored = resolve_path(f.stored_path)
+    if stored and stored.exists():
         stored.unlink()
 
     db.delete(f)

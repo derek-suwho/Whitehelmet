@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.paths import resolve_path, to_relative
 from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
@@ -614,19 +615,22 @@ async def consolidate_submissions(
                 .order_by(TemplateVersion.version_number.desc())
                 .first()
             )
-            if _master_ver and _master_ver.file_path and Path(_master_ver.file_path).exists():
-                _master_template_path = _master_ver.file_path
+            if _master_ver and _master_ver.file_path:
+                _resolved_master = resolve_path(_master_ver.file_path)
+                if _resolved_master and _resolved_master.exists():
+                    _master_template_path = str(_resolved_master)
 
-    _submission_paths = [s.file_path for s in submissions if s.file_path and Path(s.file_path).exists()]
+    _submission_paths = [str(p) for s in submissions if s.file_path for p in [resolve_path(s.file_path)] if p and p.exists()]
 
     if _master_template_path and _submission_paths and all(_has_ard_sheet(p) for p in _submission_paths):
         ard_entries = []
         for sub in submissions:
-            if not sub.file_path or not Path(sub.file_path).exists():
+            _sub_abs = resolve_path(sub.file_path)
+            if not _sub_abs or not _sub_abs.exists():
                 continue
             submitter = db.query(Profile).filter(Profile.id == sub.submitted_by).first()
             org_label = (submitter.org_name or submitter.display_name) if submitter else None
-            entry = _extract_ard_totals(sub.file_path, org_name=org_label)
+            entry = _extract_ard_totals(str(_sub_abs), org_name=org_label)
             if entry:
                 ard_entries.append(entry)
 
@@ -644,7 +648,7 @@ async def consolidate_submissions(
                 project_id=project_id,
                 name=auto_name,
                 period=report_period,
-                file_path=str(out_path),
+                file_path=to_relative(out_path),
                 generated_by=str(user.id),
             )
             db.add(sheet)
@@ -731,8 +735,8 @@ async def consolidate_submissions(
     all_file_data = []
     failed_files: list[str] = []
     for sub in submissions:
-        path = Path(sub.processed_file_path or sub.file_path)
-        if not path.exists():
+        path = resolve_path(sub.processed_file_path) or resolve_path(sub.file_path)
+        if not path or not path.exists():
             import logging as _logging
 
             _logging.getLogger(__name__).warning(
@@ -884,7 +888,7 @@ async def consolidate_submissions(
         project_id=project_id,
         name=auto_name,
         period=report_period,
-        file_path=str(out_path),
+        file_path=to_relative(out_path),
         generated_by=str(user.id),
     )
     db.add(sheet)
@@ -1108,7 +1112,9 @@ def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
     if not sheet:
         raise HTTPException(status_code=404, detail="Report not found")
     try:
-        Path(sheet.file_path).unlink(missing_ok=True)
+        _del_path = resolve_path(sheet.file_path)
+        if _del_path:
+            _del_path.unlink(missing_ok=True)
     except Exception:
         pass
     db.delete(sheet)
@@ -1124,8 +1130,8 @@ def download_master_report(sheet_id: str, db: Session = Depends(get_db)):
     sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
     if not sheet:
         raise HTTPException(status_code=404, detail="Report not found")
-    path = Path(sheet.file_path)
-    if not path.exists():
+    path = resolve_path(sheet.file_path)
+    if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     filename = f"{sheet.name or sheet_id}.xlsx".replace("/", "-")
     return FileResponse(

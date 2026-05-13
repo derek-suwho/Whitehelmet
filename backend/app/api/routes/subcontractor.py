@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.paths import resolve_path, to_relative
 from app.core.rbac import _is_admin, require_participant
 from app.core.security import hash_file
 from app.db.session import get_db
@@ -215,9 +216,10 @@ def download_template(
     safe_name = (tmpl.name.replace(" ", "_") if tmpl else "template") + ".xlsx"
 
     # If an xlsx file was uploaded for this version, serve it directly
-    if ver.file_path and Path(ver.file_path).exists():
+    _resolved = resolve_path(ver.file_path)
+    if _resolved and _resolved.exists():
         from fastapi.responses import Response
-        with open(ver.file_path, "rb") as f:
+        with open(str(_resolved), "rb") as f:
             content = f.read()
         return Response(
             content=content,
@@ -332,7 +334,7 @@ async def submit_file(
     )
 
     if existing:
-        existing.file_path = str(stored_path)
+        existing.file_path = to_relative(stored_path)
         existing.file_name = file.filename or "submission.xlsx"
         existing.submitted_by = str(user.id)
         existing.status = "resubmitted"
@@ -347,7 +349,7 @@ async def submit_file(
             id=str(uuid.uuid4()),
             assignment_id=assignment_id,
             org_id=user.org_id,
-            file_path=str(stored_path),
+            file_path=to_relative(stored_path),
             file_name=file.filename or "submission.xlsx",
             status="submitted",
             submitted_by=str(user.id),
@@ -365,9 +367,9 @@ async def submit_file(
                 processed_path = org_dir / f"{sha}_processed{ext}"
                 processed_path.write_bytes(processed_bytes)
                 if existing:
-                    existing.processed_file_path = str(processed_path)
+                    existing.processed_file_path = to_relative(processed_path)
                 else:
-                    sub.processed_file_path = str(processed_path)
+                    sub.processed_file_path = to_relative(processed_path)
             except Exception as exc:
                 import logging as _logging
 

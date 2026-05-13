@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.paths import resolve_path, to_relative
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
 from app.models.profile import Profile
@@ -142,8 +143,8 @@ def download_template_xlsx(template_id: str, db: Session = Depends(get_db)):
     )
     if not ver or not ver.file_path:
         raise HTTPException(status_code=404, detail="No xlsx file for this template")
-    path = Path(ver.file_path)
-    if not path.exists():
+    path = resolve_path(ver.file_path)
+    if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FastAPIFileResponse(
         path=str(path),
@@ -255,7 +256,7 @@ async def upload_xlsx_template(
         template_id=tmpl.id,
         version_number=1,
         schema_json='{"columns":[]}',
-        file_path=str(dest),
+        file_path=to_relative(dest),
         created_by=str(user.id),
     )
     db.add(ver)
@@ -271,8 +272,8 @@ def download_consolidated(sheet_id: str, db: Session = Depends(get_db)):
     sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
     if not sheet:
         raise HTTPException(status_code=404, detail="Consolidated sheet not found")
-    path = Path(sheet.file_path)
-    if not path.exists():
+    path = resolve_path(sheet.file_path)
+    if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FastAPIFileResponse(
         path=str(path),

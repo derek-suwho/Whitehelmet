@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
+from app.core.paths import resolve_path, to_relative
 from app.core.rbac import require_admin
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
@@ -80,11 +81,11 @@ def download_submission(
     if type == "processed":
         if not sub.processed_file_path:
             raise HTTPException(status_code=404, detail="No processed file available")
-        path = Path(sub.processed_file_path)
+        path = resolve_path(sub.processed_file_path)
     else:
-        path = Path(sub.file_path)
+        path = resolve_path(sub.file_path)
 
-    if not path.exists():
+    if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
     return FileResponse(
         path=str(path),
@@ -126,7 +127,7 @@ async def update_submission_file(
     sub = db.query(Submission).filter(Submission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
-    dest = Path(sub.file_path)
+    dest = resolve_path(sub.file_path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("wb") as f:
         shutil.copyfileobj(file.file, f)
@@ -145,14 +146,15 @@ def generate_kpi_report(
     sub = db.query(Submission).filter(Submission.id == submission_id).first()
     if not sub:
         raise HTTPException(status_code=404, detail="Submission not found")
-    if not Path(sub.file_path).exists():
+    _raw_path = resolve_path(sub.file_path)
+    if not _raw_path or not _raw_path.exists():
         raise HTTPException(status_code=404, detail="Submission file not found on disk")
 
     org = db.query(Organization).filter(Organization.id == sub.org_id).first()
     project_name = org.name if org else "DevCo"
 
     try:
-        xlsx_bytes = generate_safety_kpi_report(sub.file_path, project_name)
+        xlsx_bytes = generate_safety_kpi_report(str(_raw_path), project_name)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"KPI report generation failed: {e}")
 
@@ -169,7 +171,7 @@ def generate_kpi_report(
         template_id=sub.assignment_id,
         project_id=sub.org_id,
         name=report_name,
-        file_path=str(out_path),
+        file_path=to_relative(out_path),
         generated_by=str(user.id),
     )
     db.add(sheet)
@@ -197,11 +199,12 @@ def patch_submission_cells(
             f"Stale revision (yours: {body.revision}, current: {sub.file_revision}). Reload and re-apply."
         )
 
-    wb = openpyxl.load_workbook(sub.processed_file_path)
+    _proc_path = resolve_path(sub.processed_file_path)
+    wb = openpyxl.load_workbook(str(_proc_path))
     ws = wb.active
     for change in body.changes:
         ws.cell(row=change.row, column=change.col, value=change.value)
-    wb.save(sub.processed_file_path)
+    wb.save(str(_proc_path))
 
     sub.file_revision += 1
     db.commit()
@@ -229,29 +232,29 @@ def recalculate_submission(
     if not formulas:
         raise HTTPException(status_code=400, detail="No formulas configured for this template")
 
-    with open(sub.file_path, "rb") as f:
+    _raw_abs = resolve_path(sub.file_path)
+    with open(str(_raw_abs), "rb") as f:
         raw_bytes = f.read()
 
     processed_bytes = FormulaExecutor.execute(raw_bytes, formulas)
 
     if sub.processed_file_path:
-        target_path = sub.processed_file_path
+        target_abs = resolve_path(sub.processed_file_path)
     else:
-        raw_path = Path(sub.file_path)
-        target_path = str(raw_path.parent / f"{raw_path.stem}_processed{raw_path.suffix}")
+        target_abs = _raw_abs.parent / f"{_raw_abs.stem}_processed{_raw_abs.suffix}"
 
-    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".xlsx", dir=str(Path(target_path).parent))
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".xlsx", dir=str(target_abs.parent))
     try:
         with os.fdopen(tmp_fd, "wb") as f:
             f.write(processed_bytes)
-        shutil.move(tmp_path, target_path)
+        shutil.move(tmp_path, str(target_abs))
     except Exception:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
         raise HTTPException(500, "Failed to write processed file")
 
     if not sub.processed_file_path:
-        sub.processed_file_path = target_path
+        sub.processed_file_path = to_relative(target_abs)
     sub.file_revision += 1
     db.commit()
 

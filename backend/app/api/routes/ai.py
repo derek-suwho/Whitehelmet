@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.paths import resolve_path
 from app.core.dependencies import get_current_user
 from app.db.session import get_db
 from app.models.consolidated_sheet import ConsolidatedSheet
@@ -620,8 +621,8 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == consolidated_sheet_id).first()
     if not sheet:
         raise HTTPException(status_code=404, detail="Consolidated sheet not found")
-    path = Path(sheet.file_path)
-    if not path.exists():
+    path = resolve_path(sheet.file_path)
+    if not path or not path.exists():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
     # Read current sheet data
@@ -754,7 +755,7 @@ async def configure_formulas(
     if not tv:
         raise HTTPException(404, "Template version not found")
 
-    with open(tv.file_path, "rb") as f:
+    with open(str(resolve_path(tv.file_path)), "rb") as f:
         file_bytes = f.read()
 
     layout = analyze_template(file_bytes)

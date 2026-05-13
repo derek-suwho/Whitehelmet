@@ -38,5 +38,6 @@ Project-Documents/*.key
 Project-Documents/*.pem
 Project-Documents/*.cert
 backend/.venv_test/
+backend/uploads/
 supabase/.temp/
 ~$*
