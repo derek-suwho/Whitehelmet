@@ -510,52 +510,53 @@ def _extract_ard_totals(file_path: str, org_name: str | None = None) -> dict | N
 
 
 def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> bytes:
-    """Copy master template xlsx, inject 'ARD' sheet with org totals, fix Sheet1 rate formulas.
+    """Populate Sheet1 of the admin template with computed KPI rates from submission ARD totals.
 
-    ARD sheet cols (mirror subcontractor template F-O):
-      F(5)=Manhours  G(6)=SafeMH  H(7)=Fatalities  I(8)=LTI_incidents
-      J(9)=LTI_MH   K(10)=TRI    L(11)=NearMiss   M(12)=SafetyObs
-      N(13)=Walks    O(14)=Recognitions
+    For each org, computes per-200k-manhour rates from the raw totals and writes them
+    as plain values into Sheet1's odd input columns (C, E, G, I, K, M, O) starting at
+    row 6. The even columns (D, F, H, J, L, N, P) already contain intact IFS scoring
+    formulas and are left untouched — Excel/web viewer will evaluate them.
 
-    Sheet1 odd cols C,E,G,I,K,M,O = rate input cells (were #REF!); even cols = intact IFS scores.
+    Output contains ONLY Sheet1 from the admin template.
+
+    ARD totals index map (0-based col indices):
+      5=Manhours  7=Fatalities  8=LTI_incidents  10=TRI  11=NearMiss
+      12=SafetyObs  13=Walks  14=Recognitions
     """
     import io as _io
 
     wb = openpyxl.load_workbook(master_template_path)
 
-    # Build ARD sheet
-    if "ARD" in wb.sheetnames:
-        del wb["ARD"]
-    ard_ws = wb.create_sheet("ARD")
-    ard_ws.append([
-        "Sr.No", "Org Name", "", "", "",
-        "Total Manhours", "Safe Manhours", "Fatalities",
-        "LTI Incidents", "LTI Manhours", "Total Recordable",
-        "Near Miss", "Safety Observations", "Leadership Walks", "Recognitions",
-    ])
-    for i, entry in enumerate(ard_entries, start=1):
-        row = [i, entry["org_name"], "", "", ""]
-        for col_idx in range(5, 15):
-            row.append(entry["totals"].get(col_idx, 0))
-        ard_ws.append(row)
-    grand = ["", "TOTAL", "", "", ""]
-    for col_idx in range(5, 15):
-        grand.append(sum(e["totals"].get(col_idx, 0) for e in ard_entries))
-    ard_ws.append(grand)
+    # Keep only Sheet1 in the output workbook
+    for sname in list(wb.sheetnames):
+        if sname != "Sheet1":
+            del wb[sname]
 
-    # Fix Sheet1 #REF! input cells with live ARD rate formulas
-    sheet1 = wb["Sheet1"] if "Sheet1" in wb.sheetnames else None
-    if sheet1 is not None:
-        # (Sheet1 col, ARD incident col): rate = ARD!incident * 200000 / ARD!F (manhours)
-        KPI_MAP = [("C", "H"), ("E", "I"), ("G", "K"), ("I", "L"), ("K", "M"), ("M", "N"), ("O", "O")]
-        for org_idx, _entry in enumerate(ard_entries):
-            s1_row = 6 + org_idx
-            ard_row = 2 + org_idx
-            for s1_col, ard_col in KPI_MAP:
-                sheet1[f"{s1_col}{s1_row}"].value = f"=ARD!{ard_col}{ard_row}*200000/ARD!F{ard_row}"
-        if ard_entries:
-            sheet1["D2"] = ard_entries[0]["org_name"]
-        sheet1["D3"] = datetime.utcnow().strftime("%Y-%m-%d")
+    sheet1 = wb["Sheet1"]
+
+    # (ARD totals 0-based col index, Sheet1 input col letter)
+    # Rate = raw_value * 200_000 / total_manhours
+    KPI_MAP = [
+        (7,  "C"),   # Fatalities → fatality rate
+        (8,  "E"),   # LTI incidents → LTIR
+        (10, "G"),   # Total Recordable → TRIR
+        (11, "I"),   # Near Miss
+        (12, "K"),   # Safety Observations
+        (13, "M"),   # Leadership Walks
+        (14, "O"),   # Recognitions
+    ]
+
+    for org_idx, entry in enumerate(ard_entries):
+        row = 6 + org_idx
+        manhours = entry["totals"].get(5, 0)
+
+        # Project/org name in col B
+        sheet1[f"B{row}"] = entry["org_name"]
+
+        for ard_idx, s1_col in KPI_MAP:
+            raw = entry["totals"].get(ard_idx, 0)
+            rate = round(raw * 200000 / manhours, 4) if manhours > 0 else 0
+            sheet1[f"{s1_col}{row}"].value = rate
 
     buf = _io.BytesIO()
     wb.save(buf)
