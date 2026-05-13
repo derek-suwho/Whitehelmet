@@ -369,6 +369,12 @@ async function loadSubmissions() {
   }
 }
 
+async function deleteSubmission(id: string) {
+  if (!confirm('Delete this submission? This cannot be undone.')) return
+  await adminStore.deleteSubmission(id)
+  submissions.value = submissions.value.filter(s => s.id !== id)
+}
+
 const filteredSubmissions = computed(() => {
   let list = submissions.value
   const q = submissionSearch.value.toLowerCase()
@@ -900,11 +906,6 @@ function formatDate(iso: string | null) {
                     :to="`/admin/templates/${a.template_id}/edit`"
                     class="text-xs text-violet-600 hover:text-violet-800 hover:underline"
                   >Edit</RouterLink>
-                  <RouterLink
-                    v-if="a.template_id"
-                    :to="`/admin/consolidations/${a.template_id}`"
-                    class="text-xs font-medium text-green-600 hover:text-green-800 hover:underline"
-                  >Consolidate →</RouterLink>
                   <template v-if="confirmRemoveAssignmentId === a.assignment_id">
                     <span class="text-xs text-red-600 font-medium">Remove?</span>
                     <button class="text-xs text-red-600 hover:text-red-800 font-medium" @click="removeAssignment(a.assignment_id)">Yes</button>
@@ -1061,15 +1062,26 @@ function formatDate(iso: string | null) {
                   </div>
                 </td>
                 <td class="px-4 py-3.5 text-center">
-                  <RouterLink
-                    :to="`/admin/submissions/${s.id}/review?fileName=${encodeURIComponent(s.file_name)}`"
-                    class="text-gray-400 hover:text-gray-600 transition-colors"
-                    title="Review submission"
-                  >
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                    </svg>
-                  </RouterLink>
+                  <div class="flex items-center justify-center gap-2">
+                    <RouterLink
+                      :to="`/admin/submissions/${s.id}/review?fileName=${encodeURIComponent(s.file_name)}`"
+                      class="text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Review submission"
+                    >
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                      </svg>
+                    </RouterLink>
+                    <button
+                      class="text-gray-400 hover:text-red-600 transition-colors"
+                      title="Delete submission"
+                      @click="deleteSubmission(s.id)"
+                    >
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!filteredSubmissions.length">
@@ -1122,17 +1134,12 @@ function formatDate(iso: string | null) {
               <div class="flex items-center gap-4">
                 <RouterLink
                   :to="`/admin/templates/${project.master_template_id}/edit-xlsx?projectId=${project.id}`"
-                  class="text-xs text-violet-600 hover:underline"
-                >Edit</RouterLink>
+                  class="text-xs font-medium text-violet-600 hover:underline"
+                >Edit Master Sheet →</RouterLink>
                 <RouterLink
                   :to="`/admin/consolidations/${project.master_template_id}?project_id=${project.id}`"
                   class="text-xs font-medium text-green-600 hover:underline"
                 >Consolidate →</RouterLink>
-                <RouterLink
-                  v-if="project.master_template_id"
-                  :to="`/admin/templates/${project.master_template_id}/edit-xlsx?projectId=${project.id}`"
-                  class="text-xs font-medium text-blue-600 hover:underline"
-                >View Master Sheet →</RouterLink>
                 <button class="text-xs text-gray-400 hover:text-red-500 transition-colors" @click="setMasterTemplate(null)">Remove</button>
               </div>
             </div>

@@ -211,21 +211,25 @@ def get_consolidation_progress(
 
         members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
-        from sqlalchemy import or_ as _or_
-        _pm_ids = [m.user_id for m in members]
-        _pm_org_ids = list({str(p.org_id) for p in db.query(Profile).filter(Profile.id.in_(_pm_ids)).all() if p.org_id})
-        _asgn_filter = _or_(
-            TemplateAssignment.org_id == project_id,
-            *(TemplateAssignment.org_id == oid for oid in _pm_org_ids),
-        ) if _pm_org_ids else (TemplateAssignment.org_id == project_id)
-        assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(_asgn_filter).all()]
-
         _proj_member_ids = [m.user_id for m in members]
         _proj_profiles = (
             {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_proj_member_ids)).all()}
             if _proj_member_ids
             else {}
         )
+
+        # Pre-fetch all assignments keyed by org_id for fast per-member lookup
+        from sqlalchemy import or_ as _or_
+        _all_org_ids = list({str(p.org_id) for p in _proj_profiles.values() if p.org_id})
+        _asgn_filter = _or_(
+            TemplateAssignment.org_id == project_id,
+            *(TemplateAssignment.org_id == oid for oid in _all_org_ids),
+        ) if _all_org_ids else (TemplateAssignment.org_id == project_id)
+        _all_assignments = db.query(TemplateAssignment).filter(_asgn_filter).all()
+        # Map org_id -> list of assignment IDs
+        _org_assignment_ids: dict[str, list[str]] = {}
+        for a in _all_assignments:
+            _org_assignment_ids.setdefault(a.org_id, []).append(a.id)
 
         org_rows: list[OrgSubmissionStatus] = []
         submitted_count = 0
@@ -237,32 +241,36 @@ def get_consolidation_progress(
                 continue
             member_count += 1
 
-            subs = []
-            if assignment_ids:
-                subs = (
+            # Only look at assignments for this member's org (+ project-level)
+            member_asgn_ids = _org_assignment_ids.get(project_id, [])
+            if user.org_id:
+                member_asgn_ids = list(set(member_asgn_ids + _org_assignment_ids.get(str(user.org_id), [])))
+
+            sub = None
+            if member_asgn_ids:
+                sub = (
                     db.query(Submission)
                     .filter(
-                        Submission.assignment_id.in_(assignment_ids),
+                        Submission.assignment_id.in_(member_asgn_ids),
                         Submission.submitted_by == str(user.id),
                     )
                     .order_by(Submission.submitted_at.desc())
-                    .all()
+                    .first()
                 )
 
-            if subs:
+            if sub:
                 submitted_count += 1
-                for sub in subs:
-                    org_rows.append(
-                        OrgSubmissionStatus(
-                            org_id=str(user.id),
-                            org_name=user.display_name,
-                            assignment_id=sub.assignment_id,
-                            assignment_status="submitted",
-                            submission_id=sub.id,
-                            submitted_at=sub.submitted_at,
-                            file_name=sub.file_name,
-                        )
+                org_rows.append(
+                    OrgSubmissionStatus(
+                        org_id=str(user.id),
+                        org_name=user.display_name,
+                        assignment_id=sub.assignment_id,
+                        assignment_status="submitted",
+                        submission_id=sub.id,
+                        submitted_at=sub.submitted_at,
+                        file_name=sub.file_name,
                     )
+                )
             else:
                 org_rows.append(
                     OrgSubmissionStatus(

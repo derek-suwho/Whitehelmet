@@ -75,16 +75,25 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     )
     _member_org_ids = {str(p.org_id) for p in _member_profiles.values() if p.org_id}
 
-    # Include both legacy project-scoped assignments and new org-scoped assignments
-    from sqlalchemy import or_ as _or_
-    _org_filter = _or_(
-        TemplateAssignment.org_id == project_id,
-        *(TemplateAssignment.org_id == oid for oid in _member_org_ids),
-    ) if _member_org_ids else (TemplateAssignment.org_id == project_id)
+    # Include both legacy project-scoped assignments and org-scoped assignments
+    # whose template belongs to THIS project (prevents cross-project leakage).
+    from sqlalchemy import and_ as _and_, or_ as _or_
+
+    _legacy_filter = TemplateAssignment.org_id == project_id
+    if _member_org_ids:
+        _org_scoped = _and_(
+            TemplateAssignment.org_id.in_(list(_member_org_ids)),
+            Template.project_id == project_id,
+        )
+        _combined = _or_(_legacy_filter, _org_scoped)
+    else:
+        _combined = _legacy_filter
 
     assignments_q = (
         db.query(TemplateAssignment)
-        .filter(_org_filter)
+        .outerjoin(TemplateVersion, TemplateVersion.id == TemplateAssignment.template_version_id)
+        .outerjoin(Template, Template.id == TemplateVersion.template_id)
+        .filter(_combined)
         .order_by(TemplateAssignment.assigned_at.desc())
         .all()
     )
@@ -348,7 +357,7 @@ def assign_template(
 @router.get("/{project_id}/submissions")
 def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
     """Return all submissions for a project, enriched with submitter org name."""
-    from sqlalchemy import or_ as _or_
+    from sqlalchemy import and_ as _and_, or_ as _or_
 
     # Collect member org_ids so org-based assignments are included
     member_ids = [m.user_id for m in db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()]
@@ -357,12 +366,24 @@ def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
     )
     member_org_ids = list({str(p.org_id) for p in member_profiles if p.org_id})
 
-    org_filter = _or_(
-        TemplateAssignment.org_id == project_id,
-        *(TemplateAssignment.org_id == oid for oid in member_org_ids),
-    ) if member_org_ids else (TemplateAssignment.org_id == project_id)
+    # Legacy: org_id stores project_id; Org-scoped: verify template belongs to this project
+    _legacy = TemplateAssignment.org_id == project_id
+    if member_org_ids:
+        _org_scoped = _and_(
+            TemplateAssignment.org_id.in_(member_org_ids),
+            Template.project_id == project_id,
+        )
+        org_filter = _or_(_legacy, _org_scoped)
+    else:
+        org_filter = _legacy
 
-    assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(org_filter).all()]
+    assignment_ids = [
+        a.id for a in db.query(TemplateAssignment)
+        .outerjoin(TemplateVersion, TemplateVersion.id == TemplateAssignment.template_version_id)
+        .outerjoin(Template, Template.id == TemplateVersion.template_id)
+        .filter(org_filter)
+        .all()
+    ]
     if not assignment_ids:
         return []
 

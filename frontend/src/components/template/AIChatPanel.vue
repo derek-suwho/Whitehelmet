@@ -89,13 +89,26 @@ async function sendTemplateBuilder(prompt: string) {
 
 async function sendFinetune(prompt: string) {
   if (!props.consolidatedSheetId) throw new Error('No consolidated sheet selected')
+  const history = messages.value.slice(0, -1).map((m) => ({ role: m.role, content: m.content }))
   const data = await api.post<{ message: string; data_changed?: boolean }>('/api/ai/finetune', {
     consolidated_sheet_id: props.consolidatedSheetId,
     prompt,
+    messages: history,
   })
   if (data?.data_changed) emit('finetune-applied')
   messages.value.push({ role: 'assistant', content: data?.message ?? 'Changes applied.' })
 }
+
+function injectFormulaContext(text: string) {
+  messages.value.push({ role: 'user', content: text })
+  loading.value = true
+  error.value = ''
+  sendFinetune(text)
+    .catch((e) => { error.value = e instanceof Error ? e.message : 'Something went wrong' })
+    .finally(() => { loading.value = false })
+}
+
+defineExpose({ injectFormulaContext })
 </script>
 
 <template>

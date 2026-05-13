@@ -180,6 +180,24 @@ def generate_kpi_report(
     return {"sheet_id": sheet_id, "name": report_name}
 
 
+@router.delete("/{submission_id}", status_code=204)
+def delete_submission(
+    submission_id: str,
+    db: Session = Depends(get_db),
+):
+    sub = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    # Remove files from disk
+    for path_attr in (sub.file_path, sub.processed_file_path):
+        if path_attr:
+            p = resolve_path(path_attr)
+            if p and p.exists():
+                p.unlink()
+    db.delete(sub)
+    db.commit()
+
+
 @router.patch("/{submission_id}/cells")
 def patch_submission_cells(
     submission_id: str,

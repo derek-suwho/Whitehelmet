@@ -173,6 +173,10 @@ export const useAdminStore = defineStore('admin', () => {
     return api.get<ProjectSubmission[]>(`/api/projects/${projectId}/submissions`)
   }
 
+  async function deleteSubmission(submissionId: string): Promise<void> {
+    await api.delete(`/api/admin/submissions/${submissionId}`)
+  }
+
   async function fetchMasterReports(projectId: string): Promise<MasterReport[]> {
     return api.get<MasterReport[]>(`/api/admin/projects/${projectId}/master-reports`)
   }
@@ -209,6 +213,7 @@ export const useAdminStore = defineStore('admin', () => {
     createUser,
     updateUserRole,
     fetchProjectSubmissions,
+    deleteSubmission,
     fetchMasterReports,
     renameMasterReport,
     deleteMasterReport,

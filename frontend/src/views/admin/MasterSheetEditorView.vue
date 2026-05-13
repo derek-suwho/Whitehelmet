@@ -7,9 +7,11 @@ import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
 import { useTemplatesStore } from '@/stores/templates'
 import { useFormulasStore } from '@/stores/formulas'
-import { getColumnHeadersExternal, detectHeaderRow } from '@/composables/useSpreadsheetEditor'
+import { getColumnHeadersExternal } from '@/composables/useSpreadsheetEditor'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
+
+const chatPanelRef = ref<InstanceType<typeof AIChatPanel> | null>(null)
 
 const route = useRoute()
 const router = useRouter()
@@ -45,9 +47,7 @@ const selectedFormulaId = ref('')
 const paramColumnMap = ref<Record<string, string>>({})
 const outputName = ref('')
 const sheetColumns = ref<{ idx: number; letter: string; name: string }[]>([])
-const applyLoading = ref(false)
 const applyError = ref('')
-const applySuccess = ref('')
 
 const selectedFormula = computed(() =>
   formulasStore.formulas.find(f => String(f.id) === selectedFormulaId.value) ?? null
@@ -59,7 +59,6 @@ function openFormulaApply() {
   paramColumnMap.value = {}
   outputName.value = ''
   applyError.value = ''
-  applySuccess.value = ''
   showFormulaApply.value = true
   if (!formulasStore.formulas.length) formulasStore.fetchFormulas()
 }
@@ -69,61 +68,38 @@ function onFormulaSelect() {
   outputName.value = selectedFormula.value?.name ?? ''
 }
 
-async function applyFormula() {
+function applyFormula() {
   if (!selectedFormulaId.value) { applyError.value = 'Select a formula.'; return }
   if (!outputName.value.trim()) { applyError.value = 'Enter an output column name.'; return }
 
-  const params = selectedFormula.value?.parameters ?? []
-  for (const p of params) {
-    if (!paramColumnMap.value[p]) {
-      applyError.value = `Map all parameters — "${p}" is not mapped.`
-      return
-    }
+  const formula = selectedFormula.value
+  if (!formula) return
+
+  // Build context message for the AI
+  const parts: string[] = [
+    `I want to apply the formula "${formula.name}" to this sheet.`,
+    `Expression: ${formula.expression}`,
+  ]
+  if (formula.parameters?.length) {
+    const mappings = formula.parameters.map(p => `  ${p} → ${paramColumnMap.value[p] || '(unmapped)'}`).join('\n')
+    parts.push(`Parameter mappings:\n${mappings}`)
+  }
+  parts.push(`Output column name: ${outputName.value.trim()}`)
+
+  // Include sheet columns for context
+  const cols = getColumnHeadersExternal()
+  if (cols.length) {
+    parts.push(`Current sheet columns: ${cols.map(c => c.name).join(', ')}`)
   }
 
-  const hot = spreadsheetStore.instance
-  if (!hot) { applyError.value = 'Spreadsheet not loaded yet.'; return }
+  const contextMessage = parts.join('\n')
 
-  const allData = hot.getData() as unknown[][]
-  if (allData.length < 2) { applyError.value = 'No data rows in the sheet.'; return }
-
-  const headerRowIdx = detectHeaderRow(allData)
-  const headers = (allData[headerRowIdx] as unknown[]).map(h => String(h ?? ''))
-  const dataRows = allData.slice(headerRowIdx + 1).map(row => {
-    const obj: Record<string, unknown> = {}
-    headers.forEach((h, i) => { if (h.trim()) obj[h] = (row as unknown[])[i] })
-    return obj
-  })
-
-  applyLoading.value = true
-  applyError.value = ''
-  applySuccess.value = ''
-  try {
-    const result = await api.post<{ column_name: string; values: (number | null)[] }>(
-      '/api/formulas/evaluate',
-      {
-        formula_id: selectedFormulaId.value,
-        column_map: paramColumnMap.value,
-        output_name: outputName.value.trim(),
-        rows: dataRows,
-      },
-    )
-
-    // Append new column after the last existing column
-    const newColIdx = hot.countCols()
-    const changes: [number, number, unknown][] = [[headerRowIdx, newColIdx, result.column_name]]
-    result.values.forEach((val, rowIdx) => {
-      changes.push([headerRowIdx + 1 + rowIdx, newColIdx, val ?? ''])
-    })
-    hot.setDataAtCell(changes)
-    applySuccess.value = `Column "${result.column_name}" added with ${result.values.length} values.`
-    selectedFormulaId.value = ''
-    paramColumnMap.value = {}
-  } catch (e) {
-    applyError.value = e instanceof Error ? e.message : 'Failed to apply formula'
-  } finally {
-    applyLoading.value = false
-  }
+  // Inject into AI chat and close modal
+  chatPanelRef.value?.injectFormulaContext(contextMessage)
+  showFormulaApply.value = false
+  selectedFormulaId.value = ''
+  paramColumnMap.value = {}
+  outputName.value = ''
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -201,12 +177,6 @@ function download() {
       </div>
       <div class="flex items-center gap-2">
         <button
-          class="border border-violet-300 text-violet-700 px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-violet-50 transition-colors"
-          @click="openFormulaApply"
-        >
-          ƒ Apply Formula
-        </button>
-        <button
           class="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
           @click="download"
         >
@@ -257,6 +227,7 @@ function download() {
         <!-- AI Fine-Tuning -->
         <div class="flex-1 min-h-0">
           <AIChatPanel
+            ref="chatPanelRef"
             mode="consolidation-finetune"
             :template-id="templateId ?? ''"
             :consolidated-sheet-id="sheetId"
@@ -333,19 +304,18 @@ function download() {
             <p class="text-xs text-gray-400 mt-1">A new column with this name will be added to the sheet.</p>
           </div>
 
-          <!-- Error / success -->
+          <!-- Error -->
           <p v-if="applyError" class="text-sm text-red-600">{{ applyError }}</p>
-          <p v-if="applySuccess" class="text-sm text-green-600">{{ applySuccess }}</p>
         </div>
 
         <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">
           <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100" @click="showFormulaApply = false">Cancel</button>
           <button
-            :disabled="applyLoading || !selectedFormulaId || !outputName.trim()"
+            :disabled="!selectedFormulaId || !outputName.trim()"
             class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 transition-colors"
             @click="applyFormula"
           >
-            {{ applyLoading ? 'Applying…' : 'Apply Formula' }}
+            Apply Formula
           </button>
         </div>
       </div>

@@ -615,6 +615,7 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
     """Apply a natural-language change to a consolidated sheet (by ID)."""
     consolidated_sheet_id = body.get("consolidated_sheet_id")
     prompt = body.get("prompt", "")
+    chat_history = body.get("messages", [])  # prior chat messages for context
     if not consolidated_sheet_id:
         raise HTTPException(status_code=422, detail="consolidated_sheet_id required")
 
@@ -661,19 +662,30 @@ async def finetune_consolidated(body: dict, db: Session = Depends(get_db)):
         "- Return ONLY the JSON object, no markdown fences or extra text."
     )
 
+    # Build message list: system → sheet data → chat history → current instruction
+    ai_messages: list[dict] = [
+        {"role": "system", "content": system},
+        {
+            "role": "user",
+            "content": f"Current sheet data:\n{json.dumps(all_rows)}",
+        },
+        {"role": "assistant", "content": "I have the sheet data. What would you like me to do?"},
+    ]
+    # Append prior chat history for multi-turn context (e.g. formula selections)
+    for msg in chat_history[-10:]:  # last 10 messages max
+        role = msg.get("role", "user")
+        if role in ("user", "assistant"):
+            ai_messages.append({"role": role, "content": msg.get("content", "")})
+    ai_messages.append({
+        "role": "user",
+        "content": json.dumps({"instruction": prompt}),
+    })
+
     ai_data = await _ai_post(
         {
             "model": "anthropic/claude-sonnet-4-5",
             "max_tokens": 8192,
-            "messages": [
-                {"role": "system", "content": system},
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {"rows": all_rows, "instruction": prompt}
-                    ),
-                },
-            ],
+            "messages": ai_messages,
         }
     )
 
