@@ -36,10 +36,16 @@ router = APIRouter(
 )
 
 
+def _user_project_ids(user: Profile, db) -> list[str]:
+    """Return all project IDs this user belongs to via ProjectMember."""
+    memberships = db.query(ProjectMember).filter(ProjectMember.user_id == str(user.id)).all()
+    return [m.project_id for m in memberships]
+
+
 def _assignment_filter(user: Profile):
-    """Return an OR filter matching project-wide assignments OR user-targeted ones."""
+    """SQLAlchemy filter: assignment belongs to user's org (org-based) or is user-scoped (legacy)."""
     return or_(
-        (TemplateAssignment.org_id == user.org_id) & (TemplateAssignment.assigned_to_user_id.is_(None)),
+        TemplateAssignment.org_id == str(user.org_id),
         TemplateAssignment.assigned_to_user_id == str(user.id),
     )
 
@@ -104,15 +110,16 @@ def list_my_assignments(
     user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return template assignments for this user — project-wide or directly targeted."""
+    """Return org-level template assignments for this user's org."""
     if not user.org_id:
-        raise HTTPException(status_code=400, detail="User has no org_id assigned")
+        return []
 
     assignments = (
         db.query(TemplateAssignment)
         .filter(
             TemplateAssignment.submission_type == "template",
-            _assignment_filter(user),
+            TemplateAssignment.assigned_to_user_id.is_(None),
+            TemplateAssignment.org_id == str(user.org_id),
         )
         .order_by(TemplateAssignment.assigned_at.desc())
         .all()
@@ -127,30 +134,36 @@ def list_my_assignments(
                 tmpl = db.query(Template).filter(Template.id == ver.template_id).first()
                 template_name = tmpl.name if tmpl else None
 
+        # Org-level: any submission by anyone in the org counts
         has_submission = (
             db.query(Submission)
-            .filter(
-                Submission.assignment_id == a.id,
-                Submission.submitted_by == str(user.id),
-            )
+            .filter(Submission.assignment_id == a.id)
             .first()
         ) is not None
 
-        # Derive per-user status: locked is set by PM and is authoritative;
-        # otherwise reflect whether THIS user has submitted, not the shared assignment.
         if a.status == "locked":
-            user_status = "locked"
+            org_status = "locked"
         else:
-            user_status = "submitted" if has_submission else "pending"
+            org_status = "submitted" if has_submission else "pending"
 
-        pm = (
-            db.query(ProjectMember)
-            .filter(
-                ProjectMember.project_id == a.org_id,
-                ProjectMember.user_id == str(user.id),
+        if a.assigned_to_user_id:
+            # Legacy user-scoped assignment: org_id was the project_id
+            pm = (
+                db.query(ProjectMember)
+                .filter(
+                    ProjectMember.project_id == a.org_id,
+                    ProjectMember.user_id == str(user.id),
+                )
+                .first()
             )
-            .first()
-        ) if a.org_id else None
+        else:
+            # Org-based assignment: look up role by user_id across any project
+            pm = (
+                db.query(ProjectMember)
+                .filter(ProjectMember.user_id == str(user.id))
+                .order_by(ProjectMember.added_at.desc())
+                .first()
+            )
 
         result.append(
             AssignmentForSubcontractor(
@@ -158,7 +171,7 @@ def list_my_assignments(
                 template_version_id=a.template_version_id,
                 deadline=a.deadline,
                 instructions=a.instructions,
-                status=user_status,
+                status=org_status,
                 assigned_at=a.assigned_at,
                 template_name=template_name,
                 has_submission=has_submission,
@@ -274,15 +287,14 @@ async def submit_file(
         raise HTTPException(status_code=409, detail="Assignment is locked; no further submissions accepted")
 
     if not _is_admin(user):
-        pm = (
-            db.query(ProjectMember)
-            .filter(
-                ProjectMember.project_id == a.org_id,
-                ProjectMember.user_id == str(user.id),
-                ProjectMember.participant_role == "focal",
-            )
-            .first()
+        pm_q = db.query(ProjectMember).filter(
+            ProjectMember.user_id == str(user.id),
+            ProjectMember.participant_role == "focal",
         )
+        if a.assigned_to_user_id:
+            # Legacy user-scoped: org_id was the project_id
+            pm_q = pm_q.filter(ProjectMember.project_id == a.org_id)
+        pm = pm_q.first()
         if not pm:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only focal participants may submit files")
 
@@ -376,10 +388,21 @@ def list_my_submissions(
     user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all submissions made by this user, newest first."""
+    """Return all submissions for assignments in the user's projects (org-level view)."""
+    if not user.org_id:
+        return []
+    assignment_ids = [
+        row[0] for row in db.query(TemplateAssignment.id)
+        .filter(
+            TemplateAssignment.org_id == str(user.org_id),
+            TemplateAssignment.assigned_to_user_id.is_(None),
+        ).all()
+    ]
+    if not assignment_ids:
+        return []
     return (
         db.query(Submission)
-        .filter(Submission.submitted_by == str(user.id))
+        .filter(Submission.assignment_id.in_(assignment_ids))
         .order_by(Submission.submitted_at.desc())
         .all()
     )

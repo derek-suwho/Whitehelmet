@@ -36,11 +36,14 @@ router = APIRouter(
 @router.get("", response_model=list[TemplateResponse])
 def list_templates(
     type: str | None = Query(None, alias="type"),
+    project_id: str | None = Query(None),
     db: Session = Depends(get_db),
 ):
     q = db.query(Template)
     if type:
         q = q.filter(Template.template_type == type)
+    if project_id:
+        q = q.filter(Template.project_id == project_id)
     return q.order_by(Template.updated_at.desc()).all()
 
 
@@ -61,6 +64,7 @@ def create_template(body: TemplateCreate, user: Profile = Depends(get_current_us
         created_by=str(user.id),
         status="draft",
         template_type=body.template_type,
+        project_id=body.project_id,
     )
     db.add(tmpl)
     db.commit()
@@ -92,6 +96,27 @@ def update_template(template_id: str, body: dict, db: Session = Depends(get_db))
     return tmpl
 
 
+@router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_csrf)])
+def delete_template(template_id: str, db: Session = Depends(get_db)):
+    from app.models.template_version import TemplateVersion
+    from app.models.template_assignment import TemplateAssignment
+    from app.models.template_formula import TemplateFormula
+    from app.models.consolidated_sheet import ConsolidatedSheet
+
+    tmpl = db.query(Template).filter(Template.id == template_id).first()
+    if not tmpl:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    version_ids = [row[0] for row in db.query(TemplateVersion.id).filter(TemplateVersion.template_id == template_id).all()]
+    if version_ids:
+        db.query(TemplateAssignment).filter(TemplateAssignment.template_version_id.in_(version_ids)).delete(synchronize_session=False)
+        db.query(TemplateFormula).filter(TemplateFormula.template_version_id.in_(version_ids)).delete(synchronize_session=False)
+        db.query(TemplateVersion).filter(TemplateVersion.template_id == template_id).delete(synchronize_session=False)
+    db.query(ConsolidatedSheet).filter(ConsolidatedSheet.template_id == template_id).delete(synchronize_session=False)
+    db.delete(tmpl)
+    db.commit()
+
+
 @router.patch("/{template_id}/status", response_model=TemplateResponse, dependencies=[Depends(verify_csrf)])
 def update_status(template_id: str, body: dict, db: Session = Depends(get_db)):
     tmpl = db.query(Template).filter(Template.id == template_id).first()
@@ -104,6 +129,27 @@ def update_status(template_id: str, body: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(tmpl)
     return tmpl
+
+
+@router.get("/{template_id}/download-xlsx")
+def download_template_xlsx(template_id: str, db: Session = Depends(get_db)):
+    """Serve the latest uploaded xlsx file for a template (admin editor use)."""
+    ver = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.template_id == template_id)
+        .order_by(TemplateVersion.version_number.desc())
+        .first()
+    )
+    if not ver or not ver.file_path:
+        raise HTTPException(status_code=404, detail="No xlsx file for this template")
+    path = Path(ver.file_path)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    return FastAPIFileResponse(
+        path=str(path),
+        filename=f"template_{template_id}.xlsx",
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @router.get("/{template_id}/versions", response_model=list[TemplateVersionResponse])
@@ -164,6 +210,8 @@ def save_version(
 )
 async def upload_xlsx_template(
     name: str = Query(..., description="Template name"),
+    template_type: str = Query("subcontractor", description="Template type: subcontractor or master"),
+    project_id: str | None = Query(None),
     file: UploadFile = File(...),
     user: Profile = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -177,9 +225,11 @@ async def upload_xlsx_template(
     raw = await file.read()
     wb_in = openpyxl.load_workbook(_io.BytesIO(raw))
     _UTILITY_SHEETS = {"dropdown", "sheet1", "quality", "cover", "instructions"}
-    for sheet_name in wb_in.sheetnames[:]:
-        if sheet_name.lower() in _UTILITY_SHEETS:
-            del wb_in[sheet_name]
+    sheets_to_keep = [s for s in wb_in.sheetnames if s.lower() not in _UTILITY_SHEETS]
+    if sheets_to_keep:
+        for sheet_name in wb_in.sheetnames[:]:
+            if sheet_name.lower() in _UTILITY_SHEETS:
+                del wb_in[sheet_name]
 
     upload_dir = Path(settings.upload_dir) / "templates"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -191,9 +241,10 @@ async def upload_xlsx_template(
     tmpl = Template(
         id=str(uuid.uuid4()),
         name=name,
-        template_type="subcontractor",
+        template_type=template_type if template_type in ("subcontractor", "master") else "subcontractor",
         status="active",
         created_by=str(user.id),
+        project_id=project_id,
     )
     db.add(tmpl)
     db.flush()

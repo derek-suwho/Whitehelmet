@@ -5,19 +5,34 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
+class UserProjectEntry(BaseModel):
+    project_id: str
+    project_name: str
+    membership_id: str
+    participant_role: str | None = None
+
+
 class UserWithOrgResponse(BaseModel):
     id: str
     display_name: str
     email: str | None = None
     role: str | None
     org_id: str | None
+    org_name: str | None = None
     project_name: str | None = None
+    participant_role: str | None = None
+    projects: list[UserProjectEntry] = []
 
     model_config = {"from_attributes": True}
 
 
 class UpdateRoleRequest(BaseModel):
     role: str  # super_admin | coe_admin | participant
+    participant_role: str | None = None  # focal | member | viewer (only for participant)
+
+
+class UpdateOrgRequest(BaseModel):
+    org_name: str
 
 
 class AssignmentCreate(BaseModel):

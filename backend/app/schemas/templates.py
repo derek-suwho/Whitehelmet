@@ -12,6 +12,7 @@ class TemplateCreate(BaseModel):
     name: str
     description: str | None = None
     template_type: str = "subcontractor"
+    project_id: str | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -21,6 +22,7 @@ class TemplateResponse(BaseModel):
     created_by: str | None
     status: str
     template_type: str = "subcontractor"
+    project_id: str | None = None
     created_at: datetime
     updated_at: datetime
 

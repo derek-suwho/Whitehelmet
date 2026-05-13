@@ -68,9 +68,23 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
 
     members_q = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
+    # Batch-fetch member profiles early so we can derive org_ids for assignment lookup
+    _member_ids = [m.user_id for m in members_q]
+    _member_profiles = (
+        {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_member_ids)).all()} if _member_ids else {}
+    )
+    _member_org_ids = {str(p.org_id) for p in _member_profiles.values() if p.org_id}
+
+    # Include both legacy project-scoped assignments and new org-scoped assignments
+    from sqlalchemy import or_ as _or_
+    _org_filter = _or_(
+        TemplateAssignment.org_id == project_id,
+        *(TemplateAssignment.org_id == oid for oid in _member_org_ids),
+    ) if _member_org_ids else (TemplateAssignment.org_id == project_id)
+
     assignments_q = (
         db.query(TemplateAssignment)
-        .filter(TemplateAssignment.org_id == project_id)
+        .filter(_org_filter)
         .order_by(TemplateAssignment.assigned_at.desc())
         .all()
     )
@@ -81,13 +95,6 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     if assignment_ids:
         rows = db.query(Submission.submitted_by).filter(Submission.assignment_id.in_(assignment_ids)).all()
         submitter_ids = {r[0] for r in rows if r[0] is not None}
-
-    # Re-build members list now that we have submitter info
-    # Batch-fetch all related objects needed by the two loops below
-    _member_ids = [m.user_id for m in members_q]
-    _member_profiles = (
-        {p.id: p for p in db.query(Profile).filter(Profile.id.in_(_member_ids)).all()} if _member_ids else {}
-    )
 
     _version_ids = [a.template_version_id for a in assignments_q if a.template_version_id]
     _versions = (
@@ -107,6 +114,15 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
         if _assigned_user_ids
         else {}
     )
+
+    # Build org_id → org_name map for org-scoped assignments (one profile lookup per unique org)
+    _assignment_org_ids = list({str(a.org_id) for a in assignments_q if a.org_id and str(a.org_id) != project_id})
+    _org_name_map: dict[str, str] = {}
+    if _assignment_org_ids:
+        for row in db.query(Profile.org_id, Profile.org_name).filter(
+            Profile.org_id.in_(_assignment_org_ids), Profile.org_name.isnot(None)
+        ).distinct(Profile.org_id).all():
+            _org_name_map[str(row.org_id)] = row.org_name
 
     members = []
     for m in members_q:
@@ -128,16 +144,20 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
     for a in assignments_q:
         template_name = None
         template_id = None
+        template_type = None
         if a.template_version_id:
             ver = _versions.get(a.template_version_id)
             if ver:
                 template_id = ver.template_id
                 tmpl = _templates.get(ver.template_id)
                 template_name = tmpl.name if tmpl else None
+                template_type = tmpl.template_type if tmpl else None
         assigned_to_display = None
         if a.assigned_to_user_id:
             target = _assigned_profiles.get(a.assigned_to_user_id)
             assigned_to_display = target.display_name if target else None
+
+        assignment_org_name = _org_name_map.get(str(a.org_id)) if a.org_id else None
 
         template_assignments.append(
             {
@@ -145,6 +165,9 @@ def get_project(project_id: str, db: Session = Depends(get_db)):
                 "template_version_id": a.template_version_id,
                 "template_id": template_id,
                 "template_name": template_name,
+                "template_type": template_type,
+                "assignment_org_id": a.org_id,
+                "assignment_org_name": assignment_org_name,
                 "status": a.status,
                 "deadline": a.deadline.isoformat() if a.deadline else None,
                 "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
@@ -324,8 +347,22 @@ def assign_template(
 
 @router.get("/{project_id}/submissions")
 def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
-    """Return all submissions for a project, enriched with submitter name."""
-    assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(TemplateAssignment.org_id == project_id).all()]
+    """Return all submissions for a project, enriched with submitter org name."""
+    from sqlalchemy import or_ as _or_
+
+    # Collect member org_ids so org-based assignments are included
+    member_ids = [m.user_id for m in db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()]
+    member_profiles = (
+        db.query(Profile).filter(Profile.id.in_(member_ids)).all() if member_ids else []
+    )
+    member_org_ids = list({str(p.org_id) for p in member_profiles if p.org_id})
+
+    org_filter = _or_(
+        TemplateAssignment.org_id == project_id,
+        *(TemplateAssignment.org_id == oid for oid in member_org_ids),
+    ) if member_org_ids else (TemplateAssignment.org_id == project_id)
+
+    assignment_ids = [a.id for a in db.query(TemplateAssignment).filter(org_filter).all()]
     if not assignment_ids:
         return []
 
@@ -336,19 +373,23 @@ def list_project_submissions(project_id: str, db: Session = Depends(get_db)):
         .all()
     )
 
+    # Build submitter display cache: profile.org_name or display_name
+    submitter_ids = list({s.submitted_by for s in submissions if s.submitted_by})
+    profile_map = {
+        str(p.id): p
+        for p in db.query(Profile).filter(Profile.id.in_(submitter_ids)).all()
+    } if submitter_ids else {}
+
     result = []
-    org_cache: dict[str, str] = {}
     for idx, s in enumerate(submissions):
-        if s.org_id and s.org_id not in org_cache:
-            from app.models.organization import Organization
-            org = db.query(Organization).filter(Organization.id == s.org_id).first()
-            org_cache[s.org_id] = org.name if org else s.org_id
+        profile = profile_map.get(str(s.submitted_by)) if s.submitted_by else None
+        submitter_name = (profile.org_name or profile.display_name) if profile else "Unknown"
         result.append(
             {
                 "id": s.id,
                 "row_number": idx + 1,
                 "file_name": s.file_name,
-                "submitter_name": org_cache.get(s.org_id or "", "Unknown"),
+                "submitter_name": submitter_name,
                 "reporting_period": s.reporting_period,
                 "submitted_at": s.submitted_at.isoformat() if s.submitted_at else None,
                 "status": s.status,

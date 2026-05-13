@@ -20,11 +20,15 @@ export const useTemplatesStore = defineStore('templates', () => {
     currentVersion.value = versions.value[0] ?? null
   }
 
-  async function createTemplate(name: string, description: string, templateType = 'subcontractor'): Promise<Template> {
-    const tmpl = await api.post<Template>('/api/templates', { name, description, template_type: templateType })
+  async function createTemplate(name: string, description: string, templateType = 'subcontractor', projectId?: string): Promise<Template> {
+    const tmpl = await api.post<Template>('/api/templates', { name, description, template_type: templateType, project_id: projectId ?? null })
     templates.value.unshift(tmpl)
     currentTemplate.value = tmpl
     return tmpl
+  }
+
+  async function fetchProjectTemplates(projectId: string): Promise<Template[]> {
+    return api.get<Template[]>(`/api/templates?project_id=${encodeURIComponent(projectId)}`)
   }
 
   async function fetchMasterTemplates(): Promise<Template[]> {
@@ -64,6 +68,12 @@ export const useTemplatesStore = defineStore('templates', () => {
     _syncTemplate(updated)
   }
 
+  async function deleteTemplate(templateId: string): Promise<void> {
+    await api.delete(`/api/templates/${templateId}`)
+    templates.value = templates.value.filter(t => t.id !== templateId)
+    if (currentTemplate.value?.id === templateId) currentTemplate.value = null
+  }
+
   function _syncTemplate(updated: Template) {
     const idx = templates.value.findIndex(t => t.id === updated.id)
     if (idx !== -1) templates.value[idx] = updated
@@ -80,8 +90,8 @@ export const useTemplatesStore = defineStore('templates', () => {
 
   return {
     templates, currentTemplate, currentVersion, versions, consolidatedSheets,
-    fetchTemplates, fetchTemplate, createTemplate, updateTemplate, saveVersion,
-    publishTemplate, deprecateTemplate, fetchConsolidatedSheets, getDownloadUrl,
+    fetchTemplates, fetchTemplate, fetchProjectTemplates, createTemplate, updateTemplate, saveVersion,
+    publishTemplate, deprecateTemplate, deleteTemplate, fetchConsolidatedSheets, getDownloadUrl,
     fetchMasterTemplates, setTemplateType,
   }
 })
