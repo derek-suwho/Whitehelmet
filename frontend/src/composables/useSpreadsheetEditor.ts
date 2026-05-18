@@ -47,7 +47,7 @@ export const selectedCol = ref(0)
 
 /** Find the header row — the row with the most non-empty cells among the first 10 rows. */
 export function detectHeaderRow(data: unknown[][]): number {
-  const limit = Math.min(data.length, 10)
+  const limit = Math.min(data.length, 30)
   let bestRow = 0
   let bestCount = 0
   for (let r = 0; r < limit; r++) {
@@ -408,8 +408,10 @@ export function useSpreadsheetEditor() {
           const cell = ws[addr]
           if (!cell) { row.push(''); continue }
           if (cell.t === 'e') {
-            // Error cells: show the error string for display
             row.push(cell.w || cell.v || '')
+          } else if (cell.f && (cell.v === undefined || cell.v === null)) {
+            // Formula without cached value — inject as =formula for HyperFormula
+            row.push('=' + cell.f)
           } else {
             row.push(cell.v !== undefined && cell.v !== null ? cell.v : '')
           }
