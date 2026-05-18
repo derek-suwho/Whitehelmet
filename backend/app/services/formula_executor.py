@@ -134,7 +134,7 @@ class FormulaExecutor:
             else:
                 # New column: append after last column and write header
                 target_col_idx = ws.max_column + 1
-                ws.cell(row=1, column=target_col_idx, value=target)
+                ws.cell(row=header_row, column=target_col_idx, value=target)
                 header_to_col[target] = target_col_idx
 
             target_col_indices[(sheet_name, target)] = target_col_idx
