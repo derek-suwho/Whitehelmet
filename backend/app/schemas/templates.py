@@ -31,6 +31,8 @@ class TemplateResponse(BaseModel):
 
 class TemplateVersionCreate(BaseModel):
     schema_data: Any = Field(validation_alias="schema_json", serialization_alias="schema_json")
+    header_row: int | None = None
+    grid_data: list[list] | None = None  # AR-8: optional editor grid snapshot
 
     model_config = {"populate_by_name": True}
 
@@ -42,6 +44,7 @@ class TemplateVersionResponse(BaseModel):
     schema_data: Any = Field(validation_alias="schema_json", serialization_alias="schema_json")
     created_by: str | None
     created_at: datetime
+    header_row: int | None = None
 
     model_config = {"from_attributes": True, "populate_by_name": True}
 

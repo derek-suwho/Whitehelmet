@@ -187,12 +187,38 @@ def save_version(
     )
     next_version = (last.version_number if last else 0) + 1
 
+    import openpyxl, io as _io
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    upload_dir = Path(settings.upload_dir) / "templates"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    snapshot_id = str(uuid.uuid4())
+    snapshot_path = upload_dir / f"{snapshot_id}.xlsx"
+
+    if body.grid_data:
+        wb_snap = openpyxl.Workbook()
+        ws_snap = wb_snap.active
+        for row_data in body.grid_data:
+            ws_snap.append(row_data)
+        wb_snap.save(str(snapshot_path))
+    else:
+        wb_snap = openpyxl.Workbook()
+        ws_snap = wb_snap.active
+        cols = body.schema_data.get("columns", []) if isinstance(body.schema_data, dict) else []
+        hr = body.header_row or 1
+        for ci, col in enumerate(cols, start=1):
+            ws_snap.cell(row=hr, column=ci, value=col.get("name", ""))
+        wb_snap.save(str(snapshot_path))
+
     ver = TemplateVersion(
         id=str(uuid.uuid4()),
         template_id=template_id,
         version_number=next_version,
         schema_json=json.dumps(body.schema_data),
         created_by=str(user.id),
+        header_row=body.header_row,
+        file_path=to_relative(snapshot_path),
     )
     db.add(ver)
     try:

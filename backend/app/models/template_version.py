@@ -16,5 +16,6 @@ class TemplateVersion(Base):
     version_number = Column(Integer, nullable=False)
     schema_json = Column(Text, nullable=False)
     file_path = Column(String(500), nullable=True)   # uploaded xlsx source file
+    header_row = Column(Integer, nullable=True)  # 1-indexed row containing column headers; None = row 1
     created_by = Column(String(36), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
