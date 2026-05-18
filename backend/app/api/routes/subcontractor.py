@@ -372,7 +372,9 @@ async def submit_file(
         formulas = db.query(TemplateFormula).filter(TemplateFormula.template_version_id == a.template_version_id).all()
         if formulas:
             try:
-                processed_bytes = FormulaExecutor.execute(content, formulas)
+                tv = db.query(TemplateVersion).filter(TemplateVersion.id == a.template_version_id).first()
+                hr = (tv.header_row or 1) if tv else 1
+                processed_bytes = FormulaExecutor.execute(content, formulas, header_row=hr)
                 processed_path = org_dir / f"{sha}_processed{ext}"
                 processed_path.write_bytes(processed_bytes)
                 if existing:

@@ -58,7 +58,7 @@ def _apply_scoring(value: float, rules: list[dict]) -> int | None:
 
 class FormulaExecutor:
     @staticmethod
-    def execute(xlsx_bytes: bytes, formulas: list[Any]) -> bytes:
+    def execute(xlsx_bytes: bytes, formulas: list[Any], *, header_row: int = 1, evaluate: bool = True) -> bytes:
         """
         Apply formulas to an xlsx file and return modified bytes.
 
@@ -90,15 +90,16 @@ class FormulaExecutor:
                 ws = wb[sheet_name]
             else:
                 ws = wb.active
+            hr = header_row  # 1-indexed
             header_to_col: dict[str, int] = {}
             for col_idx in range(1, ws.max_column + 1):
-                header = ws.cell(row=1, column=col_idx).value
-                if header:
-                    header_to_col[str(header)] = col_idx
+                hdr = ws.cell(row=hr, column=col_idx).value
+                if hdr:
+                    header_to_col[str(hdr)] = col_idx
             state = {
                 "ws": ws,
                 "header_to_col": header_to_col,
-                "data_start": 2,
+                "data_start": hr + 1,
                 "data_end": ws.max_row,
             }
             sheet_state[sheet_name] = state
@@ -148,6 +149,11 @@ class FormulaExecutor:
                 # single_cell: write formula once at target_row (or data_start if not set)
                 write_row = getattr(formula, "target_row", None) or data_start
                 ws.cell(row=write_row, column=target_col_idx, value=translated)
+
+        if not evaluate:
+            buf = io.BytesIO()
+            wb.save(buf)
+            return buf.getvalue()
 
         # ── Evaluate with xlcalculator ────────────────────────────────────────
         buf = io.BytesIO()

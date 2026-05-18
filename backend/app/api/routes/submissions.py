@@ -26,6 +26,7 @@ from app.models.profile import Profile
 from app.models.submission import Submission
 from app.models.template_assignment import TemplateAssignment
 from app.models.template_formula import TemplateFormula
+from app.models.template_version import TemplateVersion
 from app.schemas.subcontractor import SubmissionResponse, SubmissionReviewRequest
 from app.services.formula_executor import FormulaExecutor
 from app.services.kpi_report import generate_safety_kpi_report
@@ -254,7 +255,9 @@ def recalculate_submission(
     with open(str(_raw_abs), "rb") as f:
         raw_bytes = f.read()
 
-    processed_bytes = FormulaExecutor.execute(raw_bytes, formulas)
+    tv = db.query(TemplateVersion).filter(TemplateVersion.id == assignment.template_version_id).first()
+    hr = (tv.header_row or 1) if tv else 1
+    processed_bytes = FormulaExecutor.execute(raw_bytes, formulas, header_row=hr)
 
     if sub.processed_file_path:
         target_abs = resolve_path(sub.processed_file_path)
