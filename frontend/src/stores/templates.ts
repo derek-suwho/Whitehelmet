@@ -41,10 +41,10 @@ export const useTemplatesStore = defineStore('templates', () => {
     return updated
   }
 
-  async function saveVersion(templateId: string, schemaJson: SchemaJson): Promise<TemplateVersion> {
+  async function saveVersion(templateId: string, schemaJson: SchemaJson, headerRow?: number | null): Promise<TemplateVersion> {
     const ver = await api.post<TemplateVersion>(
       `/api/templates/${templateId}/versions`,
-      { schema_json: schemaJson },
+      { schema_json: schemaJson, header_row: headerRow ?? null },
     )
     versions.value.unshift(ver)
     currentVersion.value = ver

@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useSpreadsheetStore } from '@/stores/spreadsheet'
-import { useSpreadsheetEditor } from '@/composables/useSpreadsheetEditor'
+import { useSpreadsheetEditor, detectHeaderRow } from '@/composables/useSpreadsheetEditor'
 import { useTemplatesStore } from '@/stores/templates'
 import SpreadsheetEditor from '@/components/editor/SpreadsheetEditor.vue'
 import AIChatPanel from '@/components/template/AIChatPanel.vue'
@@ -17,6 +17,10 @@ const templatesStore = useTemplatesStore()
 
 const templateId = (route.params.templateId ?? route.params.id) as string
 const projectId = route.query.projectId as string | undefined
+
+const aiChatRef = ref<InstanceType<typeof AIChatPanel> | null>(null)
+const headerRow = ref<number | null>(null)
+const headerRowConfirmed = ref(false)
 
 const templateName = ref('')
 const loadError = ref('')
@@ -62,10 +66,37 @@ onMounted(async () => {
         : ['Column 1', 'Column 2', 'Column 3']
       loadWorkbookFromHeaders(headers)
     }
+
+    // Header row detection
+    const existingHeaderRow = templatesStore.currentVersion?.header_row
+    if (existingHeaderRow) {
+      headerRow.value = existingHeaderRow
+      headerRowConfirmed.value = true
+    } else {
+      nextTick(() => {
+        const data = spreadsheetStore.instance?.getData() as unknown[][] | undefined
+        if (data?.length) {
+          const detected = detectHeaderRow(data) + 1  // 0-indexed → 1-indexed
+          const allHeaders = (data[detected - 1] ?? []) as unknown[]
+          const headerNames = allHeaders
+            .map(v => (v != null ? String(v).trim() : ''))
+            .filter(h => h.length > 0)
+          const preview = headerNames.slice(0, 6).join(', ')
+            + (headerNames.length > 6 ? ` ... (${headerNames.length} total)` : '')
+          headerRow.value = detected
+          aiChatRef.value?.injectHeaderPrompt(detected, preview)
+        }
+      })
+    }
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Failed to load template'
   }
 })
+
+function onHeaderRowConfirmed(row: number) {
+  headerRow.value = row
+  headerRowConfirmed.value = true
+}
 
 // When the AI generates a schema, reload the spreadsheet with those headers
 function onSchemaGenerated(schemaJson: object) {
@@ -86,8 +117,9 @@ async function saveTemplate() {
 
   try {
     const data = hot.getData() as unknown[][]
-    const firstRow = (data[0] ?? []) as unknown[]
-    const headers = firstRow
+    const hr = (headerRow.value ?? 1) - 1  // 1-indexed → 0-indexed
+    const headerRowData = (data[hr] ?? []) as unknown[]
+    const headers = headerRowData
       .map(v => (v != null ? String(v).trim() : ''))
       .filter(h => h.length > 0)
 
@@ -104,7 +136,7 @@ async function saveTemplate() {
       await templatesStore.updateTemplate(templateId, trimmedName)
     }
 
-    await templatesStore.saveVersion(templateId, schemaJson)
+    await templatesStore.saveVersion(templateId, schemaJson, headerRow.value)
     saveSuccess.value = true
     setTimeout(() => { saveSuccess.value = false }, 3000)
   } catch (e) {
@@ -204,9 +236,11 @@ function goBack() {
       </div>
       <div class="w-80 shrink-0 border-l border-gray-200 flex flex-col min-h-0">
         <AIChatPanel
+          ref="aiChatRef"
           mode="template-builder"
           :template-id="templateId"
           @schema-generated="onSchemaGenerated"
+          @header-confirmed="onHeaderRowConfirmed"
         />
       </div>
     </div>

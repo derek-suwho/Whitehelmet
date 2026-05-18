@@ -12,6 +12,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'schema-generated': [schemaJson: object]
   'finetune-applied': []
+  'header-confirmed': [row: number]
 }>()
 
 interface Message { role: 'user' | 'assistant'; content: string }
@@ -108,7 +109,27 @@ function injectFormulaContext(text: string) {
     .finally(() => { loading.value = false })
 }
 
-defineExpose({ injectFormulaContext })
+const headerPrompt = ref<{ row: number; headers: string } | null>(null)
+const headerChangeInput = ref('')
+
+function injectHeaderPrompt(row: number, headerPreview: string) {
+  headerPrompt.value = { row, headers: headerPreview }
+}
+
+function confirmHeaderRow() {
+  emit('header-confirmed', headerPrompt.value!.row)
+  headerPrompt.value = null
+}
+
+function changeHeaderRow() {
+  const parsed = parseInt(headerChangeInput.value, 10)
+  if (parsed > 0) {
+    emit('header-confirmed', parsed)
+    headerPrompt.value = null
+  }
+}
+
+defineExpose({ injectFormulaContext, injectHeaderPrompt })
 </script>
 
 <template>
@@ -123,6 +144,33 @@ defineExpose({ injectFormulaContext })
     </div>
 
     <div ref="scrollEl" class="flex-1 overflow-y-auto p-4 space-y-3">
+      <!-- Header row detection prompt -->
+      <div v-if="headerPrompt" class="mx-3 mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm space-y-2">
+        <p class="text-gray-700">
+          I detected <strong>row {{ headerPrompt.row }}</strong> as your header row:
+          <span class="text-gray-500">{{ headerPrompt.headers }}</span>
+        </p>
+        <div class="flex items-center gap-2">
+          <button
+            class="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            @click="confirmHeaderRow"
+          >Confirm Row {{ headerPrompt.row }}</button>
+          <span class="text-xs text-gray-400">or</span>
+          <input
+            v-model="headerChangeInput"
+            type="number"
+            min="1"
+            placeholder="Row #"
+            class="w-16 rounded border border-gray-300 px-2 py-1 text-xs"
+            @keydown.enter="changeHeaderRow"
+          />
+          <button
+            class="rounded-md border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-100"
+            @click="changeHeaderRow"
+          >Use This Row</button>
+        </div>
+      </div>
+
       <div
         v-for="(msg, i) in messages"
         :key="i"
