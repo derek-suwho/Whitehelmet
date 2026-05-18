@@ -80,7 +80,7 @@ async function handleDownloadFile(file: UserFile) {
     if (!resp.ok) throw new Error('Download failed')
     const blob = await resp.blob()
     const arrayBuffer = await blob.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true })
+    const wb = XLSX.read(new Uint8Array(arrayBuffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
     spreadsheet.loadWorkbook(wb, file.original_name, arrayBuffer)
     router.push({ name: 'workspace' })
   } catch (err) {

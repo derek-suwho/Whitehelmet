@@ -10,6 +10,8 @@ let _allSheetFormats: Record<string, Record<string, any>>[] = []
 let _allSheetMerges: any[][] = []
 let _allSheetColWidths: number[][] = []
 let _allSheetRowHeights: number[][] = []
+let _allSheetHiddenRows: number[][] = []
+let _allSheetHiddenCols: number[][] = []
 let _sheetsData: any[][][] = []
 let _sheetNames: string[] = []
 let _zoomLevel = 1.0
@@ -241,18 +243,28 @@ Handsontable.renderers.registerRenderer(
       TD.style.whiteSpace = 'normal'
       TD.style.wordBreak = 'break-word'
     }
-    if (fmt.numFormat && value !== '' && value !== null && value !== undefined) {
-      const num = parseFloat(String(value))
-      if (!isNaN(num)) {
-        if (fmt.numFormat === 'currency')
-          TD.textContent =
-            '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        else if (fmt.numFormat === 'percent') TD.textContent = (num * 100).toFixed(1) + '%'
-        else if (fmt.numFormat === 'number') TD.textContent = num.toLocaleString('en-US')
-        else if (fmt.numFormat === 'date') {
-          const d = new Date(Math.round((num - 25569) * 86400 * 1000))
-          if (!isNaN(d.getTime())) TD.textContent = d.toLocaleDateString('en-US')
+    // Display formatting — visual only, does not affect stored data
+    if (value !== '' && value !== null && value !== undefined) {
+      if (fmt.numFormat) {
+        // User-applied format (toolbar) takes precedence over file format
+        const num = parseFloat(String(value))
+        if (!isNaN(num)) {
+          if (fmt.numFormat === 'currency')
+            TD.textContent =
+              '$' + num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          else if (fmt.numFormat === 'percent') TD.textContent = (num * 100).toFixed(1) + '%'
+          else if (fmt.numFormat === 'number') TD.textContent = num.toLocaleString('en-US')
+          else if (fmt.numFormat === 'date') {
+            const d = new Date(Math.round((num - 25569) * 86400 * 1000))
+            if (!isNaN(d.getTime())) TD.textContent = d.toLocaleDateString('en-US')
+          }
         }
+      } else if (fmt.xlsxFormat) {
+        // XLSX format code from imported file (dates, percentages, currency, etc.)
+        try {
+          const formatted = (XLSX.SSF as any).format(fmt.xlsxFormat, value)
+          if (formatted !== undefined && formatted !== null) TD.textContent = formatted
+        } catch { /* fallback to raw value display */ }
       }
     }
   },
@@ -266,6 +278,14 @@ export function useSpreadsheetEditor() {
   function _updateFormulaBar(row: number, col: number): void {
     formulaRef.value = _colLetter(col) + (row + 1)
     if (!_currentInstance) return
+    // Show formula expression (prefixed with =) if the cell has one stored
+    const physRow = _currentInstance.toPhysicalRow(row)
+    const physCol = _currentInstance.toPhysicalColumn(col)
+    const fmt = _getFmt(_currentSheetIdx, physRow, physCol)
+    if (fmt.formula) {
+      formulaValue.value = '=' + fmt.formula
+      return
+    }
     const raw = (_currentInstance as any).getSourceDataAtCell
       ? (_currentInstance as any).getSourceDataAtCell(row, col)
       : _currentInstance.getDataAtCell(row, col)
@@ -316,16 +336,12 @@ export function useSpreadsheetEditor() {
     _applyFmt({ [key]: !current })
   }
 
-  // Returns the right display value for a numeric XLSX cell.
-  // Comma-formatted numbers ("125,000") → raw numeric so HyperFormula SUM works.
-  // Everything else (dates "10/30/2025", custom formats) → display string.
-  function _displayVal(cell: any): any {
-    const v = cell.v
-    const w = typeof cell.w === 'string' ? cell.w.trim() : cell.w
-    if (v === undefined || v === null) return ''
-    if (!w) return v
-    if (/^-?[\d,]+(\.\d+)?$/.test(w)) return v   // plain/comma number → raw value
-    return w                                        // date or other format → display string
+  // Returns the raw underlying value for a cell — never the display string.
+  // Display formatting is handled exclusively by the renderer using stored
+  // XLSX format codes, so the data model always reflects the true file value.
+  function _rawVal(cell: any): any {
+    if (cell.v === undefined || cell.v === null) return ''
+    return cell.v
   }
 
   // Resolve a simple cross-sheet reference by looking up the cell directly in wb.
@@ -338,7 +354,7 @@ export function useSpreadsheetEditor() {
     if (!ws) return null
     const cell = ws[m[2]]
     if (!cell) return ''
-    return _displayVal(cell)
+    return _rawVal(cell)
   }
 
   // ── openFile: parse XLSX workbook and mount HT ──
@@ -355,6 +371,8 @@ export function useSpreadsheetEditor() {
     _allSheetMerges = []
     _allSheetColWidths = []
     _allSheetRowHeights = []
+    _allSheetHiddenRows = []
+    _allSheetHiddenCols = []
     _sheetsData = []
     // Filter out hidden/very-hidden sheets (wb.Workbook.Sheets[i].Hidden > 0)
     const wbSheetMeta: { Hidden?: number }[] = wb.Workbook?.Sheets ?? []
@@ -369,6 +387,9 @@ export function useSpreadsheetEditor() {
         _sheetsData.push([new Array(10).fill('')])
         _allSheetMerges.push([])
         _allSheetColWidths.push(new Array(10).fill(100))
+        _allSheetRowHeights.push([])
+        _allSheetHiddenRows.push([])
+        _allSheetHiddenCols.push([])
         _allSheetFormats.push({})
         return
       }
@@ -376,8 +397,9 @@ export function useSpreadsheetEditor() {
       const maxCols = Math.max(range.e.c + 1, 10)
       const maxRows = range.e.r + 1
 
-      // Data rows — formula strings first, then raw number (avoids comma-formatted
-      // strings like "125,000" that HyperFormula can't sum), then display value
+      // Data rows — always use raw cell.v so round-trip fidelity is preserved.
+      // Display formatting (dates, percentages, currency) is handled exclusively
+      // by the renderer via stored XLSX format codes (cell.z) in _allSheetFormats.
       const processed: any[][] = []
       for (let R = 0; R < maxRows; R++) {
         const row: any[] = []
@@ -385,69 +407,78 @@ export function useSpreadsheetEditor() {
           const addr = XLSX.utils.encode_cell({ r: R, c: C })
           const cell = ws[addr]
           if (!cell) { row.push(''); continue }
-          let val: any
-          if (cell.f) {
-            // Always use cached Excel value for formula cells so the display
-            // matches what Excel computed. Avoids: (1) cross-sheet refs pulling
-            // wrong data via _resolveXSheet, (2) HyperFormula #REF! errors from
-            // unsupported functions or complex references.
-            val = _displayVal(cell)
-          } else if (cell.t === 'n' && cell.v !== undefined && cell.v !== null) {
-            val = _displayVal(cell)
-          } else if (cell.w !== undefined && cell.w !== '') {
-            val = cell.w
+          if (cell.t === 'e') {
+            // Error cells: show the error string for display
+            row.push(cell.w || cell.v || '')
           } else {
-            val = cell.v !== undefined && cell.v !== null ? cell.v : ''
+            row.push(cell.v !== undefined && cell.v !== null ? cell.v : '')
           }
-          row.push(val)
         }
         processed.push(row)
       }
       while (processed.length < 50) processed.push(new Array(maxCols).fill(''))
       _sheetsData.push(processed)
 
-      // Collect formulas found in this sheet (first sheet only, skip header row)
+      // Collect formulas found in this sheet (first sheet only, skip header row).
+      // Checks both user-typed =formulas in data and XLSX formula metadata.
       if (sheetIdx === 0 && processed.length > 0) {
         const headers = processed[0]
         const found: { column: string; expression: string }[] = []
         const seen = new Set<string>()
         for (let DC = 0; DC < maxCols; DC++) {
           for (let DR = 1; DR < processed.length; DR++) {
+            // Check data for user-typed =formula strings
             const v = String(processed[DR][DC] ?? '')
             if (v.startsWith('=') && !seen.has(v)) {
               seen.add(v)
               found.push({ column: String(headers[DC] ?? `Col ${DC + 1}`), expression: v })
               break
             }
+            // Check XLSX formula metadata
+            const cellAddr = XLSX.utils.encode_cell({ r: DR, c: DC })
+            const xlsxCell = ws[cellAddr]
+            if (xlsxCell?.f) {
+              const expr = '=' + xlsxCell.f
+              if (!seen.has(expr)) {
+                seen.add(expr)
+                found.push({ column: String(headers[DC] ?? `Col ${DC + 1}`), expression: expr })
+                break
+              }
+            }
           }
         }
         if (found.length) detectedFormulas.value = found
       }
 
-      // Cell styles
+      // Cell styles, XLSX format codes, and formula expressions
       const fmts: Record<string, Record<string, any>> = {}
       for (let SR = 0; SR <= range.e.r; SR++) {
         for (let SC = 0; SC <= range.e.c; SC++) {
           const addr = XLSX.utils.encode_cell({ r: SR, c: SC })
           const scell = ws[addr]
-          if (!scell?.s) continue
-          const s = scell.s
+          if (!scell) continue
           const fmt: Record<string, any> = {}
-          // XLSX.js flattens font props directly onto s (not s.font)
-          if (s.bold) fmt.bold = true
-          if (s.italic) fmt.italic = true
-          if (s.underline) fmt.underline = true
-          const fc = _resolveXlsxColor(s.color)
-          if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
-          // Fill: fgColor is flat on s (not s.fill.fgColor)
-          if (s.patternType === 'solid') {
-            const bg = _resolveXlsxColor(s.fgColor)
-            if (bg && bg.toUpperCase() !== '#FFFFFF') fmt.bgColor = bg
+          // Style props (XLSX.js flattens font props directly onto s)
+          if (scell.s) {
+            const s = scell.s
+            if (s.bold) fmt.bold = true
+            if (s.italic) fmt.italic = true
+            if (s.underline) fmt.underline = true
+            const fc = _resolveXlsxColor(s.color)
+            if (fc && fc.toUpperCase() !== '#000000') fmt.color = fc
+            if (s.patternType === 'solid') {
+              const bg = _resolveXlsxColor(s.fgColor)
+              if (bg && bg.toUpperCase() !== '#FFFFFF') fmt.bgColor = bg
+            }
+            if (s.alignment) {
+              if (s.alignment.horizontal) fmt.align = s.alignment.horizontal
+              if (s.alignment.wrapText) fmt.wrapText = true
+            }
           }
-          if (s.alignment) {
-            if (s.alignment.horizontal) fmt.align = s.alignment.horizontal
-            if (s.alignment.wrapText) fmt.wrapText = true
-          }
+          // XLSX number format code (e.g. "m/d/yyyy", "0.00%", "#,##0")
+          if (scell.z && scell.z !== 'General') fmt.xlsxFormat = scell.z
+          // Formula expression (stored without leading =)
+          if (scell.f) fmt.formula = scell.f
           if (Object.keys(fmt).length > 0) fmts[`${SR},${SC}`] = fmt
         }
       }
@@ -467,27 +498,33 @@ export function useSpreadsheetEditor() {
       }
       _allSheetMerges.push(merges)
 
-      // Column widths
+      // Column widths + hidden columns
       const cols = ws['!cols'] || []
       const widths: number[] = []
+      const hiddenCols: number[] = []
       for (let CW = 0; CW < maxCols; CW++) {
         const ci = cols[CW]
+        if (ci?.hidden) hiddenCols.push(CW)
         if (ci?.wpx) widths.push(Math.max(40, ci.wpx))
         else if (ci?.wch) widths.push(Math.max(40, Math.round(ci.wch * 7)))
         else widths.push(100)
       }
       _allSheetColWidths.push(widths)
+      _allSheetHiddenCols.push(hiddenCols)
 
-      // Row heights
+      // Row heights + hidden rows
       const rowDefs = ws['!rows'] || []
       const heights: number[] = []
+      const hiddenRows: number[] = []
       for (let RH = 0; RH < Math.max(maxRows, 50); RH++) {
         const ri = rowDefs[RH]
+        if (ri?.hidden) hiddenRows.push(RH)
         if (ri?.hpx) heights.push(Math.max(18, ri.hpx))
         else if (ri?.hpt) heights.push(Math.max(18, Math.round(ri.hpt * 1.33)))
         else heights.push(23)
       }
       _allSheetRowHeights.push(heights)
+      _allSheetHiddenRows.push(hiddenRows)
     })
 
     sheetNames.value = _sheetNames.slice()
@@ -511,7 +548,8 @@ export function useSpreadsheetEditor() {
       manualRowResize: true,
       contextMenu: true,
       columnSorting: true,
-      hiddenRows: { indicators: false },
+      hiddenRows: { rows: _allSheetHiddenRows[0] ?? [], indicators: false },
+      hiddenColumns: { columns: _allSheetHiddenCols[0] ?? [], indicators: false },
       fixedRowsTop: 1,
       stretchH: 'none' as const,
       fillHandle: true,
@@ -577,6 +615,8 @@ export function useSpreadsheetEditor() {
     _sheetNames = []
     _currentSheetIdx = 0
     _allSheetFormats = []
+    _allSheetHiddenRows = []
+    _allSheetHiddenCols = []
     sheetNames.value = []
     sheetTabColors.value = []
     currentSheetIdx.value = 0
@@ -596,6 +636,8 @@ export function useSpreadsheetEditor() {
       mergeCells: _allSheetMerges[idx] ?? [],
       colWidths: _allSheetColWidths[idx] ?? 100,
       rowHeights: _allSheetRowHeights[idx] ?? 23,
+      hiddenRows: { rows: _allSheetHiddenRows[idx] ?? [], indicators: false },
+      hiddenColumns: { columns: _allSheetHiddenCols[idx] ?? [], indicators: false },
     })
     _currentInstance.loadData(_sheetsData[idx])
   }
@@ -788,6 +830,32 @@ export function useSpreadsheetEditor() {
     _applyFmt({ numFormat: val || null })
   }
 
+  function _restoreXlsxMetadata(ws: XLSX.WorkSheet, sheetIdx: number, data: any[][]): void {
+    const fmts = _allSheetFormats[sheetIdx] || {}
+    for (const [key, fmt] of Object.entries(fmts)) {
+      const [r, c] = key.split(',').map(Number)
+      const addr = XLSX.utils.encode_cell({ r, c })
+      const cell = ws[addr]
+      if (!cell) continue
+      // Restore XLSX number format code
+      if (fmt.xlsxFormat) cell.z = fmt.xlsxFormat
+      // Restore formula expression
+      if (fmt.formula) cell.f = fmt.formula
+    }
+    // Also convert user-typed =formula strings
+    Object.keys(ws)
+      .filter((k) => !k.startsWith('!'))
+      .forEach((addr) => {
+        const cell = ws[addr]
+        if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
+          cell.f = cell.v.slice(1)
+          delete cell.v
+          delete cell.w
+          delete cell.t
+        }
+      })
+  }
+
   function downloadXlsx(fileName: string): void {
     if (!_currentInstance) return
     _sheetsData[_currentSheetIdx] = (_currentInstance as any).getSourceData
@@ -796,18 +864,7 @@ export function useSpreadsheetEditor() {
     const wb2 = XLSX.utils.book_new()
     for (let i = 0; i < _sheetsData.length; i++) {
       const ws = XLSX.utils.aoa_to_sheet(_sheetsData[i])
-      // Convert formula strings to XLSX formula cell objects so Excel evaluates them
-      Object.keys(ws)
-        .filter((k) => !k.startsWith('!'))
-        .forEach((addr) => {
-          const cell = ws[addr]
-          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
-            cell.f = cell.v.slice(1)
-            delete cell.v
-            delete cell.w
-            delete cell.t
-          }
-        })
+      _restoreXlsxMetadata(ws, i, _sheetsData[i])
       XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)
     }
     const arr = XLSX.write(wb2, { bookType: 'xlsx', type: 'array' })
@@ -844,7 +901,7 @@ export function useSpreadsheetEditor() {
     document.addEventListener('keydown', _onKeydown)
   }
 
-  /** Return all sheets as xlsx bytes (preserves sheet names). */
+  /** Return all sheets as xlsx bytes (preserves sheet names, format codes, formulas). */
   function toXlsxBytes(): Uint8Array | null {
     if (!_currentInstance || !_sheetsData.length) return null
     _sheetsData[_currentSheetIdx] = (_currentInstance as any).getSourceData
@@ -853,17 +910,7 @@ export function useSpreadsheetEditor() {
     const wb2 = XLSX.utils.book_new()
     for (let i = 0; i < _sheetsData.length; i++) {
       const ws = XLSX.utils.aoa_to_sheet(_sheetsData[i])
-      Object.keys(ws)
-        .filter((k) => !k.startsWith('!'))
-        .forEach((addr) => {
-          const cell = ws[addr]
-          if (cell && typeof cell.v === 'string' && cell.v.startsWith('=')) {
-            cell.f = cell.v.slice(1)
-            delete cell.v
-            delete cell.w
-            delete cell.t
-          }
-        })
+      _restoreXlsxMetadata(ws, i, _sheetsData[i])
       XLSX.utils.book_append_sheet(wb2, ws, _sheetNames[i] || `Sheet${i + 1}`)
     }
     return new Uint8Array(XLSX.write(wb2, { bookType: 'xlsx', type: 'array' }))

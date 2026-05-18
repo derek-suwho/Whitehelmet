@@ -71,7 +71,7 @@ onMounted(async () => {
     )
     if (!resp.ok) throw new Error(`Failed to load submission (${resp.status})`)
     const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
     spreadsheetStore.loadWorkbook(wb, fileName.value, buffer)
     viewMode.value = mode
 
@@ -97,7 +97,7 @@ async function switchView(mode: 'raw' | 'processed') {
     )
     if (!resp.ok) throw new Error(`Failed to load ${mode} file`)
     const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
     spreadsheetStore.loadWorkbook(wb, fileName.value, buffer)
 
     const hot = spreadsheetStore.instance

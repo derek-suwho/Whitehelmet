@@ -221,22 +221,26 @@ async def upload_xlsx_template(
     from app.core.config import get_settings
     settings = get_settings()
 
-    # Save file to disk, stripping utility sheets (Dropdown, Sheet1, Quality, etc.)
-    import openpyxl, io as _io
     raw = await file.read()
-    wb_in = openpyxl.load_workbook(_io.BytesIO(raw))
-    _UTILITY_SHEETS = {"dropdown", "sheet1", "quality", "cover", "instructions"}
-    sheets_to_keep = [s for s in wb_in.sheetnames if s.lower() not in _UTILITY_SHEETS]
-    if sheets_to_keep:
-        for sheet_name in wb_in.sheetnames[:]:
-            if sheet_name.lower() in _UTILITY_SHEETS:
-                del wb_in[sheet_name]
-
     upload_dir = Path(settings.upload_dir) / "templates"
     upload_dir.mkdir(parents=True, exist_ok=True)
     file_id = str(uuid.uuid4())
     dest = upload_dir / f"{file_id}.xlsx"
-    wb_in.save(str(dest))
+
+    if template_type == "master":
+        # Master templates: save raw bytes to preserve exact file structure
+        dest.write_bytes(raw)
+    else:
+        # Subcontractor templates: strip utility sheets (Dropdown, Sheet1, Quality, etc.)
+        import openpyxl, io as _io
+        wb_in = openpyxl.load_workbook(_io.BytesIO(raw))
+        _UTILITY_SHEETS = {"dropdown", "sheet1", "quality", "cover", "instructions"}
+        sheets_to_keep = [s for s in wb_in.sheetnames if s.lower() not in _UTILITY_SHEETS]
+        if sheets_to_keep:
+            for sheet_name in wb_in.sheetnames[:]:
+                if sheet_name.lower() in _UTILITY_SHEETS:
+                    del wb_in[sheet_name]
+        wb_in.save(str(dest))
 
     # Create Template record
     tmpl = Template(

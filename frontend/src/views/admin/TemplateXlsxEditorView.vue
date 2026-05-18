@@ -49,7 +49,7 @@ onMounted(async () => {
 
     if (fileResp.ok) {
       const buffer = await fileResp.arrayBuffer()
-      const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+      const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
       spreadsheetStore.loadWorkbook(wb, `${templateName.value}.xlsx`, buffer)
     } else {
       // Fall back to schema_json columns as header row.

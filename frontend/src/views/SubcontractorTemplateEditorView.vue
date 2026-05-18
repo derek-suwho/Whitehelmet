@@ -14,6 +14,8 @@ const spreadsheetStore = useSpreadsheetStore()
 
 const assignmentId = route.params.assignmentId as string
 const templateName = ref((route.query.name as string | undefined) ?? 'Template')
+const participantRole = (route.query.role as string | undefined) ?? 'focal'
+const canSubmit = participantRole === 'focal'
 
 const loadError = ref('')
 const submitLoading = ref(false)
@@ -35,7 +37,7 @@ onMounted(async () => {
     )
     if (!resp.ok) throw new Error(`Failed to load template (${resp.status})`)
     const buffer = await resp.arrayBuffer()
-    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true })
+    const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
     spreadsheetStore.loadWorkbook(wb, `${templateName.value}.xlsx`, buffer)
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : 'Failed to load template'
@@ -56,7 +58,7 @@ async function submitFilled() {
     if (rawBuffer) {
       // Patch the original template with entered values — preserves all cell
       // colors, merged cells, row heights, and other formatting.
-      const wb = XLSX.read(new Uint8Array(rawBuffer), { type: 'array', cellStyles: true })
+      const wb = XLSX.read(new Uint8Array(rawBuffer), { type: 'array', cellStyles: true, cellNF: true, cellFormula: true })
       const sheetName = wb.SheetNames[currentSheetIdx.value] ?? wb.SheetNames[0]
       const ws = wb.Sheets[sheetName]
       const data = hot.getData() as unknown[][]
@@ -70,8 +72,11 @@ async function submitFilled() {
             if (newVal === null || newVal === undefined || newVal === '') continue
             const addr = XLSX.utils.encode_cell({ r: R, c: C })
             const existing = ws[addr] ?? {}
+            // Don't overwrite formula cells — formulas are managed server-side
+            if (existing.f) continue
             ws[addr] = {
               ...(existing.s ? { s: existing.s } : {}),
+              ...(existing.z ? { z: existing.z } : {}),
               v: newVal,
               t: typeof newVal === 'number' ? 'n' : 's',
             }
@@ -138,7 +143,9 @@ function goBack() {
         <span v-if="submitSuccess" class="text-xs text-green-600 font-medium">
           Submitted! Redirecting…
         </span>
+        <span v-if="!canSubmit" class="text-xs text-muted italic">Edit only — focal members can submit</span>
         <button
+          v-if="canSubmit"
           :disabled="submitLoading || submitSuccess"
           class="bg-brand-600 text-white px-5 py-1.5 rounded-lg text-sm font-medium hover:bg-brand-700 disabled:opacity-50 transition-colors"
           @click="submitFilled"
@@ -150,8 +157,13 @@ function goBack() {
 
     <!-- Instruction banner -->
     <div class="px-6 py-2.5 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 shrink-0">
-      Fill in your data below, then click <strong>Submit</strong> when ready.
-      All changes stay in this editor until you submit — nothing is saved automatically.
+      <template v-if="canSubmit">
+        Fill in your data below, then click <strong>Submit</strong> when ready.
+        All changes stay in this editor until you submit — nothing is saved automatically.
+      </template>
+      <template v-else>
+        You can edit and review the data below. Only focal members can submit.
+      </template>
     </div>
 
     <!-- Error state -->
