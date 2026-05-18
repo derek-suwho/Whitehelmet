@@ -62,6 +62,7 @@ export interface TemplateVersion {
   schema_json: SchemaJson
   created_by: string | null
   created_at: string
+  header_row: number | null  // 1-indexed row containing column headers
 }
 
 export interface TemplateAssignment {
