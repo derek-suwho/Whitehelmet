@@ -230,6 +230,26 @@ def save_version(
     return ver
 
 
+def _detect_header_row(wb: "openpyxl.Workbook", max_scan: int = 30) -> int:
+    """Detect the header row in the active sheet. Returns 1-indexed row number.
+    Heuristic: first row where >50% of cells are non-empty strings."""
+    ws = wb.active
+    max_row = min(ws.max_row or 1, max_scan)
+    max_col = ws.max_column or 1
+    for r in range(1, max_row + 1):
+        non_empty = 0
+        str_cells = 0
+        for c in range(1, max_col + 1):
+            val = ws.cell(row=r, column=c).value
+            if val is not None:
+                non_empty += 1
+                if isinstance(val, str) and val.strip():
+                    str_cells += 1
+        if max_col > 0 and str_cells / max_col > 0.5:
+            return r
+    return 1  # default
+
+
 @router.post(
     "/upload-xlsx",
     status_code=status.HTTP_201_CREATED,
@@ -268,6 +288,11 @@ async def upload_xlsx_template(
                     del wb_in[sheet_name]
         wb_in.save(str(dest))
 
+    # AR-10: Auto-detect header_row from the uploaded xlsx
+    import openpyxl as _openpyxl
+    detect_wb = _openpyxl.load_workbook(str(dest), data_only=True)
+    detected_header_row = _detect_header_row(detect_wb)
+
     # Create Template record
     tmpl = Template(
         id=str(uuid.uuid4()),
@@ -287,6 +312,7 @@ async def upload_xlsx_template(
         version_number=1,
         schema_json='{"columns":[]}',
         file_path=to_relative(dest),
+        header_row=detected_header_row,
         created_by=str(user.id),
     )
     db.add(ver)
