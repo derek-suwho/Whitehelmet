@@ -237,3 +237,89 @@ class FormulaExecutor:
         result_buf = io.BytesIO()
         wb.save(result_buf)
         return result_buf.getvalue()
+
+    @staticmethod
+    def remap_expression(
+        expression: str,
+        template_header_to_col: dict[str, int],
+        target_header_to_col: dict[str, int],
+        header_rename_map: dict[str, str] | None = None,
+    ) -> str:
+        """Remap formula column references from template layout to target layout.
+
+        Args:
+            template_header_to_col: template header name → column index
+            target_header_to_col: consolidated header name → column index
+            header_rename_map: template header → unified header name (from AI column_map)
+        """
+        template_letter_to_name: dict[str, str] = {}
+        for name, col_idx in template_header_to_col.items():
+            letter = _col_index_to_letter(col_idx)
+            template_letter_to_name[letter] = name
+
+        rename = header_rename_map or {}
+        name_to_target_letter: dict[str, str] = {
+            name: _col_index_to_letter(col_idx)
+            for name, col_idx in target_header_to_col.items()
+        }
+
+        def resolve_target_letter(template_name: str) -> str | None:
+            if template_name in name_to_target_letter:
+                return name_to_target_letter[template_name]
+            unified_name = rename.get(template_name)
+            if unified_name and unified_name in name_to_target_letter:
+                return name_to_target_letter[unified_name]
+            for src, dst in rename.items():
+                if src.upper() == template_name.upper() and dst in name_to_target_letter:
+                    return name_to_target_letter[dst]
+            return None
+
+        def replace(m: re.Match) -> str:
+            col_ref = m.group(1)
+            row_part = m.group(2)
+            header_name = template_letter_to_name.get(col_ref)
+            if header_name:
+                target_letter = resolve_target_letter(header_name)
+                if target_letter:
+                    return target_letter + row_part
+            target_letter = resolve_target_letter(col_ref)
+            if target_letter:
+                return target_letter + row_part
+            return col_ref + row_part
+
+        return re.sub(r"([A-Z]+)(\{row\}|\d+)", replace, expression)
+
+    @staticmethod
+    def remap_target_column(
+        target: str,
+        template_header_to_col: dict[str, int],
+        target_header_to_col: dict[str, int],
+        header_rename_map: dict[str, str] | None = None,
+    ) -> str:
+        """Remap a formula's target_column from template to target layout.
+        Returns the header name in the target layout. For derived columns
+        (e.g. LTIFR) that don't exist yet, returns the original target name
+        so it can be appended as a new column."""
+        rename = header_rename_map or {}
+
+        target_upper = target.upper()
+        for name in target_header_to_col:
+            if name.upper() == target_upper:
+                return name
+        for src, dst in rename.items():
+            if src.upper() == target_upper:
+                for name in target_header_to_col:
+                    if name.upper() == dst.upper():
+                        return name
+        template_letter_to_name = {
+            _col_index_to_letter(idx): name
+            for name, idx in template_header_to_col.items()
+        }
+        header_name = template_letter_to_name.get(target_upper)
+        if header_name:
+            renamed = rename.get(header_name, header_name)
+            for name in target_header_to_col:
+                if name.upper() == renamed.upper():
+                    return name
+            return renamed
+        return target

@@ -825,6 +825,54 @@ async def consolidate_submissions(
     if not all_file_data:
         raise HTTPException(status_code=400, detail="Could not read any submission files")
 
+    # ── Version-consistency guard (AR-3, AR-9) ───────────────────────
+    from sqlalchemy import distinct
+
+    submission_version_ids = (
+        db.query(distinct(TemplateAssignment.template_version_id))
+        .join(Submission, Submission.assignment_id == TemplateAssignment.id)
+        .filter(Submission.id.in_([s.id for s in submissions]))
+        .all()
+    )
+    non_null_version_ids = [vid for (vid,) in submission_version_ids if vid]
+    has_null_versions = any(vid is None for (vid,) in submission_version_ids)
+
+    if has_null_versions:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Some submissions have no template version assigned. "
+                "Formula-aware consolidation requires every submission to be "
+                "linked to a specific template version. Please backfill the "
+                "template_version_id on all assignments before consolidating."
+            ),
+        )
+
+    if len(non_null_version_ids) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot consolidate submissions from different template versions. "
+                f"Found versions: {non_null_version_ids}. "
+                "Please ensure all submissions use the same template version, "
+                "or reassign them before consolidating."
+            ),
+        )
+
+    template_version = (
+        db.query(TemplateVersion)
+        .filter(TemplateVersion.id == non_null_version_ids[0])
+        .first()
+    ) if non_null_version_ids else None
+
+    t_formulas = []
+    if template_version:
+        t_formulas = (
+            db.query(TemplateFormula)
+            .filter(TemplateFormula.template_version_id == template_version.id)
+            .all()
+        )
+
     # AI schema unification
     system_prompt = (
         "You are a spreadsheet schema unifier. "
@@ -900,6 +948,111 @@ async def consolidate_submissions(
     sheet_id = str(_uuid.uuid4())
     out_path = out_dir / f"{sheet_id}.xlsx"
     wb_out.save(out_path)
+
+    # ── Apply template formulas as Excel formula strings ──────────────
+    if t_formulas:
+        from app.services.formula_executor import FormulaExecutor
+
+        t_hr = template_version.header_row or 1
+        file_path = template_version.file_path
+
+        if not file_path:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    f"Template version {template_version.id} has no xlsx snapshot. "
+                    "Cannot remap formulas without a workbook artifact. "
+                    "Re-save the template version to generate one."
+                ),
+            )
+
+        # Build template header maps per sheet
+        template_h2c_by_sheet: dict[str, dict[str, int]] = {}
+        active_sheet_name: str | None = None
+
+        t_path = resolve_path(file_path)
+        if t_path and t_path.exists():
+            t_wb = openpyxl.load_workbook(t_path, data_only=True)
+            active_sheet_name = t_wb.active.title
+            for ws_name in t_wb.sheetnames:
+                t_ws = t_wb[ws_name]
+                h2c: dict[str, int] = {}
+                for ci in range(1, t_ws.max_column + 1):
+                    hdr = t_ws.cell(row=t_hr, column=ci).value
+                    if hdr:
+                        h2c[str(hdr)] = ci
+                template_h2c_by_sheet[ws_name] = h2c
+
+        template_h2c = template_h2c_by_sheet.get(active_sheet_name or "", {})
+
+        # Build consolidated header→col map (row 1)
+        consol_h2c: dict[str, int] = {}
+        for ci, h in enumerate(unified_headers, start=1):
+            if h:
+                consol_h2c[h] = ci
+
+        # Build header_rename_map from AI's column_map
+        header_rename_map: dict[str, str] = {}
+        for file_map in mappings.values():
+            for src, unified in file_map.items():
+                if src != unified:
+                    header_rename_map[src] = unified
+            break  # one file's map is sufficient
+
+        # Remap and write formulas
+        wb_consol = openpyxl.load_workbook(out_path)
+        ws_consol = wb_consol.active
+        data_start = 2
+        data_end = ws_consol.max_row
+        single_cell_offset = 0
+
+        # Filter formulas — reject non-active-sheet targeting
+        skipped_sheets: set[str] = set()
+        applicable_formulas = []
+        for fm in t_formulas:
+            fm_sheet = getattr(fm, "target_sheet", None)
+            if fm_sheet and fm_sheet != active_sheet_name:
+                skipped_sheets.add(fm_sheet)
+                continue
+            applicable_formulas.append(fm)
+
+        if skipped_sheets:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Consolidation skipped %d formula(s) targeting non-active sheets: %s",
+                len(t_formulas) - len(applicable_formulas),
+                skipped_sheets,
+            )
+
+        for fm in applicable_formulas:
+            fm_sheet = getattr(fm, "target_sheet", None)
+            fm_h2c = template_h2c_by_sheet.get(fm_sheet, template_h2c) if fm_sheet else template_h2c
+
+            remapped_target = FormulaExecutor.remap_target_column(
+                fm.target_column, fm_h2c, consol_h2c, header_rename_map
+            )
+
+            target_col_idx = consol_h2c.get(remapped_target)
+            if not target_col_idx:
+                target_col_idx = ws_consol.max_column + 1
+                ws_consol.cell(row=1, column=target_col_idx, value=remapped_target)
+                consol_h2c[remapped_target] = target_col_idx
+
+            remapped_expr = FormulaExecutor.remap_expression(
+                fm.expression, fm_h2c, consol_h2c, header_rename_map
+            )
+
+            if fm.formula_type == "column":
+                for row in range(data_start, data_end + 1):
+                    cell_formula = remapped_expr.replace("{row}", str(row))
+                    ws_consol.cell(row=row, column=target_col_idx, value=cell_formula)
+            else:
+                single_cell_offset += 1
+                write_row = data_end + 1 + single_cell_offset
+                cell_formula = remapped_expr.replace("{row}", str(write_row))
+                ws_consol.cell(row=write_row, column=target_col_idx, value=cell_formula)
+
+        wb_consol.save(out_path)
 
     auto_name = report_name or f"Consolidation – {datetime.utcnow().strftime('%b %d, %Y')}"
     sheet = ConsolidatedSheet(
