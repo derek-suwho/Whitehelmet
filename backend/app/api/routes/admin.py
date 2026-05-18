@@ -826,6 +826,8 @@ async def consolidate_submissions(
         raise HTTPException(status_code=400, detail="Could not read any submission files")
 
     # ── Version-consistency guard (AR-3, AR-9) ───────────────────────
+    # Only enforced when formulas exist — legacy/formula-free consolidation
+    # proceeds without requiring version metadata on every submission.
     from sqlalchemy import distinct
 
     submission_version_ids = (
@@ -837,28 +839,7 @@ async def consolidate_submissions(
     non_null_version_ids = [vid for (vid,) in submission_version_ids if vid]
     has_null_versions = any(vid is None for (vid,) in submission_version_ids)
 
-    if has_null_versions:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Some submissions have no template version assigned. "
-                "Formula-aware consolidation requires every submission to be "
-                "linked to a specific template version. Please backfill the "
-                "template_version_id on all assignments before consolidating."
-            ),
-        )
-
-    if len(non_null_version_ids) > 1:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Cannot consolidate submissions from different template versions. "
-                f"Found versions: {non_null_version_ids}. "
-                "Please ensure all submissions use the same template version, "
-                "or reassign them before consolidating."
-            ),
-        )
-
+    # Resolve template version and formulas (best-effort — may be None for legacy data)
     template_version = (
         db.query(TemplateVersion)
         .filter(TemplateVersion.id == non_null_version_ids[0])
@@ -872,6 +853,30 @@ async def consolidate_submissions(
             .filter(TemplateFormula.template_version_id == template_version.id)
             .all()
         )
+
+    # Guards only fire when formulas exist — no-formula consolidation works with any data
+    if t_formulas:
+        if has_null_versions:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Some submissions have no template version assigned. "
+                    "Formula-aware consolidation requires every submission to be "
+                    "linked to a specific template version. Please backfill the "
+                    "template_version_id on all assignments before consolidating."
+                ),
+            )
+
+        if len(non_null_version_ids) > 1:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Cannot consolidate submissions from different template versions. "
+                    f"Found versions: {non_null_version_ids}. "
+                    "Please ensure all submissions use the same template version, "
+                    "or reassign them before consolidating."
+                ),
+            )
 
     # AI schema unification
     system_prompt = (
