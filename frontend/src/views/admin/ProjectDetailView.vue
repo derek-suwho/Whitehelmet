@@ -22,8 +22,8 @@ const error = ref('')
 
 const tabs = [
   { key: 'workpackage',   label: 'Work Package' },
-  { key: 'document',      label: 'Document Management' },
-  { key: 'template',      label: 'Subcontractor Templates' },
+  { key: 'document',      label: 'Template Management' },
+  { key: 'template',      label: 'Subcontractor Assigned' },
   { key: 'subcontractor', label: 'Sub-Contractor Record' },
   { key: 'consolidated',  label: 'Auto-Consolidated Master Records' },
   { key: 'formulas',      label: 'Formulas' },
@@ -109,11 +109,20 @@ async function uploadXlsxTemplate() {
 
 // Formula management
 const showFormulaForm = ref(false)
+const editingFormulaId = ref<number | null>(null)
 const newFormula = ref({ name: '', expression: '', description: '', formula_type: 'calculation' })
 const newFormulaParamInput = ref('')
 const newFormulaParams = ref<string[]>([])
 const addingFormula = ref(false)
 const formulaError = ref('')
+const expressionPlaceholder = computed(() =>
+  newFormulaParams.value.length >= 2
+    ? `(${newFormulaParams.value[0]} / ${newFormulaParams.value[1]}) * 200000`
+    : '(incidents / hours_worked) * 200000'
+)
+function fillExpressionPlaceholder() {
+  if (!newFormula.value.expression) newFormula.value.expression = expressionPlaceholder.value
+}
 
 function addParam() {
   const val = newFormulaParamInput.value.trim().replace(/[^a-zA-Z0-9_]/g, '_')
@@ -125,6 +134,24 @@ function removeParam(p: string) {
   newFormulaParams.value = newFormulaParams.value.filter(x => x !== p)
 }
 
+function openAddFormula() {
+  editingFormulaId.value = null
+  newFormula.value = { name: '', expression: '', description: '', formula_type: 'calculation' }
+  newFormulaParams.value = []
+  newFormulaParamInput.value = ''
+  formulaError.value = ''
+  showFormulaForm.value = true
+}
+
+function openEditFormula(f: import('@/types').SavedFormula) {
+  editingFormulaId.value = f.id
+  newFormula.value = { name: f.name, expression: f.expression, description: f.description ?? '', formula_type: f.formula_type ?? 'calculation' }
+  newFormulaParams.value = f.parameters ? [...f.parameters] : []
+  newFormulaParamInput.value = ''
+  formulaError.value = ''
+  showFormulaForm.value = true
+}
+
 async function addFormula() {
   if (!newFormula.value.name.trim() || !newFormula.value.expression.trim()) {
     formulaError.value = 'Name and expression are required.'
@@ -133,14 +160,20 @@ async function addFormula() {
   addingFormula.value = true
   formulaError.value = ''
   try {
-    await formulasStore.saveFormula({
+    const payload = {
       ...newFormula.value,
       parameters: newFormulaParams.value.length ? [...newFormulaParams.value] : undefined,
-    })
+    }
+    if (editingFormulaId.value !== null) {
+      await formulasStore.updateFormula(editingFormulaId.value, payload)
+    } else {
+      await formulasStore.saveFormula(payload)
+    }
     newFormula.value = { name: '', expression: '', description: '', formula_type: 'calculation' }
     newFormulaParams.value = []
     newFormulaParamInput.value = ''
     showFormulaForm.value = false
+    editingFormulaId.value = null
   } catch (e) {
     formulaError.value = e instanceof Error ? e.message : 'Failed to save formula'
   } finally {
@@ -154,7 +187,7 @@ const selectedMasterTemplateId = ref('')
 const settingMaster = ref(false)
 const masterError = ref('')
 const masterTemplates = computed(() =>
-  templatesStore.templates.filter(t => t.template_type === 'master')
+  templatesStore.templates.filter(t => t.template_type === 'master' && t.project_id === projectId)
 )
 
 // Master reports list
@@ -197,7 +230,7 @@ function formatDateTime(iso: string) {
   })
 }
 
-// Document Management tab
+// Template Management tab
 const docSearch = ref('')
 const docTypeFilter = ref<'all' | 'master' | 'subcontractor'>('all')
 const showCreateTemplateModal = ref(false)
@@ -273,8 +306,9 @@ async function createTemplateUpload() {
       { method: 'POST', headers, body: form },
     )
     if (!resp.ok) { const t = await resp.text(); throw new Error(t) }
-    await loadProjectTemplates()
+    const result = await resp.json()
     showCreateTemplateModal.value = false
+    router.push({ name: 'admin-template-edit-xlsx', params: { templateId: result.template_id }, query: { projectId, freshUpload: '1' } })
   } catch (e) {
     createError.value = e instanceof Error ? e.message : 'Upload failed'
   } finally {
@@ -625,7 +659,7 @@ function formatDate(iso: string | null) {
         </div>
       </template>
 
-      <!-- ── Document Management ── -->
+      <!-- ── Template Management ── -->
       <template v-else-if="activeTab === 'document'">
         <!-- Header -->
         <div class="flex items-center justify-between mb-5">
@@ -828,7 +862,7 @@ function formatDate(iso: string | null) {
       <template v-else-if="activeTab === 'template'">
         <div class="flex items-center justify-between mb-5">
           <h2 class="text-base font-semibold text-gray-800">
-            Subcontractor Templates ({{ filteredAssignments.length }})
+            Subcontractor Assigned ({{ filteredAssignments.length }})
           </h2>
           <div class="flex items-center gap-3">
             <div class="relative">
@@ -1253,94 +1287,10 @@ function formatDate(iso: string | null) {
           </h2>
           <button
             class="flex items-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
-            @click="showFormulaForm = !showFormulaForm"
+            @click="openAddFormula"
           >
-            {{ showFormulaForm ? '✕ Cancel' : '+ Add Formula' }}
+            + Add Formula
           </button>
-        </div>
-
-        <!-- Add formula form -->
-        <div v-if="showFormulaForm" class="mb-5 bg-white rounded-xl border border-violet-200 p-5">
-          <h3 class="text-sm font-semibold text-gray-700 mb-4">New Formula</h3>
-          <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Name *</label>
-              <input
-                v-model="newFormula.name"
-                type="text"
-                placeholder="e.g. Injury Rate"
-                class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs text-gray-500 mb-1">Type</label>
-              <select v-model="newFormula.formula_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="calculation">Calculation</option>
-                <option value="aggregation">Aggregation</option>
-                <option value="validation">Validation</option>
-              </select>
-            </div>
-          </div>
-          <!-- Parameters -->
-          <div class="mb-4">
-            <label class="block text-xs text-gray-500 mb-1">Parameters</label>
-            <div class="flex flex-wrap gap-1.5 mb-2">
-              <span
-                v-for="p in newFormulaParams"
-                :key="p"
-                class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
-              >
-                {{ p }}
-                <button type="button" class="ml-0.5 text-violet-400 hover:text-violet-700" @click="removeParam(p)">×</button>
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <input
-                v-model="newFormulaParamInput"
-                type="text"
-                placeholder="e.g. incidents"
-                class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                @keydown.enter.prevent="addParam"
-                @keydown.comma.prevent="addParam"
-              />
-              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="addParam">Add</button>
-            </div>
-            <p class="text-xs text-gray-400 mt-1">Press Enter or comma after each name. Use these names in the expression below.</p>
-          </div>
-
-          <div class="mb-4">
-            <label class="block text-xs text-gray-500 mb-1">Expression *</label>
-            <input
-              v-model="newFormula.expression"
-              type="text"
-              :placeholder="newFormulaParams.length >= 2 ? `e.g. (${newFormulaParams[0]} / ${newFormulaParams[1]}) * 200000` : 'e.g. (incidents / hours_worked) * 200000'"
-              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-            <p class="text-xs text-gray-400 mt-1">
-              Use your parameter names as variables.
-              <span v-if="newFormulaParams.length" class="text-violet-600">
-                Available: {{ newFormulaParams.join(', ') }}
-              </span>
-            </p>
-          </div>
-          <div class="mb-4">
-            <label class="block text-xs text-gray-500 mb-1">Description (optional)</label>
-            <input
-              v-model="newFormula.description"
-              type="text"
-              placeholder="What does this formula calculate?"
-              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
-            />
-          </div>
-          <div v-if="formulaError" class="mb-3 text-sm text-red-600">{{ formulaError }}</div>
-          <div class="flex justify-end gap-2">
-            <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100" @click="showFormulaForm = false">Cancel</button>
-            <button
-              :disabled="addingFormula"
-              class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
-              @click="addFormula"
-            >{{ addingFormula ? 'Saving…' : 'Save Formula' }}</button>
-          </div>
         </div>
 
         <!-- Formula table -->
@@ -1386,10 +1336,16 @@ function formatDate(iso: string | null) {
                   <span class="block truncate">{{ f.description ?? '—' }}</span>
                 </td>
                 <td class="px-5 py-3.5">
-                  <button
-                    class="text-xs text-red-400 hover:text-red-600 transition-colors"
-                    @click="formulasStore.deleteFormula(f.id)"
-                  >Delete</button>
+                  <div class="flex items-center gap-3">
+                    <button
+                      class="text-xs text-violet-500 hover:text-violet-700 font-medium transition-colors"
+                      @click="openEditFormula(f)"
+                    >Edit</button>
+                    <button
+                      class="text-xs text-red-400 hover:text-red-600 transition-colors"
+                      @click="formulasStore.deleteFormula(f.id)"
+                    >Delete</button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="!formulasStore.formulas.length">
@@ -1611,6 +1567,96 @@ function formatDate(iso: string | null) {
           >
             {{ uploadingTemplate ? 'Uploading…' : 'Upload Template' }}
           </button>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+
+  <!-- Formula Add/Edit Modal -->
+  <Teleport to="body">
+    <div v-if="showFormulaForm" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" @click.self="showFormulaForm = false; editingFormulaId = null">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <h2 class="font-semibold text-gray-800">{{ editingFormulaId !== null ? 'Edit Formula' : 'New Formula' }}</h2>
+          <button class="text-gray-400 hover:text-gray-600 text-lg" @click="showFormulaForm = false; editingFormulaId = null">✕</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Name *</label>
+              <input
+                v-model="newFormula.name"
+                type="text"
+                placeholder="e.g. Injury Rate"
+                class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Type</label>
+              <select v-model="newFormula.formula_type" class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="calculation">Calculation</option>
+                <option value="aggregation">Aggregation</option>
+                <option value="validation">Validation</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Parameters</label>
+            <div class="flex flex-wrap gap-1.5 mb-2">
+              <span
+                v-for="p in newFormulaParams"
+                :key="p"
+                class="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+              >
+                {{ p }}
+                <button type="button" class="ml-0.5 text-violet-400 hover:text-violet-700" @click="removeParam(p)">×</button>
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <input
+                v-model="newFormulaParamInput"
+                type="text"
+                placeholder="e.g. incidents"
+                class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+                @keydown.enter.prevent="addParam"
+                @keydown.comma.prevent="addParam"
+              />
+              <button type="button" class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50" @click="addParam">Add</button>
+            </div>
+            <p class="text-xs text-gray-400 mt-1">Press Enter or comma after each name. Use these names in the expression below.</p>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Expression *</label>
+            <input
+              v-model="newFormula.expression"
+              type="text"
+              :placeholder="expressionPlaceholder"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+              @keydown.tab.prevent="fillExpressionPlaceholder"
+            />
+            <p class="text-xs text-gray-400 mt-1">
+              Use your parameter names as variables.
+              <span v-if="newFormulaParams.length" class="text-violet-600">Available: {{ newFormulaParams.join(', ') }}</span>
+            </p>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1">Description (optional)</label>
+            <input
+              v-model="newFormula.description"
+              type="text"
+              placeholder="What does this formula calculate?"
+              class="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div v-if="formulaError" class="text-sm text-red-600">{{ formulaError }}</div>
+        </div>
+        <div class="flex justify-end gap-2 px-5 py-4 border-t border-gray-200">
+          <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100" @click="showFormulaForm = false; editingFormulaId = null">Cancel</button>
+          <button
+            :disabled="addingFormula"
+            class="px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50"
+            @click="addFormula"
+          >{{ addingFormula ? 'Saving…' : 'Save Formula' }}</button>
         </div>
       </div>
     </div>

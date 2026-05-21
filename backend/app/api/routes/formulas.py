@@ -159,6 +159,26 @@ def evaluate_formula(
     return FormulaEvaluateResponse(column_name=body.output_name, values=values)
 
 
+@router.put("/{formula_id}", response_model=FormulaResponse)
+def update_formula(
+    formula_id: str,
+    body: FormulaCreate,
+    user: Profile = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    formula = db.query(Formula).filter(Formula.id == formula_id, Formula.created_by == user.id).first()
+    if not formula:
+        raise HTTPException(status_code=404, detail="Formula not found")
+    formula.name = body.name
+    formula.expression = body.expression
+    formula.parameters = json.dumps(body.parameters) if body.parameters else None
+    formula.description = body.description
+    formula.formula_type = body.formula_type
+    db.commit()
+    db.refresh(formula)
+    return _formula_to_response(formula)
+
+
 @router.delete("/{formula_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_formula(
     formula_id: str,

@@ -26,6 +26,13 @@ export const useFormulasStore = defineStore('formulas', () => {
     return resp
   }
 
+  async function updateFormula(id: number, payload: FormulaCreate): Promise<SavedFormula> {
+    const resp = await api.put<SavedFormula>(`/api/formulas/${id}`, payload)
+    const idx = formulas.value.findIndex((f) => f.id === id)
+    if (idx !== -1) formulas.value[idx] = resp
+    return resp
+  }
+
   async function deleteFormula(id: number) {
     await api.delete(`/api/formulas/${id}`)
     formulas.value = formulas.value.filter((f) => f.id !== id)
@@ -59,5 +66,5 @@ export const useFormulasStore = defineStore('formulas', () => {
     return formulas.value.find((f) => f.name.toLowerCase() === lower)
   }
 
-  return { formulas, libraryFormulas, loading, fetchFormulas, fetchLibrary, saveFormula, deleteFormula, createFromNL, findByName }
+  return { formulas, libraryFormulas, loading, fetchFormulas, fetchLibrary, saveFormula, updateFormula, deleteFormula, createFromNL, findByName }
 })
