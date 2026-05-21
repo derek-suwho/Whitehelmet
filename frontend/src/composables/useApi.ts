@@ -61,6 +61,3 @@ export const api = {
     return request<T>(url, 'POST', formData, true)
   },
 }
-
-// Kept as no-op for any remaining callers — CSRF is gone
-export function setCsrfToken(_token: string) {}
