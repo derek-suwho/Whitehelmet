@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 import uuid as _uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.core.config import get_settings
 from app.core.dependencies import get_current_user, verify_csrf
@@ -438,150 +442,6 @@ def get_project_submission_overview(project_id: str, db: Session = Depends(get_d
     }
 
 
-def _has_ard_sheet(file_path: str) -> bool:
-    """Return True if the xlsx at file_path contains a sheet whose name contains 'ard'."""
-    try:
-        wb = openpyxl.load_workbook(file_path, read_only=True)
-        return any("ard" in name.lower() for name in wb.sheetnames)
-    except Exception:
-        return False
-
-
-def _extract_ard_totals(file_path: str, org_name: str | None = None) -> dict | None:
-    """Sum ARD data-row totals from a submission xlsx.
-
-    Returns {'org_name': str, 'totals': {col_idx_0based: float}} for cols F-O (indices 5-14),
-    or None if no ARD sheet is found.
-    """
-    try:
-        wb = openpyxl.load_workbook(file_path, data_only=True)
-    except Exception:
-        return None
-
-    ard_ws = next((wb[name] for name in wb.sheetnames if "ard" in name.lower()), None)
-    if ard_ws is None:
-        return None
-
-    # Find header row: row in first 15 with most non-empty string cells
-    header_row_num = 1
-    best = 0
-    for row in ard_ws.iter_rows(min_row=1, max_row=15):
-        score = sum(1 for c in row if isinstance(c.value, str) and c.value.strip())
-        if score > best:
-            best = score
-            header_row_num = row[0].row
-
-    # Collect data rows: col F (index 5, Total Manhours) has a positive numeric value.
-    # Column A is often None/empty in submitted files, so don't rely on it.
-    data_rows: list[list] = []
-    for row in ard_ws.iter_rows(min_row=header_row_num + 1):
-        vals = [c.value for c in row]
-        f_val = vals[5] if len(vals) > 5 else None
-        if isinstance(f_val, (int, float)) and f_val > 0:
-            data_rows.append(vals)
-
-    if not data_rows:
-        return None
-
-    def _to_num(v) -> float:
-        if isinstance(v, (int, float)):
-            return float(v)
-        if isinstance(v, str):
-            try:
-                return float(v.replace(",", ""))
-            except ValueError:
-                return 0.0
-        return 0.0
-
-    totals: dict[int, float] = {}
-    for col_idx in range(5, 15):  # F=5 … O=14 (0-based)
-        totals[col_idx] = sum(_to_num(row[col_idx]) for row in data_rows if col_idx < len(row))
-
-    # LTI manhours (index 9, col J) is a formula =F-G that may not be cached.
-    # Compute it directly from summed manhours if it came out zero but manhours differ.
-    if totals.get(9, 0) == 0 and totals.get(5, 0) != totals.get(6, 0):
-        totals[9] = totals.get(5, 0) - totals.get(6, 0)
-
-    if not org_name:
-        for sname in wb.sheetnames:
-            if "company" in sname.lower() or "infomation" in sname.lower() or "information" in sname.lower():
-                ci_ws = wb[sname]
-                for ci_row in ci_ws.iter_rows(max_row=20, values_only=True):
-                    for val in ci_row:
-                        if isinstance(val, str) and len(val.strip()) > 3:
-                            org_name = val.strip()
-                            break
-                    if org_name:
-                        break
-                break
-
-    return {"org_name": org_name or "Unknown", "totals": totals}
-
-
-def _build_ard_output(master_template_path: str, ard_entries: list[dict]) -> bytes:
-    """Populate Sheet1 of the admin template with computed KPI rates from submission ARD totals.
-
-    For each org, computes per-200k-manhour rates from the raw totals and writes them
-    as plain values into Sheet1's odd input columns (C, E, G, I, K, M, O) starting at
-    row 6. The even columns (D, F, H, J, L, N, P) already contain intact IFS scoring
-    formulas and are left untouched — Excel/web viewer will evaluate them.
-
-    Output contains ONLY Sheet1 from the admin template.
-
-    ARD totals index map (0-based col indices):
-      5=Manhours  7=Fatalities  8=LTI_incidents  10=TRI  11=NearMiss
-      12=SafetyObs  13=Walks  14=Recognitions
-    """
-    import io as _io
-    from openpyxl.styles import PatternFill, Font
-
-    wb = openpyxl.load_workbook(master_template_path)
-
-    # Keep only Sheet1 in the output workbook
-    for sname in list(wb.sheetnames):
-        if sname != "Sheet1":
-            del wb[sname]
-
-    sheet1 = wb["Sheet1"]
-    no_fill = PatternFill(fill_type=None)
-    default_font = Font()
-
-    # (ARD totals 0-based col index, Sheet1 input col letter)
-    # Rate = raw_value * 200_000 / total_manhours
-    KPI_MAP = [
-        (7,  "C"),   # Fatalities → fatality rate
-        (8,  "E"),   # LTI incidents → LTIR
-        (10, "G"),   # Total Recordable → TRIR
-        (11, "I"),   # Near Miss
-        (12, "K"),   # Safety Observations
-        (13, "M"),   # Leadership Walks
-        (14, "O"),   # Recognitions
-    ]
-
-    for org_idx, entry in enumerate(ard_entries):
-        row = 6 + org_idx
-        manhours = entry["totals"].get(5, 0)
-
-        # Project/org name in col B
-        sheet1[f"B{row}"] = entry["org_name"]
-
-        for ard_idx, s1_col in KPI_MAP:
-            raw = entry["totals"].get(ard_idx, 0)
-            rate = round(raw * 200000 / manhours, 4) if manhours > 0 else 0
-            sheet1[f"{s1_col}{row}"].value = rate
-
-    # Strip template formatting from all cells row 6+ and clear leftover rows
-    first_empty_row = 6 + len(ard_entries)
-    for row in sheet1.iter_rows(min_row=6, max_row=sheet1.max_row):
-        for cell in row:
-            cell.fill = no_fill
-            cell.font = default_font
-            if cell.row >= first_empty_row:
-                cell.value = None
-
-    buf = _io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
 
 
 @router.post(
@@ -621,60 +481,6 @@ async def consolidate_submissions(
 
     if not submissions:
         raise HTTPException(status_code=400, detail="No submissions to consolidate")
-
-    # ── ARD-mode detection ────────────────────────────────────────────────────
-    # If every submission has an ARD sheet AND the project has a master template
-    # with an uploaded xlsx, use ARD-based template consolidation (skip flat merge).
-    _master_template_path: str | None = None
-    if project_id:
-        _proj = db.query(Project).filter(Project.id == project_id).first()
-        if _proj and _proj.master_template_id:
-            _master_ver = (
-                db.query(TemplateVersion)
-                .filter(TemplateVersion.template_id == _proj.master_template_id)
-                .order_by(TemplateVersion.version_number.desc())
-                .first()
-            )
-            if _master_ver and _master_ver.file_path:
-                _resolved_master = resolve_path(_master_ver.file_path)
-                if _resolved_master and _resolved_master.exists():
-                    _master_template_path = str(_resolved_master)
-
-    _submission_paths = [str(p) for s in submissions if s.file_path for p in [resolve_path(s.file_path)] if p and p.exists()]
-
-    if _master_template_path and _submission_paths and all(_has_ard_sheet(p) for p in _submission_paths):
-        ard_entries = []
-        for sub in submissions:
-            _sub_abs = resolve_path(sub.file_path)
-            if not _sub_abs or not _sub_abs.exists():
-                continue
-            submitter = db.query(Profile).filter(Profile.id == sub.submitted_by).first()
-            org_label = (submitter.org_name or submitter.display_name) if submitter else None
-            entry = _extract_ard_totals(str(_sub_abs), org_name=org_label)
-            if entry:
-                ard_entries.append(entry)
-
-        if ard_entries:
-            output_bytes = _build_ard_output(_master_template_path, ard_entries)
-            out_dir = Path(settings.upload_dir) / "consolidated"
-            out_dir.mkdir(parents=True, exist_ok=True)
-            sheet_id = str(_uuid.uuid4())
-            out_path = out_dir / f"{sheet_id}.xlsx"
-            out_path.write_bytes(output_bytes)
-            auto_name = report_name or f"ARD Consolidation – {datetime.utcnow().strftime('%b %d, %Y')}"
-            sheet = ConsolidatedSheet(
-                id=sheet_id,
-                template_id=template_id,
-                project_id=project_id,
-                name=auto_name,
-                period=report_period,
-                file_path=to_relative(out_path),
-                generated_by=str(user.id),
-            )
-            db.add(sheet)
-            db.commit()
-            return {"consolidated_sheet_id": sheet_id, "name": auto_name}
-    # ── end ARD-mode block — fall through to flat consolidation ───────────────
 
     from app.api.routes.ai import _expand_merged
 
@@ -1029,6 +835,17 @@ async def consolidate_submissions(
                 skipped_sheets,
             )
 
+        # Pre-process: build a map of header names → column letter for replacing
+        # literal header names that someone typed directly in formula expressions.
+        def _normalize_expr_headers(expr: str, h2c: dict[str, int]) -> str:
+            """Replace literal header names in expression with column letter + {row}."""
+            from app.services.formula_executor import _col_index_to_letter
+            for name in sorted(h2c.keys(), key=len, reverse=True):
+                if name in expr:
+                    letter = _col_index_to_letter(h2c[name])
+                    expr = expr.replace(name, f"{letter}{{row}}")
+            return expr
+
         for fm in applicable_formulas:
             fm_sheet = getattr(fm, "target_sheet", None)
             fm_h2c = template_h2c_by_sheet.get(fm_sheet, template_h2c) if fm_sheet else template_h2c
@@ -1043,8 +860,11 @@ async def consolidate_submissions(
                 ws_consol.cell(row=1, column=target_col_idx, value=remapped_target)
                 consol_h2c[remapped_target] = target_col_idx
 
+            # Pre-process: resolve header names typed directly in expression
+            expr = _normalize_expr_headers(fm.expression, fm_h2c)
+
             remapped_expr = FormulaExecutor.remap_expression(
-                fm.expression, fm_h2c, consol_h2c, header_rename_map
+                expr, fm_h2c, consol_h2c, header_rename_map
             )
 
             if fm.formula_type == "column":
@@ -1157,6 +977,479 @@ def unlock_assignment(
     db.commit()
     db.refresh(a)
     return a
+
+
+# ── Template stamp helper ─────────────────────────────────────────────────────
+
+_STAMP_PROJECT_KW = ("project name", "project names", "project")
+_STAMP_SOURCE_KW = ("source file", "source", "devco", "file name")
+_RATE_SUFFIXES = (" RATE", " FREQUENCY RATE", " FREQUENCY", " INDEX", " RATIO")
+_TEXT_CRITERIA_RE = re.compile(r"[Ss]core\s+(?:\d+|[Zz]ero)", re.IGNORECASE)
+
+
+def _parse_scoring_criteria_text(text: str) -> list[dict]:
+    """Parse free-text scoring criteria into rule dicts for _apply_scoring.
+
+    Handles formats such as:
+      "1. 0 : Score 100%"          → exact match 0 → score 100
+      "> 0 and ≤ 0.01: Score 90%"  → (0, 0.01] → score 90
+      "0.01 and ≤ 0.05: Score 80"  → [0.01, 0.05] → score 80
+      "> 0.1: Score Zero"           → > 0.1 → score 0
+      "< 1.0: Score 70%"            → < 1.0 → score 70
+      "3.0 - 5.0: Score 90%"        → [3.0, 5.0] → score 90
+    Works for both newline-separated and inline numbered-list formats.
+    """
+    rules: list[dict] = []
+
+    for raw_cond, raw_score in re.findall(
+        r"([^\n:]+?)\s*:\s*[Ss]core\s+(0*\d{1,3}(?:\.\d+)?|[Zz]ero)%?(?!\d)",
+        text,
+    ):
+        cond = re.sub(r"^\s*\d+[.)]\s+", "", raw_cond).strip()
+        if not cond:
+            continue
+
+        raw_score = raw_score.strip()
+        score = 0 if raw_score.lower() == "zero" else int(float(raw_score.lstrip("0") or "0"))
+        rule: dict = {"score": score}
+
+        nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", cond)]
+
+        if ("-" in cond or "\u2013" in cond) and len(nums) >= 2:
+            # "X - Y" inclusive range
+            rule["min"] = nums[0]
+            rule["max"] = nums[1]
+        elif "and" in cond.lower() and len(nums) >= 2:
+            # "> X and ≤ Y" / "X and ≤ Y"
+            rule["min"] = nums[0]
+            rule["max"] = nums[1]
+        elif re.match(r"^\s*[>≥]", cond):
+            # "> X" or ">= X"
+            if nums:
+                rule["min"] = nums[0]
+        elif re.match(r"^\s*[<≤]", cond):
+            # "< X" or "<= X"
+            if nums:
+                rule["max"] = nums[0]
+        elif len(nums) == 1:
+            # exact "= X" or bare "X"
+            rule["min"] = nums[0]
+            rule["max"] = nums[0]
+        else:
+            continue
+
+        rules.append(rule)
+
+    return rules
+
+
+def _stamp_with_template(
+    consol_xlsx: bytes,
+    template_path,
+    header_row: int,
+    template_h2c: dict[str, int],
+    scoring_by_tmpl_col: "dict[int, list] | None" = None,
+) -> bytes:
+    """Reshape a consolidated xlsx to match the master template structure.
+
+    Only formula-computed (rate) columns are written into the template —
+    raw input columns (manhours, incident counts, etc.) are excluded.
+    Project name and source file are appended as extras after the template columns.
+    Formula strings in the consolidated workbook are evaluated via xlcalculator
+    before copying so they don't break in the template context.
+    """
+    import io as _io
+
+    wb_final = openpyxl.load_workbook(_io.BytesIO(consol_xlsx))
+    ws_final = wb_final.active
+
+    # ── Identify formula (rate) columns before evaluation ────────────────────
+    formula_cols: set[int] = set()
+    for ci in range(1, ws_final.max_column + 1):
+        for ri in range(2, min(ws_final.max_row + 1, 5)):  # sample first few rows
+            v = ws_final.cell(row=ri, column=ci).value
+            if isinstance(v, str) and v.startswith("="):
+                formula_cols.add(ci)
+                break
+
+    # ── Pre-fill None with 0 in non-formula numeric columns ──────────────────
+    # xlcalculator treats blank cells as errors (not 0 like Excel), so formulas
+    # like =D2*200000/E2 where D2 is blank return errors instead of 0.
+    for _ci in range(1, ws_final.max_column + 1):
+        if _ci in formula_cols:
+            continue
+        _is_numeric = any(
+            isinstance(ws_final.cell(row=_ri, column=_ci).value, (int, float))
+            for _ri in range(2, ws_final.max_row + 1)
+        )
+        if _is_numeric:
+            for _ri in range(2, ws_final.max_row + 1):
+                if ws_final.cell(row=_ri, column=_ci).value is None:
+                    ws_final.cell(row=_ri, column=_ci).value = 0
+
+    # ── Evaluate formula strings via xlcalculator ────────────────────────────
+    try:
+        from xlcalculator import ModelCompiler, Evaluator as _Eval
+        from app.services.formula_executor import _col_index_to_letter as _cil
+        _buf = _io.BytesIO()
+        wb_final.save(_buf)
+        _buf.seek(0)
+        _compiler = ModelCompiler()
+        _model = _compiler.read_and_parse_archive(_buf, ignore_sheets=[])
+        _evaluator = _Eval(_model)
+        _sheet = ws_final.title
+        for ci in formula_cols:
+            for ri in range(2, ws_final.max_row + 1):
+                cell = ws_final.cell(row=ri, column=ci)
+                if isinstance(cell.value, str) and cell.value.startswith("="):
+                    addr = f"{_sheet}!{_cil(ci)}{ri}"
+                    try:
+                        computed = _evaluator.evaluate(addr)
+                        # xlcalculator's Number(0.0) == None, so use `is not None` (identity)
+                        cell.value = float(computed) if computed is not None else None
+                    except Exception:
+                        cell.value = None
+    except Exception:
+        pass  # proceed with raw values if xlcalculator unavailable
+
+    # ── Build header map ─────────────────────────────────────────────────────
+    final_h2c: dict[str, int] = {}
+    for ci in range(1, ws_final.max_column + 1):
+        h = ws_final.cell(row=1, column=ci).value
+        if h:
+            final_h2c[str(h)] = ci
+
+    t_wb_stamp = openpyxl.load_workbook(template_path)
+    t_ws_stamp = t_wb_stamp.active
+
+    tmpl_upper_to_col: dict[str, int] = {k.upper(): v for k, v in template_h2c.items()}
+
+    # ── Map columns to template columns ──────────────────────────────────────
+    # Non-formula cols: exact header match only.
+    # Formula (rate) cols: exact match first, then fuzzy rate-suffix match.
+    consol_to_tmpl: dict[int, int] = {}
+    for h, ci in final_h2c.items():
+        tmpl_ci = tmpl_upper_to_col.get(h.upper())
+        if tmpl_ci is None and ci in formula_cols:
+            # Fuzzy match: strip trailing parenthetical abbreviations like (LTIFR),
+            # then strip rate suffixes, then find template col whose header contains the base.
+            # e.g. "Lost Time Injury Frequency Rate (LTIFR)" → "Lost Time Injury Frequency Rate"
+            #      → base "LOST TIME INJURY" matches "Lost Time Injury incidents"
+            import re as _re
+            h_upper = _re.sub(r"\s*\([^)]*\)\s*$", "", h.upper()).strip()
+            for suffix in _RATE_SUFFIXES:
+                if h_upper.endswith(suffix):
+                    base = h_upper[: -len(suffix)].strip()
+                    if not base:
+                        continue
+                    best_ci: int | None = None
+                    best_extra: float = float("inf")
+                    for tmpl_h, tcol in tmpl_upper_to_col.items():
+                        if base in tmpl_h:
+                            extra = len(tmpl_h) - len(base)
+                            if extra < best_extra:
+                                best_extra, best_ci = extra, tcol
+                    if best_ci is not None:
+                        tmpl_ci = best_ci
+                        break
+        if tmpl_ci is not None:
+            consol_to_tmpl[ci] = tmpl_ci
+
+    # ── Extras: project name and source file only ────────────────────────────
+    unmapped: list[tuple[str, int]] = []
+    for h, ci in final_h2c.items():
+        if ci in consol_to_tmpl:
+            continue
+        hl = h.lower()
+        if any(kw in hl for kw in _STAMP_PROJECT_KW) or any(kw in hl for kw in _STAMP_SOURCE_KW):
+            unmapped.append((h, ci))
+
+    def _extra_sort_key(item: tuple[str, int]) -> int:
+        hl = item[0].lower()
+        if any(kw in hl for kw in _STAMP_PROJECT_KW):
+            return 0
+        return 1
+
+    unmapped.sort(key=_extra_sort_key)
+
+    # ── Safe-write helper (skips read-only MergedCell objects) ───────────────
+    from openpyxl.cell.cell import MergedCell as _MergedCell
+
+    def _safe_write(ws, row, col, value, reset_format=False):
+        cell = ws.cell(row=row, column=col)
+        if isinstance(cell, _MergedCell):
+            return
+        cell.value = value
+        if reset_format and value is not None:
+            cell.number_format = "General"
+
+    used_tmpl_cols = set(template_h2c.values())
+    extra_col_map: dict[int, int] = {}
+
+    # Find template column designated for project names in any non-header row
+    _pn_designated_col: int | None = None
+    for _r in range(1, header_row):
+        for _c in range(1, t_ws_stamp.max_column + 1):
+            _v = t_ws_stamp.cell(row=_r, column=_c).value
+            if isinstance(_v, str) and any(kw in _v.lower() for kw in _STAMP_PROJECT_KW):
+                if _c not in used_tmpl_cols:
+                    _pn_designated_col = _c
+                break
+        if _pn_designated_col is not None:
+            break
+
+    # Project names → template-designated col if found, else leftmost free col
+    pn_col: int
+    if _pn_designated_col is not None:
+        pn_col = _pn_designated_col
+    else:
+        pn_col = 1
+        while pn_col in used_tmpl_cols:
+            pn_col += 1
+
+    # Source file → col 1 if free and before pn_col, else after last template col
+    if 1 not in used_tmpl_cols and pn_col != 1:
+        src_col = 1
+    else:
+        src_col = (max(template_h2c.values()) + 1) if template_h2c else (pn_col + 1)
+        while src_col in used_tmpl_cols or src_col == pn_col:
+            src_col += 1
+
+    right_col = (max(template_h2c.values()) + 1) if template_h2c else (max(pn_col, src_col) + 1)
+    while right_col in used_tmpl_cols or right_col in {pn_col, src_col}:
+        right_col += 1
+
+    for h, ci in unmapped:
+        hl = h.lower()
+        if any(kw in hl for kw in _STAMP_PROJECT_KW):
+            _safe_write(t_ws_stamp, header_row, pn_col, h)
+            extra_col_map[ci] = pn_col
+        elif any(kw in hl for kw in _STAMP_SOURCE_KW):
+            _safe_write(t_ws_stamp, header_row, src_col, h)
+            extra_col_map[ci] = src_col
+        else:
+            _safe_write(t_ws_stamp, header_row, right_col, h)
+            extra_col_map[ci] = right_col
+            right_col += 1
+
+    # ── Clear stale data rows in template ────────────────────────────────────
+    for row in range(header_row + 1, t_ws_stamp.max_row + 1):
+        for col in range(1, t_ws_stamp.max_column + 1):
+            _safe_write(t_ws_stamp, row, col, None)
+
+    # ── Write rate values + extras into template, unhiding each data row ─────
+    _tmpl_scoring = scoring_by_tmpl_col or {}
+
+    for row_offset, src_row in enumerate(range(2, ws_final.max_row + 1), start=1):
+        tgt_row = header_row + row_offset
+        t_ws_stamp.row_dimensions[tgt_row].hidden = False
+        for consol_ci, tmpl_ci in consol_to_tmpl.items():
+            val = ws_final.cell(row=src_row, column=consol_ci).value
+            _safe_write(t_ws_stamp, tgt_row, tmpl_ci, val, reset_format=True)
+            # Write score to adjacent column (tmpl_ci + 1) if rules exist for this template col
+            if _tmpl_scoring and val is not None:
+                from app.services.formula_executor import _apply_scoring
+                _rules = _tmpl_scoring.get(tmpl_ci)
+                if _rules:
+                    try:
+                        _score = _apply_scoring(float(val), _rules)
+                        _safe_write(t_ws_stamp, tgt_row, tmpl_ci + 1, _score, reset_format=True)
+                    except (TypeError, ValueError):
+                        pass
+        for consol_ci, tmpl_ci in extra_col_map.items():
+            val = ws_final.cell(row=src_row, column=consol_ci).value
+            _safe_write(t_ws_stamp, tgt_row, tmpl_ci, val)
+
+    buf = _io.BytesIO()
+    t_wb_stamp.save(buf)
+    return buf.getvalue()
+
+
+# ── Apply Formula Library to Consolidated Sheet ──────────────────────────────
+
+
+def _col_idx_to_letter(index: int) -> str:
+    """1-based column index → Excel column letter (1→A, 27→AA)."""
+    result = ""
+    while index > 0:
+        index, remainder = divmod(index - 1, 26)
+        result = chr(ord("A") + remainder) + result
+    return result
+
+
+def _decode_param_name(param: str) -> str:
+    """Decode underscore-encoded param to expression form: __ → '. ', _ → ' '."""
+    return param.replace("__", ". ").replace("_", " ")
+
+
+def _normalize_for_match(s: str) -> str:
+    """Normalize text for fuzzy matching: lowercase, collapse periods/spaces."""
+    return re.sub(r"[\s.]+", " ", s.lower()).strip()
+
+
+@router.post(
+    "/consolidated-sheets/{sheet_id}/apply-formulas",
+    dependencies=[Depends(require_admin), Depends(verify_csrf)],
+)
+def apply_library_formulas(
+    sheet_id: str,
+    body: dict,
+    user: Profile = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Apply Formula Library formulas to a consolidated sheet.
+
+    body: { "formulas": [
+        { "formula_id": "...", "param_map": {"param_name": "Column Header"}, "output_name": "Rate Name" }
+    ]}
+    """
+    from app.models.formula import Formula
+
+    settings = get_settings()
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Consolidated sheet not found")
+
+    path = resolve_path(sheet.file_path)
+    if not path or not path.exists():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+
+    formula_configs = body.get("formulas", [])
+    if not formula_configs:
+        raise HTTPException(status_code=400, detail="No formulas provided")
+
+    wb = openpyxl.load_workbook(path)
+    ws = wb.active
+
+    # Build header→col_idx map (1-indexed)
+    header_to_col: dict[str, int] = {}
+    for ci in range(1, ws.max_column + 1):
+        hdr = ws.cell(row=1, column=ci).value
+        if hdr:
+            header_to_col[str(hdr)] = ci
+
+    data_start = 2
+    data_end = ws.max_row
+    applied = []
+
+    for cfg in formula_configs:
+        formula_id = cfg.get("formula_id")
+        param_map = cfg.get("param_map", {})
+        output_name = cfg.get("output_name", "")
+
+        formula = db.query(Formula).filter(Formula.id == formula_id).first()
+        if not formula:
+            logger.warning("apply-formulas: formula_id=%s not found in DB", formula_id)
+            continue
+
+        # Parse parameters from JSON
+        params = []
+        if formula.parameters:
+            try:
+                params = json.loads(formula.parameters)
+            except Exception:
+                pass
+
+        # Build param→column letter mapping
+        param_to_letter: dict[str, str] = {}
+        for param in params:
+            col_name = param_map.get(param)
+            if col_name and col_name in header_to_col:
+                param_to_letter[param] = _col_idx_to_letter(header_to_col[col_name])
+
+        logger.info("apply-formulas: %s | params=%s | param_map=%s | param_to_letter=%s | expression=%r",
+                     formula.name, params, param_map, param_to_letter, formula.expression)
+
+        if len(param_to_letter) != len(params):
+            logger.warning("apply-formulas: SKIPPED %s — param_to_letter(%d) != params(%d)",
+                           formula.name, len(param_to_letter), len(params))
+            continue  # skip if not all params are mapped
+
+        # Reuse existing output column or append new one
+        out_name = output_name or formula.name
+        if out_name in header_to_col:
+            out_col_idx = header_to_col[out_name]
+        else:
+            out_col_idx = ws.max_column + 1
+            ws.cell(row=1, column=out_col_idx, value=out_name)
+            header_to_col[out_name] = out_col_idx
+
+        # Build unified replacement map: expression term → column letter.
+        # Params are underscore-encoded (__ = '. ', _ = ' ') so we decode
+        # them to match the expression text. Also include sheet headers as
+        # fallback for expressions that use current column names directly.
+        replacements: dict[str, str] = {}
+        for param in params:
+            if param in param_to_letter:
+                letter = param_to_letter[param]
+                replacements[param] = letter
+                decoded = _decode_param_name(param)
+                if decoded != param:
+                    replacements[decoded] = letter
+        for hdr, col_idx in header_to_col.items():
+            if hdr == out_name or hdr in replacements:
+                continue
+            replacements[hdr] = _col_idx_to_letter(col_idx)
+
+        # Replace longest keys first to avoid partial matches
+        sorted_keys = sorted(replacements, key=len, reverse=True)
+
+        # Build normalized lookup for fallback matching (handles encoding
+        # mismatches like "No. of N.M." vs decoded "No. of N M ")
+        norm_replacements: dict[str, tuple[str, str]] = {}
+        for key in sorted_keys:
+            norm_key = _normalize_for_match(key)
+            if norm_key not in norm_replacements:
+                norm_replacements[norm_key] = (key, replacements[key])
+
+        # Pre-compute: detect params whose names don't appear in the expression
+        # (e.g. expression uses "No. of N.M." but param is "near_misses").
+        # Build a fragment→letter map for last-resort substitution.
+        used_params = set()
+        for p in params:
+            if p in formula.expression or _decode_param_name(p) in formula.expression:
+                used_params.add(p)
+        unused_mapped_letters = [
+            param_to_letter[p]
+            for p in params
+            if p not in used_params and p in param_to_letter
+        ]
+
+        for row in range(data_start, data_end + 1):
+            excel_expr = formula.expression
+            for key in sorted_keys:
+                if key in excel_expr:
+                    excel_expr = excel_expr.replace(key, f"{replacements[key]}{row}")
+
+            # Fallback 1: find unresolved text fragments and match via normalization
+            remaining = re.findall(r"[A-Za-z][A-Za-z0-9. ]*[A-Za-z.]", excel_expr)
+            for fragment in remaining:
+                if re.fullmatch(r"[A-Z]+\d+", fragment):
+                    continue
+                norm_frag = _normalize_for_match(fragment)
+                if norm_frag in norm_replacements:
+                    _, letter = norm_replacements[norm_frag]
+                    excel_expr = excel_expr.replace(fragment, f"{letter}{row}")
+
+            # Fallback 2: assign unresolved fragments to unused param columns
+            if unused_mapped_letters:
+                unresolved = [
+                    f for f in re.findall(r"[A-Za-z][A-Za-z0-9. ]*[A-Za-z.]", excel_expr)
+                    if not re.fullmatch(r"[A-Z]+\d+", f)
+                ]
+                for i, fragment in enumerate(unresolved):
+                    if i >= len(unused_mapped_letters):
+                        break
+                    excel_expr = excel_expr.replace(fragment, f"{unused_mapped_letters[i]}{row}")
+
+            if not excel_expr.startswith("="):
+                excel_expr = "=" + excel_expr
+            ws.cell(row=row, column=out_col_idx, value=excel_expr)
+
+        applied.append(output_name or formula.name)
+
+    wb.save(path)
+    return {"applied": applied, "count": len(applied)}
 
 
 # ── Template Formula CRUD ────────────────────────────────────────────────────
@@ -1279,6 +1572,17 @@ def rename_master_report(
     return sheet
 
 
+@router.get(
+    "/consolidated-sheets/{sheet_id}/meta",
+    dependencies=[Depends(require_admin)],
+)
+def get_consolidated_sheet_meta(sheet_id: str, db: Session = Depends(get_db)):
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Sheet not found")
+    return {"template_id": sheet.template_id, "project_id": sheet.project_id, "name": sheet.name}
+
+
 @router.delete(
     "/consolidated-sheets/{sheet_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -1297,6 +1601,138 @@ def delete_master_report(sheet_id: str, db: Session = Depends(get_db)):
         pass
     db.delete(sheet)
     db.commit()
+
+
+@router.get(
+    "/consolidated-sheets/{sheet_id}/stamped-template",
+    dependencies=[Depends(require_admin)],
+)
+def download_stamped_template(sheet_id: str, db: Session = Depends(get_db)):
+    """Return the consolidated sheet reshaped into its master template structure."""
+    from fastapi.responses import Response as _Resp
+
+    sheet = db.query(ConsolidatedSheet).filter(ConsolidatedSheet.id == sheet_id).first()
+    if not sheet:
+        raise HTTPException(status_code=404, detail="Report not found")
+    consol_path = resolve_path(sheet.file_path)
+    if not consol_path or not consol_path.exists():
+        raise HTTPException(status_code=404, detail="Consolidated file not found on disk")
+
+    # Resolve the latest template version with an xlsx snapshot
+    tv = (
+        db.query(TemplateVersion)
+        .filter(
+            TemplateVersion.template_id == sheet.template_id,
+            TemplateVersion.file_path.isnot(None),
+        )
+        .order_by(TemplateVersion.version_number.desc())
+        .first()
+    )
+    if not tv:
+        raise HTTPException(
+            status_code=400,
+            detail="No template version with an xlsx snapshot found. Re-save the template version first.",
+        )
+
+    t_path = resolve_path(tv.file_path)
+    if not t_path or not t_path.exists():
+        raise HTTPException(status_code=404, detail="Template xlsx file not found on disk")
+
+    t_wb = openpyxl.load_workbook(t_path, data_only=True)
+    t_ws = t_wb.active
+
+    # Load consolidated headers to use as ground truth for finding the right
+    # header row in the master template. The KPI template's header_row applies
+    # to submissions; the master template xlsx may have a different structure.
+    import io as _io2
+    _consol_wb = openpyxl.load_workbook(_io2.BytesIO(consol_path.read_bytes()), data_only=True)
+    _consol_ws = _consol_wb.active
+    consol_header_upper: set[str] = set()
+    for ci in range(1, _consol_ws.max_column + 1):
+        v = _consol_ws.cell(row=1, column=ci).value
+        if isinstance(v, str) and not v.startswith("#"):
+            consol_header_upper.add(" ".join(v.split()).upper())
+
+    # Pick the template row with the most matches against consolidated headers.
+    # Normalize whitespace (collapse newlines/multiple spaces) so headers like
+    # "Total Recordable \nIncident" match "Total Recordable Incident".
+    template_h2c: dict[str, int] = {}
+    t_hr = tv.header_row or 1
+    best_overlap = -1
+    for r in range(1, min(t_ws.max_row + 1, 20)):
+        h2c: dict[str, int] = {}
+        for ci in range(1, t_ws.max_column + 1):
+            v = t_ws.cell(row=r, column=ci).value
+            if isinstance(v, str) and not v.startswith("#") and len(v.strip()) > 2:
+                h2c[" ".join(v.split())] = ci  # collapse all whitespace
+        overlap = sum(1 for k in h2c if k.upper() in consol_header_upper)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            template_h2c = h2c
+            t_hr = r
+
+    if not template_h2c:
+        raise HTTPException(status_code=400, detail="Template has no headers at the configured header row.")
+
+    # Build scoring rules keyed by TEMPLATE COLUMN INDEX (reliable — avoids
+    # mismatch between formula.target_column and AI-unified consolidated headers).
+    # For each formula, match target_column against template headers (exact then
+    # fuzzy rate-suffix), then store rules at that template column index.
+    _scoring_by_tmpl_col: dict[int, list] = {}
+    _tv_formulas = db.query(TemplateFormula).filter(TemplateFormula.template_version_id == tv.id).all()
+    _tmpl_upper_map = {k.upper(): v for k, v in template_h2c.items()}
+    import re as _re2
+    for _f in _tv_formulas:
+        if not _f.scoring_rules:
+            continue
+        try:
+            _rules = json.loads(_f.scoring_rules)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        _tgt_upper = _f.target_column.upper()
+        _tmpl_ci = _tmpl_upper_map.get(_tgt_upper)
+        if _tmpl_ci is None:
+            # Fuzzy: strip parenthetical abbrev then rate suffixes
+            _h = _re2.sub(r"\s*\([^)]*\)\s*$", "", _tgt_upper).strip()
+            for _sfx in (" RATE", " FREQUENCY RATE", " FREQUENCY", " INDEX", " RATIO"):
+                if _h.endswith(_sfx):
+                    _base = _h[: -len(_sfx)].strip()
+                    _best_ci, _best_extra = None, float("inf")
+                    for _th, _tci in _tmpl_upper_map.items():
+                        if _base in _th:
+                            _x = len(_th) - len(_base)
+                            if _x < _best_extra:
+                                _best_extra, _best_ci = _x, _tci
+                    if _best_ci is not None:
+                        _tmpl_ci = _best_ci
+                        break
+        if _tmpl_ci is not None:
+            _scoring_by_tmpl_col[_tmpl_ci] = _rules
+
+    # Supplement DB rules with scoring criteria parsed from template text
+    # (rows above the header row).  DB rules take precedence if both exist.
+    for _ci in range(1, t_ws.max_column + 1):
+        if _ci in _scoring_by_tmpl_col:
+            continue
+        for _r in range(1, t_hr):
+            _cell_val = t_ws.cell(row=_r, column=_ci).value
+            if isinstance(_cell_val, str) and _TEXT_CRITERIA_RE.search(_cell_val):
+                _parsed = _parse_scoring_criteria_text(_cell_val)
+                if _parsed:
+                    _scoring_by_tmpl_col[_ci] = _parsed
+                    break
+
+    stamped = _stamp_with_template(
+        consol_path.read_bytes(), t_path, t_hr, template_h2c,
+        scoring_by_tmpl_col=_scoring_by_tmpl_col or None,
+    )
+    raw_name = f"{sheet.name or sheet_id} - Template View.xlsx"
+    filename = raw_name.encode("ascii", errors="replace").decode("ascii").replace("/", "-")
+    return _Resp(
+        content=stamped,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get(
